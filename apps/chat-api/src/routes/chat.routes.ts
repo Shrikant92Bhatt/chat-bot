@@ -1,15 +1,26 @@
 import { Router, Response } from 'express';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth.middleware';
 import { AIRouterService } from '../services/ai-router.service';
+import { UserRegistryService } from '../services/user-registry.service';
 import { ChatStreamRequest } from '@chat-monorepo/shared';
 
 const router = Router();
 const aiRouterService = new AIRouterService();
 
 /**
+ * GET /api/chat/config
+ * Public endpoint returning public Client ID configuration from backend .env
+ */
+router.get('/config', (req, res) => {
+  res.json({
+    googleClientId: process.env.GOOGLE_CLIENT_ID || '',
+  });
+});
+
+/**
  * POST /api/chat/stream
  * Handles SSE (Server-Sent Events) multi-LLM streaming responses.
- * Protected by Firebase / Google ID Token middleware.
+ * Protected by Google ID Token middleware.
  */
 router.post('/stream', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
   const { messages, model, temperature, mcpEnabled, ragContext } = req.body as ChatStreamRequest;
@@ -56,6 +67,15 @@ router.get('/models', authenticateToken, (req: AuthenticatedRequest, res: Respon
       { id: 'gpt-4o-mini', name: 'OpenAI GPT-4o Mini', provider: 'OpenAI', description: 'Affordable, fast intelligent model' },
     ],
   });
+});
+
+/**
+ * GET /api/chat/users
+ * Returns list of authenticated application users.
+ */
+router.get('/users', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+  const users = UserRegistryService.getAllUsers();
+  res.json({ users, count: users.length });
 });
 
 export default router;
