@@ -3,7 +3,7 @@
 ## Architecture Overview
 This repository is an enterprise-grade **Nx Monorepo** containing:
 - **`apps/chat-client`**: Angular 18 Standalone Components + Signals, Tailwind CSS (Glassmorphism & Neumorphism UI).
-- **`apps/chat-api`**: Node.js + Express TypeScript backend with Firebase Auth middleware and multi-LLM SSE streaming router (Google Gemini & OpenAI).
+- **`apps/chat-api`**: Node.js + Express TypeScript backend with Google OAuth2 middleware and multi-LLM SSE streaming router (Google Gemini & OpenAI).
 - **`libs/shared`**: Shared DTOs and interfaces (`@chat-monorepo/shared`).
 
 ---
@@ -17,7 +17,7 @@ This repository is an enterprise-grade **Nx Monorepo** containing:
 - **SSE Stream Consumption**: Use standard `fetch` with `ReadableStream` for parsing `data:` chunks from the backend.
 
 ### 2. Backend (Node.js Express)
-- **Firebase Auth Middleware**: All protected endpoints under `/api/chat/*` must validate Firebase ID Tokens passed via `Authorization: Bearer` headers.
+- **Google OAuth2 Middleware**: All protected endpoints under `/api/chat/*` validate Google ID Tokens passed via `Authorization: Bearer` headers.
 - **Multi-LLM Router**: `AIRouterService` dynamically dispatches streaming requests to Google Gemini (`@google/generative-ai`) or OpenAI (`openai`).
 - **Extension Adapters**: Keep MCP (`mcp.adapter.ts`), RAG (`rag.adapter.ts`), and Vector DB (`vector-db.adapter.ts`) decoupled for future enhancements.
 
@@ -30,5 +30,6 @@ This repository is an enterprise-grade **Nx Monorepo** containing:
 
 ### 4. Git Branching & Workflow Rules
 - **No Direct Push to `main`**: Never push changes directly to `main`.
-- **Single Working Branch**: Consolidate ongoing fixes and updates on a single working branch (e.g., `develop` or `feat/updates`) instead of creating a new branch for every change.
+- **Sensible Branch Naming**: Always use clear, descriptive, meaningful branch names reflecting the feature or fix (e.g., `feat/google-oauth-gcp-deploy`), rather than generic branch names.
+- **Single Active Branch**: Consolidate ongoing updates on the active descriptive working branch.
 - **PR Creation**: Only generate or present Pull Request links when explicitly requested by the user ("create pr").
