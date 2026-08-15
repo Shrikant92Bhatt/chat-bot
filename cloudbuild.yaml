@@ -1,43 +1,27 @@
 steps:
-  # 1. Build Docker image for chat-api
+  # 1. Build Backend API Docker Image
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/chat-api:$SHORT_SHA'
-      - '-t'
-      - 'gcr.io/$PROJECT_ID/chat-api:latest'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/chat-repo/chat-api:latest'
       - '-f'
       - 'Dockerfile.api'
       - '.'
 
-  # 2. Push image to GCP Artifact Registry / Container Registry
+  # 2. Build Frontend Client Docker Image
   - name: 'gcr.io/cloud-builders/docker'
     args:
-      - 'push'
-      - 'gcr.io/$PROJECT_ID/chat-api:$SHORT_SHA'
-
-  - name: 'gcr.io/cloud-builders/docker'
-    args:
-      - 'push'
-      - 'gcr.io/$PROJECT_ID/chat-api:latest'
-
-  # 3. Deploy to GCP Cloud Run
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: gcloud
-    args:
-      - 'run'
-      - 'deploy'
-      - 'chat-api-service'
-      - '--image=gcr.io/$PROJECT_ID/chat-api:$SHORT_SHA'
-      - '--region=us-central1'
-      - '--platform=managed'
-      - '--allow-unauthenticated'
-      - '--set-env-vars=NODE_ENV=production'
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/chat-repo/chat-client:latest'
+      - '-f'
+      - 'Dockerfile.client'
+      - '.'
 
 images:
-  - 'gcr.io/$PROJECT_ID/chat-api:$SHORT_SHA'
-  - 'gcr.io/$PROJECT_ID/chat-api:latest'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/chat-repo/chat-api:latest'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/chat-repo/chat-client:latest'
 
 options:
   logging: CLOUD_LOGGING_ONLY
