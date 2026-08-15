@@ -4,9 +4,21 @@ on:
   push:
     branches: ["*"]
   pull_request:
+    branches: ["*"]
     types: [opened, synchronize, reopened]
 
+# Security Permissions Standard
+permissions:
+  contents: read
+  id-token: write
+
+# Prevent wasteful concurrent pipeline runs on duplicate branch pushes
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # Job 1: Nx Monorepo Compilation & Quality Check
   build-and-lint:
     name: Monorepo Build Check
     runs-on: ubuntu-latest
@@ -28,6 +40,7 @@ jobs:
       - name: Build All Monorepo Projects
         run: npm run build:all
 
+  # Job 2: Production Container Build & GCP Integration Check
   gcp-build-check:
     name: GCP Docker Build Verification
     runs-on: ubuntu-latest
@@ -36,16 +49,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build Backend Express API Docker Image
+      - name: Build Backend Express API Container
         run: |
           docker build -t chat-api:test -f Dockerfile.api .
 
-      - name: Build Frontend Angular NGINX Docker Image
+      - name: Build Frontend Angular NGINX Container
         run: |
           docker build -t chat-client:test -f Dockerfile.client .
 
-      # GCP Authentication (Configured via GitHub Repository Secrets)
-      - name: Authenticate to GCP (Optional for Push)
+      # GCP Authentication (Activated when GCP_SA_KEY secret is configured)
+      - name: Authenticate to GCP
         if: ${{ secrets.GCP_SA_KEY != '' }}
         uses: google-github-actions/auth@v2
         with:
@@ -55,7 +68,7 @@ jobs:
         if: ${{ secrets.GCP_SA_KEY != '' }}
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Submit to GCP Cloud Build (When secret is configured)
+      - name: Submit to GCP Cloud Build
         if: ${{ secrets.GCP_SA_KEY != '' && github.ref == 'refs/heads/main' }}
         run: |
           gcloud builds submit --config=cloudbuild.yaml

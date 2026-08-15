@@ -1,28 +1,23 @@
 import { Request, Response, NextFunction } from 'express';
-import * as admin from 'firebase-admin';
+import { OAuth2Client } from 'google-auth-library';
+import { UserRegistryService } from '../services/user-registry.service';
 
-// Initialize Firebase Admin SDK if service account environment variables are present
-if (!admin.apps.length) {
-  try {
-    if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
-      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-      });
-      console.log('[Auth] Firebase Admin initialized with service account.');
-    } else {
-      admin.initializeApp();
-      console.log('[Auth] Firebase Admin initialized with default credentials.');
-    }
-  } catch (error) {
-    console.warn('[Auth] Firebase Admin initialization notice:', (error as Error).message);
-  }
-}
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 export interface AuthenticatedRequest extends Request {
-  user?: admin.auth.DecodedIdToken | { uid: string; email: string; name: string };
+  user?: {
+    uid: string;
+    email?: string;
+    name?: string;
+    picture?: string;
+  };
 }
 
+/**
+ * Enterprise Production Middleware for Google OAuth 2.0 Token Verification.
+ * Validates incoming Bearer ID tokens against Google's public key infrastructure.
+ */
 export async function authenticateToken(
   req: AuthenticatedRequest,
   res: Response,
@@ -31,19 +26,9 @@ export async function authenticateToken(
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    // If dev mode bypass enabled, allow unauthenticated access for testing
-    if (process.env.NODE_ENV === 'development' || process.env.SKIP_AUTH === 'true') {
-      req.user = {
-        uid: 'dev-user-123',
-        email: 'dev@example.com',
-        name: 'Developer User',
-      };
-      return next();
-    }
-
     res.status(401).json({
       error: 'Unauthorized',
-      message: 'Missing or invalid Authorization header. Expected: Bearer <Firebase_ID_Token>',
+      message: 'Missing or malformed Authorization header. Expected: Bearer <Google_ID_Token>',
     });
     return;
   }
@@ -51,23 +36,40 @@ export async function authenticateToken(
   const idToken = authHeader.split('Bearer ')[1];
 
   try {
-    if (admin.apps.length && process.env.SKIP_AUTH !== 'true') {
-      const decodedToken = await admin.auth().verifyIdToken(idToken);
-      req.user = decodedToken;
-    } else {
-      // Mock validation when firebase app is running locally without full GCP credentials
-      req.user = {
-        uid: 'user-' + idToken.substring(0, 8),
-        email: 'user@example.com',
-        name: 'Authenticated User',
-      };
+    if (!GOOGLE_CLIENT_ID) {
+      console.warn('[Google Auth Middleware] GOOGLE_CLIENT_ID environment variable is not set.');
     }
+
+    const ticket = await googleClient.verifyIdToken({
+      idToken,
+      audience: GOOGLE_CLIENT_ID || undefined,
+    });
+    const payload = ticket.getPayload();
+
+    if (!payload) {
+      res.status(403).json({
+        error: 'Forbidden',
+        message: 'Invalid Google ID Token payload.',
+      });
+      return;
+    }
+
+    const authenticatedUser = {
+      uid: payload.sub,
+      email: payload.email,
+      name: payload.name,
+      picture: payload.picture,
+    };
+
+    req.user = authenticatedUser;
+    UserRegistryService.registerOrUpdateUser(authenticatedUser);
+
     next();
   } catch (error) {
-    console.error('[Auth Middleware] Token verification failed:', error);
+    console.error('[Google Auth Middleware] Token verification failed:', error);
     res.status(403).json({
       error: 'Forbidden',
-      message: 'Invalid or expired Firebase ID token.',
+      message: 'Failed to verify Google ID Token: ' + (error as Error).message,
     });
   }
 }

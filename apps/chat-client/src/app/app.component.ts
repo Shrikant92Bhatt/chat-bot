@@ -4,6 +4,7 @@ import { NavbarComponent } from './components/navbar/navbar.component';
 import { SidebarComponent } from './components/sidebar/sidebar.component';
 import { ChatWindowComponent } from './components/chat-window/chat-window.component';
 import { MessageInputComponent } from './components/message-input/message-input.component';
+import { AuthService } from './services/auth.service';
 
 @Component({
   selector: 'app-root',
@@ -22,7 +23,8 @@ import { MessageInputComponent } from './components/message-input/message-input.
 
       <!-- Main Layout Body (Sidebar + Chat Area) -->
       <div class="flex-1 flex overflow-hidden relative z-10">
-        <app-sidebar [isOpen]="isSidebarOpen"></app-sidebar>
+        <!-- Sidebar is ONLY visible when user is logged in -->
+        <app-sidebar *ngIf="authService.userSignal()" [isOpen]="isSidebarOpen"></app-sidebar>
         
         <main class="flex-1 flex flex-col h-full overflow-hidden bg-gradient-to-b from-obsidian via-slate-950 to-obsidian">
           <app-chat-window class="flex-1 overflow-hidden"></app-chat-window>
@@ -34,4 +36,6 @@ import { MessageInputComponent } from './components/message-input/message-input.
 })
 export class AppComponent {
   public isSidebarOpen = true;
+
+  constructor(public authService: AuthService) {}
 }

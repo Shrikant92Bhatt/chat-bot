@@ -1,4 +1,4 @@
-import { Injectable, signal, computed } from '@angular/core';
+import { Injectable, signal, computed, effect } from '@angular/core';
 import { AIModelType, ChatMessage, ChatThread } from '@chat-monorepo/shared';
 import { AuthService } from './auth.service';
 
@@ -14,6 +14,9 @@ export class ChatService {
   public isStreaming = signal<boolean>(false);
   public mcpEnabled = signal<boolean>(false);
 
+  // Tracks unauthenticated user message limit (Max 1 message allowed without sign-in)
+  public unauthUserMessageCount = signal<number>(0);
+
   public activeThread = computed(() => {
     const id = this.activeThreadId();
     return this.threads().find((t) => t.id === id) || null;
@@ -27,6 +30,56 @@ export class ChatService {
 
   constructor(private authService: AuthService) {
     this.createInitialThread();
+
+    // Effect: Reacts to User Login/Logout state changes
+    effect(() => {
+      const user = this.authService.userSignal();
+      if (user && user.uid) {
+        // Authenticated user: Load saved user thread history
+        this.loadUserThreadHistory(user.uid);
+      } else {
+        // Unauthenticated user: Do NOT preserve chat history
+        this.clearUnauthenticatedHistory();
+      }
+    });
+  }
+
+  /**
+   * Clears threads and message counter for unauthenticated users.
+   */
+  private clearUnauthenticatedHistory() {
+    this.unauthUserMessageCount.set(0);
+    this.createInitialThread();
+  }
+
+  /**
+   * Loads saved chat history from localStorage for authenticated users.
+   */
+  private loadUserThreadHistory(uid: string) {
+    const saved = localStorage.getItem(`NEXUS_THREADS_${uid}`);
+    if (saved) {
+      try {
+        const loadedThreads: ChatThread[] = JSON.parse(saved);
+        if (loadedThreads && loadedThreads.length > 0) {
+          this.threads.set(loadedThreads);
+          this.activeThreadId.set(loadedThreads[0].id);
+          return;
+        }
+      } catch (e) {
+        localStorage.removeItem(`NEXUS_THREADS_${uid}`);
+      }
+    }
+    this.createInitialThread();
+  }
+
+  /**
+   * Saves thread history for authenticated users ONLY.
+   */
+  private persistUserThreadHistory() {
+    const user = this.authService.userSignal();
+    if (user && user.uid) {
+      localStorage.setItem(`NEXUS_THREADS_${user.uid}`, JSON.stringify(this.threads()));
+    }
   }
 
   public createInitialThread() {
@@ -67,6 +120,7 @@ export class ChatService {
 
     this.threads.update((curr) => [newThread, ...curr]);
     this.activeThreadId.set(newThread.id);
+    this.persistUserThreadHistory();
   }
 
   public setModel(model: AIModelType) {
@@ -80,6 +134,17 @@ export class ChatService {
   async sendMessage(userContent: string): Promise<void> {
     const currentThreadId = this.activeThreadId();
     if (!currentThreadId || !userContent.trim() || this.isStreaming()) return;
+
+    // Enforce 1 message limit for unauthenticated users
+    const isAuthenticated = !!this.authService.userSignal();
+    if (!isAuthenticated && this.unauthUserMessageCount() >= 1) {
+      this.appendSystemNoticeMessage(
+        currentThreadId,
+        '🔒 Free trial limit reached (1 message without sign-in). Please sign in with Google to continue chatting.'
+      );
+      this.authService.loginWithGoogle();
+      return;
+    }
 
     const userMessage: ChatMessage = {
       id: 'msg-' + Date.now(),
@@ -101,7 +166,7 @@ export class ChatService {
     this.threads.update((threadsList) =>
       threadsList.map((t) => {
         if (t.id === currentThreadId) {
-          const updatedTitle = t.messages.length === 0 ? userContent.slice(0, 30) + '...' : t.title;
+          const updatedTitle = t.messages.length <= 1 ? userContent.slice(0, 30) + '...' : t.title;
           return {
             ...t,
             title: updatedTitle,
@@ -112,6 +177,12 @@ export class ChatService {
         return t;
       })
     );
+
+    if (!isAuthenticated) {
+      this.unauthUserMessageCount.update((count) => count + 1);
+    } else {
+      this.persistUserThreadHistory();
+    }
 
     this.isStreaming.set(true);
     this.abortController = new AbortController();
@@ -185,6 +256,9 @@ export class ChatService {
     } finally {
       this.isStreaming.set(false);
       this.abortController = null;
+      if (isAuthenticated) {
+        this.persistUserThreadHistory();
+      }
     }
   }
 
@@ -193,6 +267,28 @@ export class ChatService {
       this.abortController.abort();
       this.isStreaming.set(false);
     }
+  }
+
+  private appendSystemNoticeMessage(threadId: string, noticeContent: string) {
+    const noticeMessage: ChatMessage = {
+      id: 'notice-' + Date.now(),
+      role: 'assistant',
+      content: noticeContent,
+      timestamp: Date.now(),
+      model: this.selectedModel(),
+    };
+
+    this.threads.update((threadsList) =>
+      threadsList.map((t) => {
+        if (t.id === threadId) {
+          return {
+            ...t,
+            messages: [...t.messages, noticeMessage],
+          };
+        }
+        return t;
+      })
+    );
   }
 
   private updateAssistantMessage(threadId: string, messageId: string, content: string) {
