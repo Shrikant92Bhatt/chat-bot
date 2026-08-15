@@ -1,0 +1,43 @@
+# ==========================================
+# Stage 1: Build Workspace & Dependencies
+# ==========================================
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Copy monorepo configuration files
+COPY package.json package-lock.json* nx.json tsconfig.base.json ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy full source code
+COPY apps ./apps
+COPY libs ./libs
+
+# Build the backend application via Nx
+RUN npx nx build chat-api --configuration=production
+
+# ==========================================
+# Stage 2: Production Execution Image
+# ==========================================
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=8080
+
+# Create non-root user for security
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 expressjs
+
+# Copy built dist files from builder
+COPY --from=builder /app/dist/apps/chat-api ./dist/apps/chat-api
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./package.json
+
+USER expressjs
+
+EXPOSE 8080
+
+CMD ["node", "dist/apps/chat-api/main.js"]

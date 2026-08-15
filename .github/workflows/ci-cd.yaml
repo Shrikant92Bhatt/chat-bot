@@ -1,0 +1,66 @@
+name: Enterprise CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  # Job 1: Nx Monorepo Build & Lint Check
+  build-and-lint:
+    name: Monorepo Build & Quality Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 20 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build All Monorepo Projects
+        run: npm run build:all
+
+      - name: Run Linting Checks
+        run: npm run lint
+
+  # Job 2: GCP Container Build & Verification
+  gcp-build-check:
+    name: GCP Docker Build Verification
+    runs-on: ubuntu-latest
+    needs: build-and-lint
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Backend Express API Docker Image
+        run: |
+          docker build -t chat-api:test -f Dockerfile.api .
+
+      - name: Build Frontend Angular NGINX Docker Image
+        run: |
+          docker build -t chat-client:test -f Dockerfile.client .
+
+      # GCP Authentication (Configured via GitHub Repository Secrets)
+      - name: Authenticate to GCP (Optional for Push)
+        if: ${{ secrets.GCP_SA_KEY != '' }}
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up GCP Cloud SDK
+        if: ${{ secrets.GCP_SA_KEY != '' }}
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Submit to GCP Cloud Build (When secret is configured)
+        if: ${{ secrets.GCP_SA_KEY != '' && github.ref == 'refs/heads/main' }}
+        run: |
+          gcloud builds submit --config=cloudbuild.yaml

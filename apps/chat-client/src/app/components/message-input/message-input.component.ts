@@ -1,0 +1,79 @@
+import { Component } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { ChatService } from '../../services/chat.service';
+
+@Component({
+  selector: 'app-message-input',
+  standalone: true,
+  imports: [CommonModule, FormsModule],
+  template: `
+    <div class="p-4 md:p-6 bg-gradient-to-t from-obsidian via-obsidian/90 to-transparent relative z-20 backdrop-blur-md">
+      <div class="max-w-4xl mx-auto">
+        <form (ngSubmit)="send()" class="relative flex items-center glass-input rounded-3xl p-2 pr-3 shadow-glass transition-all focus-within:ring-2 focus-within:ring-accentCyan/30">
+          
+          <!-- Auto-resizing textarea -->
+          <textarea
+            [(ngModel)]="messageText"
+            name="messageText"
+            (keydown.enter)="onKeydown($event)"
+            rows="1"
+            placeholder="Type your message... (Press Enter to send, Shift+Enter for new line)"
+            class="flex-1 bg-transparent border-0 focus:ring-0 text-slate-100 placeholder-slate-400 text-sm px-4 py-3 resize-none max-h-36 overflow-y-auto focus:outline-none"
+          ></textarea>
+
+          <!-- Input Action Buttons -->
+          <div class="flex items-center space-x-2 shrink-0">
+            <!-- Stop Streaming Button -->
+            <button
+              *ngIf="chatService.isStreaming()"
+              type="button"
+              (click)="chatService.stopStreaming()"
+              class="p-2.5 rounded-2xl bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 border border-rose-500/40 transition-all flex items-center space-x-1.5 text-xs font-semibold"
+            >
+              <span class="w-2 h-2 bg-rose-400 rounded-sm"></span>
+              <span class="hidden sm:inline">Stop</span>
+            </button>
+
+            <!-- Send Button -->
+            <button
+              *ngIf="!chatService.isStreaming()"
+              type="submit"
+              [disabled]="!messageText.trim()"
+              class="p-3 rounded-2xl bg-gradient-to-r from-accentCyan to-accentViolet text-white shadow-glow hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center"
+            >
+              <svg class="w-5 h-5 transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+            </button>
+          </div>
+        </form>
+
+        <!-- Input Footer Metadata -->
+        <div class="flex items-center justify-between text-[11px] text-slate-400 px-4 mt-2">
+          <span>Routing: <strong class="text-slate-300">{{ chatService.selectedModel() }}</strong></span>
+          <span>Enterprise Nx Monorepo • SSE Streaming Gateway</span>
+        </div>
+      </div>
+    </div>
+  `,
+})
+export class MessageInputComponent {
+  public messageText = '';
+
+  constructor(public chatService: ChatService) {}
+
+  onKeydown(event: KeyboardEvent) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      this.send();
+    }
+  }
+
+  send() {
+    if (!this.messageText.trim() || this.chatService.isStreaming()) return;
+    const text = this.messageText;
+    this.messageText = '';
+    this.chatService.sendMessage(text);
+  }
+}

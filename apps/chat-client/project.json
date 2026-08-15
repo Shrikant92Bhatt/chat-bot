@@ -1,0 +1,29 @@
+{
+  "name": "chat-client",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/chat-client/src",
+  "prefix": "app",
+  "targets": {
+    "build": {
+      "executor": "@angular-devkit/build-angular:application",
+      "options": {
+        "outputPath": "dist/apps/chat-client",
+        "index": "apps/chat-client/src/index.html",
+        "browser": "apps/chat-client/src/main.ts",
+        "polyfills": ["zone.js"],
+        "tsConfig": "apps/chat-client/tsconfig.app.json",
+        "assets": ["apps/chat-client/src/favicon.ico", "apps/chat-client/src/assets"],
+        "styles": ["apps/chat-client/src/styles.css"],
+        "scripts": []
+      }
+    },
+    "serve": {
+      "executor": "@angular-devkit/build-angular:dev-server",
+      "options": {
+        "buildTarget": "chat-client:build",
+        "port": 4200
+      }
+    }
+  }
+}
