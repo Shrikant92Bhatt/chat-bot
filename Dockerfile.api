@@ -1,7 +1,7 @@
 # ==========================================
 # Stage 1: Build Workspace & Dependencies
 # ==========================================
-FROM node:lts-alpine AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -16,12 +16,12 @@ COPY apps ./apps
 COPY libs ./libs
 
 # Build the backend application via Nx
-RUN npx nx build chat-api
+RUN NODE_OPTIONS="--max-old-space-size=4096" npx nx build chat-api
 
 # ==========================================
 # Stage 2: Production Execution Image
 # ==========================================
-FROM node:lts-alpine AS runner
+FROM node:20-alpine AS runner
 
 WORKDIR /app
 ENV NODE_ENV=production
