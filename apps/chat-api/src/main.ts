@@ -16,10 +16,17 @@ dotenv.config({ path: path.resolve(__dirname, '../../../.env.local'), override: 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Enable CORS for frontend application
+// Enable CORS for frontend application.
+// ALLOWED_ORIGIN should be set to the chat-client's deployed URL in production
+// (comma-separated list supported); falls back to '*' for local development.
+const allowedOrigins = (process.env.ALLOWED_ORIGIN || '*')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 app.use(
   cors({
-    origin: '*', // Adjust for production environments
+    origin: allowedOrigins.includes('*') ? '*' : allowedOrigins,
     methods: ['GET', 'POST', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   })

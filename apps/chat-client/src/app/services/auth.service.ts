@@ -1,5 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { UserSession } from '@chat-monorepo/shared';
+import { getApiBaseUrl } from '../core/runtime-config';
 
 declare const google: any;
 
@@ -26,7 +27,7 @@ export class AuthService {
    */
   private async fetchBackendConfig(): Promise<void> {
     try {
-      const res = await fetch('http://localhost:3000/api/chat/config');
+      const res = await fetch(`${getApiBaseUrl()}/api/chat/config`);
       if (res.ok) {
         const data = await res.json();
         if (data && data.googleClientId) {

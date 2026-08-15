@@ -1,12 +1,13 @@
 import { Injectable, signal, computed, effect } from '@angular/core';
 import { AIModelType, ChatMessage, ChatThread } from '@chat-monorepo/shared';
 import { AuthService } from './auth.service';
+import { getApiBaseUrl } from '../core/runtime-config';
 
 @Injectable({
   providedIn: 'root',
 })
 export class ChatService {
-  private apiUrl = 'http://localhost:3000/api/chat';
+  private apiUrl = `${getApiBaseUrl()}/api/chat`;
 
   public selectedModel = signal<AIModelType>('gemini-1.5-flash');
   public threads = signal<ChatThread[]>([]);

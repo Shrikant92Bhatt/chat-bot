@@ -16,8 +16,11 @@ RUN NODE_OPTIONS="--max-old-space-size=4096" npx nx build chat-client
 FROM nginx:alpine AS runner
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=builder /app/dist/apps/chat-client /usr/share/nginx/html
+COPY --from=builder /app/dist/apps/chat-client/browser /usr/share/nginx/html
 
-EXPOSE 80
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
 
-CMD ["nginx", "-g", "daemon off;"]
+EXPOSE 8080
+
+ENTRYPOINT ["/docker-entrypoint.sh"]
