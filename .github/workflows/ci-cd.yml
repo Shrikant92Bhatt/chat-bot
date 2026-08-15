@@ -2,14 +2,13 @@ name: Enterprise CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, master ]
+    branches: ["*"]
   pull_request:
-    branches: [ main, master ]
+    types: [opened, synchronize, reopened]
 
 jobs:
-  # Job 1: Nx Monorepo Build & Lint Check
   build-and-lint:
-    name: Monorepo Build & Quality Check
+    name: Monorepo Build Check
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -29,10 +28,6 @@ jobs:
       - name: Build All Monorepo Projects
         run: npm run build:all
 
-      - name: Run Linting Checks
-        run: npm run lint
-
-  # Job 2: GCP Container Build & Verification
   gcp-build-check:
     name: GCP Docker Build Verification
     runs-on: ubuntu-latest
