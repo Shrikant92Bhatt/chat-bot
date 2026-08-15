@@ -40,4 +40,4 @@ USER expressjs
 
 EXPOSE 8080
 
-CMD ["node", "dist/apps/chat-api/main.js"]
+CMD ["sh", "-c", "if [ -f dist/apps/chat-api/apps/chat-api/src/main.js ]; then node dist/apps/chat-api/apps/chat-api/src/main.js; else node dist/apps/chat-api/main.js; fi"]
