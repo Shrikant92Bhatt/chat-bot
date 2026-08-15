@@ -2,8 +2,11 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "module": "commonjs",
-    "outDir": "../../dist/out-tsc",
-    "types": ["node"]
+    "outDir": "../../dist/apps/chat-api",
+    "rootDir": "../..",
+    "types": ["node"],
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true
   },
-  "include": ["**/*.ts"]
+  "include": ["src/**/*.ts", "../../libs/shared/src/**/*.ts"]
 }

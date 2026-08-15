@@ -2,7 +2,6 @@ import { Component, EventEmitter, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../../services/auth.service';
 import { ChatService } from '../../services/chat.service';
-import { AIModelType } from '@chat-monorepo/shared';
 
 @Component({
   selector: 'app-navbar',
@@ -38,9 +37,9 @@ import { AIModelType } from '@chat-monorepo/shared';
       <div class="flex items-center space-x-2 bg-obsidian/80 p-1.5 rounded-2xl border border-glassBorder shadow-inner">
         <button
           (click)="chatService.setModel('gemini-1.5-flash')"
-          [class.bg-white-10]="chatService.selectedModel() === 'gemini-1.5-flash'"
-          [class.text-accentCyan]="chatService.selectedModel().startsWith('gemini')"
-          [class.shadow-cyanGlow]="chatService.selectedModel().startsWith('gemini')"
+          [ngClass]="{
+            'bg-white/10 text-accentCyan shadow-cyanGlow': chatService.selectedModel().startsWith('gemini')
+          }"
           class="px-4 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 flex items-center space-x-2 hover:text-white"
         >
           <span class="w-2 h-2 rounded-full bg-accentCyan animate-pulse"></span>
@@ -49,8 +48,9 @@ import { AIModelType } from '@chat-monorepo/shared';
 
         <button
           (click)="chatService.setModel('gpt-4o')"
-          [class.text-accentEmerald]="chatService.selectedModel().startsWith('gpt')"
-          [class.shadow-glow]="chatService.selectedModel().startsWith('gpt')"
+          [ngClass]="{
+            'bg-white/10 text-accentEmerald shadow-glow': chatService.selectedModel().startsWith('gpt')
+          }"
           class="px-4 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 flex items-center space-x-2 hover:text-white"
         >
           <span class="w-2 h-2 rounded-full bg-accentEmerald animate-pulse"></span>
@@ -63,15 +63,14 @@ import { AIModelType } from '@chat-monorepo/shared';
         <!-- MCP Toggle Pill -->
         <button
           (click)="chatService.toggleMcp()"
-          [class.bg-accentViolet\/20]="chatService.mcpEnabled()"
-          [class.border-accentViolet\/50]="chatService.mcpEnabled()"
+          [ngClass]="{ 'bg-accentViolet/20 border-accentViolet/50': chatService.mcpEnabled() }"
           class="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-xl text-xs font-medium border border-glassBorder hover:border-slate-500 transition-all"
         >
           <span class="text-slate-400">MCP Protocol</span>
           <span class="w-2 h-2 rounded-full" [class.bg-accentEmerald]="chatService.mcpEnabled()" [class.bg-slate-600]="!chatService.mcpEnabled()"></span>
         </button>
 
-        <ng-container *if="authService.userSignal() as user; else loginBtn">
+        <ng-container *ngIf="authService.userSignal() as user; else loginBtn">
           <div class="flex items-center space-x-3 bg-white/5 px-3 py-1.5 rounded-2xl border border-glassBorder">
             <img [src]="user.photoURL" [alt]="user.displayName" class="w-7 h-7 rounded-full border border-accentCyan" />
             <span class="text-xs font-medium text-slate-200 hidden md:inline">{{ user.displayName }}</span>

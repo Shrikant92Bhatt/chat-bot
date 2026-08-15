@@ -2,8 +2,9 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "../../dist/apps/chat-api",
+    "rootDir": "../..",
     "types": ["node"]
   },
   "exclude": ["**/*.spec.ts"],
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "../../libs/shared/src/**/*.ts"]
 }

@@ -28,7 +28,7 @@ export class GeminiService {
       }
 
       const modelName = request.model.includes('pro') ? 'gemini-1.5-pro' : 'gemini-1.5-flash';
-      const model = this.genAI.getGenerativeAIModel({ model: modelName });
+      const model = this.genAI.getGenerativeModel({ model: modelName });
 
       // Convert messages format for Google Generative AI SDK
       const contents = request.messages.map((msg) => ({

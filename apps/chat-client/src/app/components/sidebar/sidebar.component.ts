@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ChatService } from '../../services/chat.service';
 
@@ -34,8 +34,7 @@ import { ChatService } from '../../services/chat.service';
         <div *ngFor="let thread of chatService.threads()">
           <button
             (click)="chatService.selectThread(thread.id)"
-            [class.bg-white\/10]="chatService.activeThreadId() === thread.id"
-            [class.border-white\/20]="chatService.activeThreadId() === thread.id"
+            [ngClass]="chatService.activeThreadId() === thread.id ? 'bg-white/10 border-white/20' : ''"
             class="w-full text-left p-3 rounded-xl border border-transparent hover:border-glassBorder hover:bg-white/5 transition-all group flex items-start space-x-3"
           >
             <div class="p-2 rounded-lg bg-obsidian/60 text-slate-400 group-hover:text-accentCyan transition-colors">
