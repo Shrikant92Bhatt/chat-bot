@@ -16,6 +16,10 @@ dotenv.config({ path: path.resolve(__dirname, '../../../.env.local'), override: 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Trust the X-Forwarded-For header set by Cloud Run / the load balancer so
+// req.ip reflects the real client IP (used for the anonymous free-trial limit).
+app.set('trust proxy', true);
+
 // Enable CORS for frontend application.
 // ALLOWED_ORIGIN should be set to the chat-client's deployed URL in production
 // (comma-separated list supported); falls back to '*' for local development.

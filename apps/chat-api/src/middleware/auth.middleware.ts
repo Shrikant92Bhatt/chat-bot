@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { OAuth2Client } from 'google-auth-library';
 import { UserRegistryService } from '../services/user-registry.service';
+import { AnonUsageService } from '../services/anon-usage.service';
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
@@ -72,4 +73,35 @@ export async function authenticateToken(
       message: 'Failed to verify Google ID Token: ' + (error as Error).message,
     });
   }
+}
+
+/**
+ * Allows one anonymous message per IP (tracked server-side so it survives a
+ * page reload or cleared browser storage), then requires Google Sign-In.
+ * A valid Bearer token always bypasses the trial limit.
+ */
+export async function authenticateOrAllowTrial(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  const authHeader = req.headers.authorization;
+  const hasToken = authHeader && authHeader.startsWith('Bearer ') && authHeader.split('Bearer ')[1].trim();
+
+  if (hasToken) {
+    return authenticateToken(req, res, next);
+  }
+
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+
+  if (!AnonUsageService.hasFreeMessagesRemaining(ip)) {
+    res.status(401).json({
+      error: 'SignInRequired',
+      message: 'Free trial limit reached (1 message without sign-in). Please sign in with Google to continue chatting.',
+    });
+    return;
+  }
+
+  AnonUsageService.recordUsage(ip);
+  next();
 }

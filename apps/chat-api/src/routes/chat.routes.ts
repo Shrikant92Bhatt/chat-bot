@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { authenticateToken, AuthenticatedRequest } from '../middleware/auth.middleware';
+import { authenticateToken, authenticateOrAllowTrial, AuthenticatedRequest } from '../middleware/auth.middleware';
 import { AIRouterService } from '../services/ai-router.service';
 import { UserRegistryService } from '../services/user-registry.service';
 import { ChatStreamRequest } from '@chat-monorepo/shared';
@@ -22,7 +22,7 @@ router.get('/config', (req, res) => {
  * Handles SSE (Server-Sent Events) multi-LLM streaming responses.
  * Protected by Google ID Token middleware.
  */
-router.post('/stream', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+router.post('/stream', authenticateOrAllowTrial, async (req: AuthenticatedRequest, res: Response) => {
   const { messages, model, temperature, mcpEnabled, ragContext } = req.body as ChatStreamRequest;
 
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
