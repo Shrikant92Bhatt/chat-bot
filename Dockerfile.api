@@ -1,7 +1,7 @@
 # ==========================================
 # Stage 1: Build Workspace & Dependencies
 # ==========================================
-FROM node:20-alpine AS builder
+FROM node:lts-alpine AS builder
 
 WORKDIR /app
 
@@ -21,7 +21,7 @@ RUN npx nx build chat-api --configuration=production
 # ==========================================
 # Stage 2: Production Execution Image
 # ==========================================
-FROM node:20-alpine AS runner
+FROM node:lts-alpine AS runner
 
 WORKDIR /app
 ENV NODE_ENV=production
