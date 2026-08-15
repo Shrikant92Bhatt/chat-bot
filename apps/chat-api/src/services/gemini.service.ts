@@ -1,14 +1,14 @@
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ChatStreamRequest } from '@chat-monorepo/shared';
 import { Response } from 'express';
 
 export class GeminiService {
-  private ai: GoogleGenAI | null = null;
+  private genAI: GoogleGenerativeAI | null = null;
 
   constructor() {
     const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     if (apiKey) {
-      this.ai = new GoogleGenAI({ apiKey });
+      this.genAI = new GoogleGenerativeAI(apiKey);
     } else {
       console.warn('[GeminiService] Warning: GEMINI_API_KEY is not set.');
     }
@@ -18,34 +18,30 @@ export class GeminiService {
     const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
     if (!apiKey) {
-      // Fallback mock stream if API key is missing
       await this.mockStream(request, res, 'Gemini (API Key missing - Mock Stream Mode)');
       return;
     }
 
     try {
-      if (!this.ai) {
-        this.ai = new GoogleGenAI({ apiKey });
+      if (!this.genAI) {
+        this.genAI = new GoogleGenerativeAI(apiKey);
       }
 
       const modelName = request.model.includes('pro') ? 'gemini-1.5-pro' : 'gemini-1.5-flash';
+      const model = this.genAI.getGenerativeAIModel({ model: modelName });
 
-      // Convert messages format for Gemini SDK
+      // Convert messages format for Google Generative AI SDK
       const contents = request.messages.map((msg) => ({
         role: msg.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: msg.content }],
       }));
 
-      const responseStream = await this.ai.models.generateContentStream({
-        model: modelName,
-        contents: contents as any,
-        config: {
-          temperature: request.temperature ?? 0.7,
-        },
+      const streamingResult = await model.generateContentStream({
+        contents: contents,
       });
 
-      for await (const chunk of responseStream) {
-        const text = chunk.text || '';
+      for await (const chunk of streamingResult.stream) {
+        const text = chunk.text();
         if (text) {
           res.write(`data: ${JSON.stringify({ chunk: text, done: false, model: request.model })}\n\n`);
         }
@@ -62,7 +58,7 @@ export class GeminiService {
 
   private async mockStream(request: ChatStreamRequest, res: Response, source: string): Promise<void> {
     const lastUserMessage = request.messages[request.messages.length - 1]?.content || 'Hello';
-    const mockReply = `[${source}] Received prompt: "${lastUserMessage}". This is a simulated high-performance response from Gemini model ${request.model}. Glassmorphism design and multi-LLM SSE routing active!`;
+    const mockReply = `[${source}] Received prompt: "${lastUserMessage}". High-performance response streaming from Gemini (${request.model}).`;
 
     const tokens = mockReply.split(' ');
     for (const token of tokens) {
