@@ -2,11 +2,16 @@ import OpenAI from 'openai';
 import { ChatStreamRequest } from '@chat-monorepo/shared';
 import { Response } from 'express';
 
+function cleanEnvVar(val?: string): string {
+  if (!val) return '';
+  return val.replace(/^\uFEFF/, '').replace(/\r/g, '').trim();
+}
+
 export class OpenAIService {
   private client: OpenAI | null = null;
 
   constructor() {
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = cleanEnvVar(process.env.OPENAI_API_KEY);
     if (apiKey) {
       this.client = new OpenAI({ apiKey });
     } else {
@@ -15,7 +20,7 @@ export class OpenAIService {
   }
 
   async streamChat(request: ChatStreamRequest, res: Response): Promise<void> {
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = cleanEnvVar(process.env.OPENAI_API_KEY);
 
     if (!apiKey) {
       await this.mockStream(request, res, 'OpenAI (API Key missing - Mock Stream Mode)');
@@ -42,15 +47,17 @@ export class OpenAIService {
       for await (const chunk of stream) {
         const text = chunk.choices[0]?.delta?.content || '';
         if (text) {
-          res.write(`data: ${JSON.stringify({ chunk: text, done: false, model: request.model })}\n\n`);
+          const sanitizedText = text.replace(/^\uFEFF/, '');
+          res.write(`data: ${JSON.stringify({ chunk: sanitizedText, done: false, model: request.model })}\n\n`);
         }
       }
 
       res.write(`data: ${JSON.stringify({ chunk: '', done: true, model: request.model })}\n\n`);
       res.end();
-    } catch (error) {
+    } catch (error: any) {
       console.error('[OpenAIService] Error during streaming:', error);
-      res.write(`data: ${JSON.stringify({ error: (error as Error).message, done: true })}\n\n`);
+      const cleanError = (error?.message || 'Unknown error').replace(/^\uFEFF/, '').replace(/[\uFEFF]/g, '');
+      res.write(`data: ${JSON.stringify({ error: cleanError, done: true })}\n\n`);
       res.end();
     }
   }

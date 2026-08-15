@@ -40,7 +40,7 @@ router.post('/stream', authenticateOrAllowTrial, async (req: AuthenticatedReques
     await aiRouterService.handleChatStream(
       {
         messages,
-        model: model || 'gemini-1.5-flash',
+        model: model || 'gemini-flash-latest',
         temperature: temperature ?? 0.7,
         mcpEnabled: mcpEnabled ?? false,
         ragContext,
@@ -61,8 +61,8 @@ router.post('/stream', authenticateOrAllowTrial, async (req: AuthenticatedReques
 router.get('/models', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
   res.json({
     models: [
-      { id: 'gemini-1.5-pro', name: 'Google Gemini 1.5 Pro', provider: 'Google', description: 'Advanced reasoning & large context' },
-      { id: 'gemini-1.5-flash', name: 'Google Gemini 1.5 Flash', provider: 'Google', description: 'Fast, lightweight & responsive' },
+      { id: 'gemini-pro-latest', name: 'Google Gemini Pro', provider: 'Google', description: 'Advanced reasoning & large context' },
+      { id: 'gemini-flash-latest', name: 'Google Gemini Flash', provider: 'Google', description: 'Fast, lightweight & responsive' },
       { id: 'gpt-4o', name: 'OpenAI GPT-4o', provider: 'OpenAI', description: 'Flagship multimodal model' },
       { id: 'gpt-4o-mini', name: 'OpenAI GPT-4o Mini', provider: 'OpenAI', description: 'Affordable, fast intelligent model' },
     ],

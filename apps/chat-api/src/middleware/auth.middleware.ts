@@ -34,7 +34,7 @@ export async function authenticateToken(
     return;
   }
 
-  const idToken = authHeader.split('Bearer ')[1];
+  const idToken = authHeader.split('Bearer ')[1].trim();
 
   try {
     if (!GOOGLE_CLIENT_ID) {
@@ -68,9 +68,17 @@ export async function authenticateToken(
     next();
   } catch (error) {
     console.error('[Google Auth Middleware] Token verification failed:', error);
+    const errMsg = (error as Error).message || '';
+    if (errMsg.includes('Token used too late') || errMsg.includes('expired')) {
+      res.status(401).json({
+        error: 'TokenExpired',
+        message: 'Your Google Sign-In session has expired. Please click "Sign in with Google" to refresh your session.',
+      });
+      return;
+    }
     res.status(403).json({
       error: 'Forbidden',
-      message: 'Failed to verify Google ID Token: ' + (error as Error).message,
+      message: 'Failed to verify Google ID Token: ' + errMsg,
     });
   }
 }

@@ -1,5 +1,6 @@
 import { Component, ElementRef, ViewChild, AfterViewChecked } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { ChatService } from '../../services/chat.service';
 import { AuthService } from '../../services/auth.service';
 
@@ -7,96 +8,15 @@ import { AuthService } from '../../services/auth.service';
   selector: 'app-chat-window',
   standalone: true,
   imports: [CommonModule],
-  template: `
-    <div class="flex-1 flex flex-col h-full overflow-hidden relative">
-      <!-- Ambient Backdrops -->
-      <div class="ambient-glow-1"></div>
-      <div class="ambient-glow-2"></div>
-
-      <!-- Messages Stream Feed -->
-      <div #scrollContainer class="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 relative z-10">
-        <!-- Empty State Hero -->
-        <div *ngIf="chatService.activeMessages().length === 0" class="h-full flex flex-col items-center justify-center text-center p-6 max-w-lg mx-auto">
-          <div class="w-16 h-16 rounded-3xl bg-gradient-to-tr from-accentCyan via-accentViolet to-indigo-600 p-0.5 shadow-glow mb-6 animate-pulse">
-            <div class="w-full h-full bg-obsidian rounded-[22px] flex items-center justify-center">
-              <svg class="w-8 h-8 text-accentCyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L5.6 15.11a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-              </svg>
-            </div>
-          </div>
-          <h2 class="text-2xl font-bold bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent mb-2">
-            Enterprise AI Intelligence
-          </h2>
-          <p class="text-sm text-slate-400 mb-6">
-            Multi-LLM SSE streaming router active. Switch models seamlessly between Google Gemini and OpenAI GPT-4o.
-          </p>
-
-          <!-- Prompt Cards -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
-            <button
-              (click)="chatService.sendMessage('Architect an Nx monorepo pipeline for GCP Cloud Run.')"
-              class="p-4 glass-card glass-card-hover rounded-2xl text-left border border-glassBorder group"
-            >
-              <div class="text-xs font-semibold text-accentCyan group-hover:underline">GCP Architecture</div>
-              <div class="text-xs text-slate-300 mt-1">Design an automated Nx Monorepo CI/CD deployment.</div>
-            </button>
-
-            <button
-              (click)="chatService.sendMessage('Explain Model Context Protocol (MCP) adapter integration.')"
-              class="p-4 glass-card glass-card-hover rounded-2xl text-left border border-glassBorder group"
-            >
-              <div class="text-xs font-semibold text-accentViolet group-hover:underline">MCP Protocol</div>
-              <div class="text-xs text-slate-300 mt-1">Learn how MCP tool execution works in Express.</div>
-            </button>
-          </div>
-        </div>
-
-        <!-- Chat Messages -->
-        <div *ngFor="let msg of chatService.activeMessages()" class="space-y-2">
-          <!-- User Message -->
-          <div *ngIf="msg.role === 'user'" class="flex justify-end items-start space-x-3">
-            <div class="max-w-2xl px-5 py-3.5 rounded-3xl bg-gradient-to-r from-accentViolet/30 to-indigo-600/30 border border-accentViolet/30 backdrop-blur-md shadow-glass text-slate-100 text-sm leading-relaxed">
-              {{ msg.content }}
-            </div>
-            <div class="w-8 h-8 rounded-xl bg-accentViolet/20 border border-accentViolet/40 flex items-center justify-center text-xs font-semibold text-violet-200 shadow-sm shrink-0">
-              U
-            </div>
-          </div>
-
-          <!-- Assistant Message -->
-          <div *ngIf="msg.role === 'assistant'" class="flex justify-start items-start space-x-3">
-            <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-accentCyan to-blue-600 flex items-center justify-center text-white shadow-glow shrink-0">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-            </div>
-
-            <div class="max-w-3xl glass-card rounded-3xl p-5 border border-glassBorder shadow-glass text-slate-200 text-sm leading-relaxed space-y-2">
-              <div class="flex items-center justify-between text-[11px] text-slate-400 mb-2 border-b border-white/5 pb-2">
-                <span class="font-medium text-accentCyan">NexusAI ({{ msg.model || 'Gemini' }})</span>
-                <span>{{ msg.timestamp | date:'mediumTime' }}</span>
-              </div>
-
-              <div class="whitespace-pre-wrap font-sans">{{ msg.content }}</div>
-
-              <!-- Streaming Pulse Indicator -->
-              <div *ngIf="chatService.isStreaming() && !msg.content" class="flex items-center space-x-2 py-2">
-                <span class="w-2 h-2 rounded-full bg-accentCyan animate-ping"></span>
-                <span class="text-xs text-slate-400">Synthesizing stream...</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  `,
+  templateUrl: './chat-window.component.html',
 })
 export class ChatWindowComponent implements AfterViewChecked {
   @ViewChild('scrollContainer') private scrollContainer!: ElementRef;
 
   constructor(
     public chatService: ChatService,
-    public authService: AuthService
+    public authService: AuthService,
+    private sanitizer: DomSanitizer
   ) {}
 
   ngAfterViewChecked() {
@@ -107,5 +27,56 @@ export class ChatWindowComponent implements AfterViewChecked {
     try {
       this.scrollContainer.nativeElement.scrollTop = this.scrollContainer.nativeElement.scrollHeight;
     } catch (err) {}
+  }
+
+  /**
+   * Formats raw Markdown into sanitized, safe HTML for rich visual rendering
+   */
+  public renderMarkdown(content: string): SafeHtml {
+    if (!content) return '';
+
+    // Escape all HTML first so markdown formatting is applied on top of
+    // inert text - otherwise raw HTML in model output (e.g. from prompt
+    // injection) would pass through bypassSecurityTrustHtml unescaped.
+    let html = this.escapeHtml(content);
+
+    // 1. Code blocks: ```lang ... ```
+    html = html.replace(/```([\s\S]*?)```/g, (_, code) => {
+      return `<pre class="bg-abyss/90 border border-glassBorder rounded-xl p-3 my-2 overflow-x-auto text-xs font-mono text-emerald-300"><code>${code.trim()}</code></pre>`;
+    });
+
+    // 2. Inline code: `code`
+    html = html.replace(/`([^`]+)`/g, (_, code) => {
+      return `<code class="bg-black/50 border border-white/10 px-1.5 py-0.5 rounded text-accentCyan font-mono text-xs">${code}</code>`;
+    });
+
+    // 3. Bold: **text**
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong class="font-bold text-white">$1</strong>');
+
+    // 4. Italic: *text* or _text_
+    html = html.replace(/\*([^*]+)\*/g, '<em class="italic text-slate-100">$1</em>');
+
+    // 5. Markdown Links: [label](url)
+    html = html.replace(
+      /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+      '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-accentCyan hover:text-cyan-300 underline font-medium transition-colors">$1 ↗</a>'
+    );
+
+    // 6. Bullet lists: * item or - item
+    html = html.replace(/^[*-]\s+(.+)$/gm, '<li class="ml-4 list-disc text-slate-200">$1</li>');
+
+    // 7. Line breaks
+    html = html.replace(/\n/g, '<br/>');
+
+    return this.sanitizer.bypassSecurityTrustHtml(html);
+  }
+
+  private escapeHtml(text: string): string {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
 }

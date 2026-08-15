@@ -39,18 +39,31 @@ export class AuthService {
         }
       }
     } catch (e) {
-      console.error('[Google Auth] Failed to fetch backend config (is the chat-api server running on port 3000?):', e);
+      console.error('[Google Auth] Failed to fetch backend config:', e);
     }
   }
 
+  /**
+   * Restores user session, automatically invalidating expired Google ID tokens
+   */
   private restoreSession(): void {
     const storedSession = localStorage.getItem('NEXUS_AUTH_SESSION');
     if (storedSession) {
       try {
         const session: UserSession = JSON.parse(storedSession);
+        if (session.idToken) {
+          const payload = this.decodeJwtPayload(session.idToken);
+          const currentTimestampSeconds = Math.floor(Date.now() / 1000);
+          // If Google ID Token is expired (exp < current time), clear expired session
+          if (payload && payload.exp && payload.exp < currentTimestampSeconds) {
+            console.warn('[Google Auth] Saved Google ID Token expired. Clearing session.');
+            this.logout();
+            return;
+          }
+        }
         this.userSignal.set(session);
       } catch (e) {
-        localStorage.removeItem('NEXUS_AUTH_SESSION');
+        this.logout();
       }
     }
   }
@@ -62,9 +75,6 @@ export class AuthService {
     let currentClientId = this.googleClientId().trim();
 
     if (!currentClientId) {
-      // Config fetch may still be in-flight (or failed) when the user clicks
-      // Sign In — wait for it, then retry once, rather than calling Google
-      // Identity Services with an empty client_id.
       await this.configPromise;
       currentClientId = this.googleClientId().trim();
     }
@@ -73,7 +83,7 @@ export class AuthService {
       currentClientId = this.googleClientId().trim();
     }
     if (!currentClientId) {
-      console.error('[Google Auth] No Google Client ID available. Ensure the chat-api server is running on port 3000 and GOOGLE_CLIENT_ID is set.');
+      console.error('[Google Auth] No Google Client ID available. Ensure GOOGLE_CLIENT_ID is set in .env.');
       return;
     }
 
