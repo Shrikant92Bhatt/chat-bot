@@ -69,6 +69,40 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Submit to GCP Cloud Build
-        if: ${{ secrets.GCP_SA_KEY != '' && github.ref == 'refs/heads/main' }}
+        if: ${{ secrets.GCP_SA_KEY != '' && github.ref == 'refs/heads/main' && github.event_name == 'push' }}
         run: |
           gcloud builds submit --config=cloudbuild.yaml
+
+  # Job 3: Deploy to Cloud Run (main branch only, after images are built above)
+  deploy-to-cloud-run:
+    name: Deploy to Cloud Run
+    runs-on: ubuntu-latest
+    needs: gcp-build-check
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+    steps:
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up GCP Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy chat-api
+        run: |
+          gcloud run deploy chat-api \
+            --image=asia-south1-docker.pkg.dev/chat-bot-505613/chat-repo/chat-api:latest \
+            --region=asia-south1 \
+            --platform=managed \
+            --allow-unauthenticated \
+            --set-env-vars="GOOGLE_CLIENT_ID=953232172604-iukeghd5021k56htjq7ep332bvtvppot.apps.googleusercontent.com,ALLOWED_ORIGIN=https://nexusai-gcp.duckdns.org" \
+            --set-secrets="GEMINI_API_KEY=GEMINI_API_KEY:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest"
+
+      - name: Deploy chat-client
+        run: |
+          gcloud run deploy chat-client \
+            --image=asia-south1-docker.pkg.dev/chat-bot-505613/chat-repo/chat-client:latest \
+            --region=asia-south1 \
+            --platform=managed \
+            --allow-unauthenticated \
+            --set-env-vars="API_URL=https://nexusai-gcp.duckdns.org"
