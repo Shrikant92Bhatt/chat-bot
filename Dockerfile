@@ -1,32 +1,21 @@
 # ==========================================
-# Stage 1: Build Angular Static Application
+# Default Root Dockerfile for GCP Cloud Build
 # ==========================================
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy monorepo configuration files
 COPY package.json nx.json tsconfig.base.json ./
-
-# Install Linux & cross-platform dependencies
 RUN npm install
 
-# Copy source code
 COPY apps ./apps
 COPY libs ./libs
 
-# Build production Angular client with expanded memory limit
 RUN NODE_OPTIONS="--max-old-space-size=4096" npx nx build chat-client
 
-# ==========================================
-# Stage 2: Serve via High-Performance NGINX
-# ==========================================
 FROM nginx:alpine AS runner
 
-# Copy custom NGINX config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-# Copy compiled Angular artifacts
 COPY --from=builder /app/dist/apps/chat-client /usr/share/nginx/html
 
 EXPOSE 80
