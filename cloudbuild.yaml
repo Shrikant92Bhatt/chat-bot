@@ -4,7 +4,7 @@ steps:
     args:
       - 'build'
       - '-t'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/chat-repo/chat-api:latest'
+      - 'asia-south1-docker.pkg.dev/$PROJECT_ID/chat-repo/chat-api:latest'
       - '-f'
       - 'Dockerfile.api'
       - '.'
@@ -14,14 +14,14 @@ steps:
     args:
       - 'build'
       - '-t'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/chat-repo/chat-client:latest'
+      - 'asia-south1-docker.pkg.dev/$PROJECT_ID/chat-repo/chat-client:latest'
       - '-f'
       - 'Dockerfile.client'
       - '.'
 
 images:
-  - 'us-central1-docker.pkg.dev/$PROJECT_ID/chat-repo/chat-api:latest'
-  - 'us-central1-docker.pkg.dev/$PROJECT_ID/chat-repo/chat-client:latest'
+  - 'asia-south1-docker.pkg.dev/$PROJECT_ID/chat-repo/chat-api:latest'
+  - 'asia-south1-docker.pkg.dev/$PROJECT_ID/chat-repo/chat-client:latest'
 
 options:
   logging: CLOUD_LOGGING_ONLY

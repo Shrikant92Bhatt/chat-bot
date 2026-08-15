@@ -15,8 +15,12 @@ export class ChatService {
   public isStreaming = signal<boolean>(false);
   public mcpEnabled = signal<boolean>(false);
 
-  // Tracks unauthenticated user message limit (Max 1 message allowed without sign-in)
-  public unauthUserMessageCount = signal<number>(0);
+  // Tracks unauthenticated user message limit (Max 1 message allowed without sign-in).
+  // Persisted so a page reload can't be used to bypass the limit; the backend
+  // separately enforces this per-IP as the authoritative source of truth.
+  public unauthUserMessageCount = signal<number>(
+    parseInt(localStorage.getItem('NEXUS_ANON_MSG_COUNT') || '0', 10) || 0
+  );
 
   public activeThread = computed(() => {
     const id = this.activeThreadId();
@@ -46,10 +50,11 @@ export class ChatService {
   }
 
   /**
-   * Clears threads and message counter for unauthenticated users.
+   * Clears threads for unauthenticated users (chat history is never persisted
+   * for anonymous visitors). Does NOT reset unauthUserMessageCount - that
+   * stays persisted across reload/logout so the free-trial limit holds.
    */
   private clearUnauthenticatedHistory() {
-    this.unauthUserMessageCount.set(0);
     this.createInitialThread();
   }
 
@@ -180,7 +185,11 @@ export class ChatService {
     );
 
     if (!isAuthenticated) {
-      this.unauthUserMessageCount.update((count) => count + 1);
+      this.unauthUserMessageCount.update((count) => {
+        const next = count + 1;
+        localStorage.setItem('NEXUS_ANON_MSG_COUNT', String(next));
+        return next;
+      });
     } else {
       this.persistUserThreadHistory();
     }
@@ -208,6 +217,21 @@ export class ChatService {
         }),
         signal: this.abortController.signal,
       });
+
+      if (response.status === 401) {
+        // Server-side (IP-based) trial check disagrees with our local count -
+        // e.g. storage was cleared, or the limit was already used from this
+        // network. Sync local state to match and prompt sign-in.
+        this.unauthUserMessageCount.set(1);
+        localStorage.setItem('NEXUS_ANON_MSG_COUNT', '1');
+        this.updateAssistantMessage(
+          currentThreadId,
+          assistantMessageId,
+          '🔒 Free trial limit reached (1 message without sign-in). Please sign in with Google to continue chatting.'
+        );
+        this.authService.loginWithGoogle();
+        return;
+      }
 
       if (!response.ok) {
         throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);

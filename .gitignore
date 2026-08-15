@@ -13,6 +13,9 @@ tmp/
 .env.local
 .env.production
 
+# Contains real API keys/secrets inline for copy-paste convenience - never commit
+DEPLOY_COMMANDS.md
+
 # IDE & OS files
 .vscode/
 .idea/
