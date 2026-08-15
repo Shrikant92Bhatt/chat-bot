@@ -57,19 +57,21 @@ jobs:
         run: |
           docker build -t chat-client:test -f Dockerfile.client .
 
-      # GCP Authentication (Activated when GCP_SA_KEY secret is configured)
+      # GCP steps only run on pushes to main (not on PRs, which have no GCP creds needed).
+      # Note: the "secrets" context is not available in step-level `if:` conditions,
+      # so gating is done on github.ref/event_name here instead.
       - name: Authenticate to GCP
-        if: ${{ secrets.GCP_SA_KEY != '' }}
+        if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Set up GCP Cloud SDK
-        if: ${{ secrets.GCP_SA_KEY != '' }}
+        if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Submit to GCP Cloud Build
-        if: ${{ secrets.GCP_SA_KEY != '' && github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+        if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
         run: |
           gcloud builds submit --config=cloudbuild.yaml
 
