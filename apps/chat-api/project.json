@@ -11,6 +11,7 @@
         "outputPath": "dist/apps/chat-api",
         "main": "apps/chat-api/src/main.ts",
         "tsConfig": "apps/chat-api/tsconfig.app.json",
+        "rootDir": ".",
         "assets": ["apps/chat-api/src/assets"]
       }
     },

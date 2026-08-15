@@ -8,9 +8,9 @@ import { ChatService } from '../../services/chat.service';
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="p-4 md:p-6 bg-gradient-to-t from-obsidian via-obsidian/90 to-transparent relative z-20 backdrop-blur-md">
+    <div class="p-4 md:p-6 bg-gradient-to-t from-abyss via-abyss/90 to-transparent relative z-20 backdrop-blur-md">
       <div class="max-w-4xl mx-auto">
-        <form (ngSubmit)="send()" class="relative flex items-center glass-input rounded-3xl p-2 pr-3 shadow-glass transition-all focus-within:ring-2 focus-within:ring-accentCyan/30">
+        <form (ngSubmit)="send()" class="relative flex items-center glass-input rounded-3xl p-2 pr-3 shadow-glass transition-all focus-within:ring-2 focus-within:ring-brandEmerald/40">
           
           <!-- Auto-resizing textarea -->
           <textarea
@@ -40,10 +40,10 @@ import { ChatService } from '../../services/chat.service';
               *ngIf="!chatService.isStreaming()"
               type="submit"
               [disabled]="!messageText.trim()"
-              class="p-3 rounded-2xl bg-gradient-to-r from-accentCyan to-accentViolet text-white shadow-glow hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center"
+              class="p-3 rounded-2xl bg-gradient-to-r from-brandEmerald via-brandMint to-brandIndigo text-abyss shadow-emeraldGlow hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center font-bold"
             >
               <svg class="w-5 h-5 transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
               </svg>
             </button>
           </div>
@@ -51,7 +51,7 @@ import { ChatService } from '../../services/chat.service';
 
         <!-- Input Footer Metadata -->
         <div class="flex items-center justify-between text-[11px] text-slate-400 px-4 mt-2">
-          <span>Routing: <strong class="text-slate-300">{{ chatService.selectedModel() }}</strong></span>
+          <span>Routing: <strong class="text-brandMint">{{ chatService.selectedModel() }}</strong></span>
           <span>Enterprise Nx Monorepo • SSE Streaming Gateway</span>
         </div>
       </div>

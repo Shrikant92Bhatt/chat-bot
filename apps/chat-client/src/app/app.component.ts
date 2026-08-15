@@ -16,7 +16,7 @@ import { MessageInputComponent } from './components/message-input/message-input.
     MessageInputComponent,
   ],
   template: `
-    <div class="h-screen w-screen flex flex-col bg-obsidian text-slate-100 overflow-hidden relative font-sans">
+    <div class="h-screen w-screen flex flex-col bg-abyss text-slate-100 overflow-hidden relative font-sans">
       <!-- Top Navigation Bar -->
       <app-navbar (toggleSidebar)="isSidebarOpen = !isSidebarOpen"></app-navbar>
 
@@ -24,7 +24,7 @@ import { MessageInputComponent } from './components/message-input/message-input.
       <div class="flex-1 flex overflow-hidden relative z-10">
         <app-sidebar [isOpen]="isSidebarOpen"></app-sidebar>
         
-        <main class="flex-1 flex flex-col h-full overflow-hidden bg-gradient-to-b from-obsidian via-slate-950 to-obsidian">
+        <main class="flex-1 flex flex-col h-full overflow-hidden bg-gradient-to-b from-abyss via-[#070c18] to-abyss">
           <app-chat-window class="flex-1 overflow-hidden"></app-chat-window>
           <app-message-input></app-message-input>
         </main>
