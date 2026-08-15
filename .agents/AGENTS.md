@@ -27,3 +27,8 @@ This repository is an enterprise-grade **Nx Monorepo** containing:
 - **Docker Containers**:
   - `Dockerfile.api`: Node.js 20 LTS multi-stage production image for Express backend.
   - `Dockerfile.client`: Multi-stage build with NGINX (`nginx:alpine`) for Angular SPA static asset hosting and client-side routing fallback.
+
+### 4. Git Branching & Workflow Rules
+- **No Direct Push to `main`**: Never push changes directly to `main`.
+- **Single Working Branch**: Consolidate ongoing fixes and updates on a single working branch (e.g., `develop` or `feat/updates`) instead of creating a new branch for every change.
+- **PR Creation**: Only generate or present Pull Request links when explicitly requested by the user ("create pr").
