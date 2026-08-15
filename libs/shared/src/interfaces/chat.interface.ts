@@ -1,4 +1,10 @@
-export type AIModelType = 'gemini-1.5-pro' | 'gemini-1.5-flash' | 'gpt-4o' | 'gpt-4o-mini';
+export type AIModelType =
+  | 'gemini-1.5-pro'
+  | 'gemini-1.5-flash'
+  | 'gemini-pro-latest'
+  | 'gemini-flash-latest'
+  | 'gpt-4o'
+  | 'gpt-4o-mini';
 
 export type MessageRole = 'user' | 'assistant' | 'system';
 

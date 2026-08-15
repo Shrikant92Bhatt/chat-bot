@@ -7,7 +7,9 @@ import { getApiBaseUrl } from '../core/runtime-config';
   providedIn: 'root',
 })
 export class ChatService {
-  private apiUrl = `${getApiBaseUrl()}/api/chat`;
+  private get apiUrl() {
+    return `${getApiBaseUrl()}/api/chat`;
+  }
 
   public selectedModel = signal<AIModelType>('gemini-1.5-flash');
   public threads = signal<ChatThread[]>([]);
@@ -15,12 +17,8 @@ export class ChatService {
   public isStreaming = signal<boolean>(false);
   public mcpEnabled = signal<boolean>(false);
 
-  // Tracks unauthenticated user message limit (Max 1 message allowed without sign-in).
-  // Persisted so a page reload can't be used to bypass the limit; the backend
-  // separately enforces this per-IP as the authoritative source of truth.
-  public unauthUserMessageCount = signal<number>(
-    parseInt(localStorage.getItem('NEXUS_ANON_MSG_COUNT') || '0', 10) || 0
-  );
+  // Tracks unauthenticated user message limit (Max 1 message allowed without sign-in)
+  public unauthUserMessageCount = signal<number>(0);
 
   public activeThread = computed(() => {
     const id = this.activeThreadId();
@@ -40,27 +38,18 @@ export class ChatService {
     effect(() => {
       const user = this.authService.userSignal();
       if (user && user.uid) {
-        // Authenticated user: Load saved user thread history
         this.loadUserThreadHistory(user.uid);
       } else {
-        // Unauthenticated user: Do NOT preserve chat history
         this.clearUnauthenticatedHistory();
       }
     });
   }
 
-  /**
-   * Clears threads for unauthenticated users (chat history is never persisted
-   * for anonymous visitors). Does NOT reset unauthUserMessageCount - that
-   * stays persisted across reload/logout so the free-trial limit holds.
-   */
   private clearUnauthenticatedHistory() {
+    this.unauthUserMessageCount.set(0);
     this.createInitialThread();
   }
 
-  /**
-   * Loads saved chat history from localStorage for authenticated users.
-   */
   private loadUserThreadHistory(uid: string) {
     const saved = localStorage.getItem(`NEXUS_THREADS_${uid}`);
     if (saved) {
@@ -78,9 +67,6 @@ export class ChatService {
     this.createInitialThread();
   }
 
-  /**
-   * Saves thread history for authenticated users ONLY.
-   */
   private persistUserThreadHistory() {
     const user = this.authService.userSignal();
     if (user && user.uid) {
@@ -185,11 +171,7 @@ export class ChatService {
     );
 
     if (!isAuthenticated) {
-      this.unauthUserMessageCount.update((count) => {
-        const next = count + 1;
-        localStorage.setItem('NEXUS_ANON_MSG_COUNT', String(next));
-        return next;
-      });
+      this.unauthUserMessageCount.update((count) => count + 1);
     } else {
       this.persistUserThreadHistory();
     }
@@ -219,15 +201,12 @@ export class ChatService {
       });
 
       if (response.status === 401) {
-        // Server-side (IP-based) trial check disagrees with our local count -
-        // e.g. storage was cleared, or the limit was already used from this
-        // network. Sync local state to match and prompt sign-in.
-        this.unauthUserMessageCount.set(1);
-        localStorage.setItem('NEXUS_ANON_MSG_COUNT', '1');
+        // Expired Google ID token or trial limit reached
+        this.authService.logout();
         this.updateAssistantMessage(
           currentThreadId,
           assistantMessageId,
-          '🔒 Free trial limit reached (1 message without sign-in). Please sign in with Google to continue chatting.'
+          '🔒 Your Google Sign-In session expired. Please sign in again to refresh your session.'
         );
         this.authService.loginWithGoogle();
         return;
@@ -261,7 +240,6 @@ export class ChatService {
                 accumulatedContent += data.chunk;
               }
 
-              // Update assistant message state
               this.updateAssistantMessage(currentThreadId, assistantMessageId, accumulatedContent);
             } catch (e) {
               // Ignore partial chunk parse failures
