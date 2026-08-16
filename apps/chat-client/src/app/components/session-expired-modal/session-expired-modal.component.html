@@ -1,0 +1,46 @@
+<div
+  class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="session-expired-title"
+>
+  <div class="w-full max-w-sm glass-card rounded-3xl p-6 border border-glassBorder shadow-glass text-center relative">
+    <button
+      (click)="dismiss()"
+      class="absolute top-4 right-4 text-slate-500 hover:text-slate-200 transition-colors"
+      aria-label="Dismiss"
+    >
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    </button>
+
+    <div class="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-tr from-accentCyan to-accentViolet flex items-center justify-center shadow-glow mb-4">
+      <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 10-8 0v4h8z" />
+      </svg>
+    </div>
+
+    <h2 id="session-expired-title" class="text-lg font-bold text-white mb-2">Session Expired</h2>
+    <p class="text-sm text-slate-400 mb-6">
+      Your sign-in session has expired for security reasons. Please sign in again to continue chatting.
+    </p>
+
+    <button
+      (click)="signInAgain()"
+      class="w-full px-5 py-2.5 rounded-2xl bg-gradient-to-r from-accentCyan to-accentViolet text-white font-bold shadow-[0_6px_20px_rgba(139,92,246,0.35)] border-t border-white/25 border-b border-black/30 hover:shadow-[0_8px_25px_rgba(6,182,212,0.45)] hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-inner transition-all duration-200 flex items-center justify-center space-x-2.5 cursor-pointer"
+    >
+      <svg class="w-4 h-4 drop-shadow" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.545,6.477,2.545,12s4.476,10,10,10c5.768,0,9.757-4.056,9.757-9.927c0-0.669-0.071-1.317-0.187-1.834H12.545z"/>
+      </svg>
+      <span>Sign In with Google</span>
+    </button>
+
+    <button
+      (click)="dismiss()"
+      class="w-full mt-3 text-xs text-slate-500 hover:text-slate-300 transition-colors"
+    >
+      Not now
+    </button>
+  </div>
+</div>

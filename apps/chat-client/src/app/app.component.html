@@ -12,4 +12,7 @@
       <app-message-input></app-message-input>
     </main>
   </div>
+
+  <!-- Popup shown when a signed-in user's Google session has expired -->
+  <app-session-expired-modal *ngIf="authService.sessionExpired()"></app-session-expired-modal>
 </div>
