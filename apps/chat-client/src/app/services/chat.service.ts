@@ -35,14 +35,20 @@ export class ChatService {
     this.createInitialThread();
 
     // Effect: Reacts to User Login/Logout state changes
-    effect(() => {
-      const user = this.authService.userSignal();
-      if (user && user.uid) {
-        this.loadUserThreadHistory(user.uid);
-      } else {
-        this.clearUnauthenticatedHistory();
-      }
-    });
+    effect(
+      () => {
+        const user = this.authService.userSignal();
+        if (user && user.uid) {
+          this.loadUserThreadHistory();
+        } else {
+          this.clearUnauthenticatedHistory();
+        }
+      },
+      // clearUnauthenticatedHistory/createInitialThread write signals (threads,
+      // unauthUserMessageCount) owned by this same service, which Angular
+      // disallows from inside an effect by default (NG0600) unless opted in.
+      { allowSignalWrites: true }
+    );
   }
 
   private clearUnauthenticatedHistory() {
@@ -50,27 +56,57 @@ export class ChatService {
     this.createInitialThread();
   }
 
-  private loadUserThreadHistory(uid: string) {
-    const saved = localStorage.getItem(`NEXUS_THREADS_${uid}`);
-    if (saved) {
-      try {
-        const loadedThreads: ChatThread[] = JSON.parse(saved);
+  /**
+   * Loads saved chat history from the backend (Postgres) for authenticated users.
+   */
+  private async loadUserThreadHistory(): Promise<void> {
+    try {
+      const response = await fetch(`${this.apiUrl}/threads`, {
+        headers: { Authorization: `Bearer ${this.authService.getIdToken()}` },
+      });
+
+      if (response.status === 401) {
+        this.authService.notifySessionExpired();
+        return;
+      }
+
+      if (response.ok) {
+        const data = await response.json();
+        const loadedThreads: ChatThread[] = data.threads;
         if (loadedThreads && loadedThreads.length > 0) {
           this.threads.set(loadedThreads);
           this.activeThreadId.set(loadedThreads[0].id);
           return;
         }
-      } catch (e) {
-        localStorage.removeItem(`NEXUS_THREADS_${uid}`);
       }
+    } catch (e) {
+      console.error('[ChatService] Failed to load thread history:', e);
     }
     this.createInitialThread();
   }
 
-  private persistUserThreadHistory() {
+  /**
+   * Saves thread history for authenticated users ONLY.
+   */
+  private async persistUserThreadHistory(): Promise<void> {
     const user = this.authService.userSignal();
-    if (user && user.uid) {
-      localStorage.setItem(`NEXUS_THREADS_${user.uid}`, JSON.stringify(this.threads()));
+    if (!user || !user.uid) return;
+
+    try {
+      const response = await fetch(`${this.apiUrl}/threads`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.authService.getIdToken()}`,
+        },
+        body: JSON.stringify({ threads: this.threads() }),
+      });
+
+      if (response.status === 401) {
+        this.authService.notifySessionExpired();
+      }
+    } catch (e) {
+      console.error('[ChatService] Failed to save thread history:', e);
     }
   }
 

@@ -2,7 +2,8 @@ import { Router, Response } from 'express';
 import { authenticateToken, authenticateOrAllowTrial, AuthenticatedRequest } from '../middleware/auth.middleware';
 import { AIRouterService } from '../services/ai-router.service';
 import { UserRegistryService } from '../services/user-registry.service';
-import { ChatStreamRequest } from '@chat-monorepo/shared';
+import { ThreadService } from '../services/thread.service';
+import { ChatStreamRequest, ChatThread } from '@chat-monorepo/shared';
 
 const router = Router();
 const aiRouterService = new AIRouterService();
@@ -73,9 +74,45 @@ router.get('/models', authenticateToken, (req: AuthenticatedRequest, res: Respon
  * GET /api/chat/users
  * Returns list of authenticated application users.
  */
-router.get('/users', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
-  const users = UserRegistryService.getAllUsers();
+router.get('/users', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  const users = await UserRegistryService.getAllUsers();
   res.json({ users, count: users.length });
+});
+
+/**
+ * GET /api/chat/threads
+ * Returns all saved chat threads for the authenticated user.
+ */
+router.get('/threads', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const threads = await ThreadService.getThreadsForUser(req.user!.uid);
+    res.json({ threads });
+  } catch (error) {
+    console.error('[Chat API Route] Failed to load threads:', error);
+    res.status(500).json({ error: 'Failed to load chat threads.' });
+  }
+});
+
+/**
+ * PUT /api/chat/threads
+ * Replaces the authenticated user's full thread list (mirrors the
+ * "save the whole array" pattern the frontend already uses).
+ */
+router.put('/threads', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  const threads = req.body?.threads as ChatThread[] | undefined;
+
+  if (!Array.isArray(threads)) {
+    res.status(400).json({ error: 'Invalid request: "threads" array is required.' });
+    return;
+  }
+
+  try {
+    await ThreadService.saveThreadsForUser(req.user!.uid, threads);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[Chat API Route] Failed to save threads:', error);
+    res.status(500).json({ error: 'Failed to save chat threads.' });
+  }
 });
 
 export default router;
