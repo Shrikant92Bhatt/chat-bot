@@ -4,6 +4,7 @@ import { NavbarComponent } from './components/navbar/navbar.component';
 import { SidebarComponent } from './components/sidebar/sidebar.component';
 import { ChatWindowComponent } from './components/chat-window/chat-window.component';
 import { MessageInputComponent } from './components/message-input/message-input.component';
+import { SessionExpiredModalComponent } from './components/session-expired-modal/session-expired-modal.component';
 import { AuthService } from './services/auth.service';
 
 @Component({
@@ -15,6 +16,7 @@ import { AuthService } from './services/auth.service';
     SidebarComponent,
     ChatWindowComponent,
     MessageInputComponent,
+    SessionExpiredModalComponent,
   ],
   templateUrl: './app.component.html',
 })

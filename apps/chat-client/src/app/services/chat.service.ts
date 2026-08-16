@@ -85,7 +85,7 @@ export class ChatService {
         {
           id: 'welcome-msg',
           role: 'assistant',
-          content: 'Hello! I am NexusAI, powered by Google Gemini and OpenAI. Ask me anything about multi-LLM routing, Glassmorphism UI, or GCP monorepo architecture.',
+          content: "Hello! I'm NexusAI, your intelligent assistant. Ask me anything — I'm here to help with questions, ideas, writing, and code.",
           timestamp: Date.now(),
           model: 'gemini-1.5-flash',
         },
@@ -201,14 +201,16 @@ export class ChatService {
       });
 
       if (response.status === 401) {
-        // Expired Google ID token or trial limit reached
-        this.authService.logout();
+        // Expired Google ID token or trial limit reached. Show a popup with an
+        // explicit Sign In button rather than auto-triggering Google's flow here -
+        // this fetch callback runs outside a direct user click, so calling it
+        // straight away is liable to be blocked by the browser's popup blocker.
+        this.authService.notifySessionExpired();
         this.updateAssistantMessage(
           currentThreadId,
           assistantMessageId,
-          '🔒 Your Google Sign-In session expired. Please sign in again to refresh your session.'
+          '🔒 Your session has expired. Please sign in again to continue.'
         );
-        this.authService.loginWithGoogle();
         return;
       }
 

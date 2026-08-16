@@ -10,6 +10,10 @@ declare const google: any;
 export class AuthService {
   public userSignal = signal<UserSession | null>(null);
 
+  // Drives the "session expired" popup - true whenever a previously signed-in
+  // user's Google ID token has expired (detected on load or on a 401 from the API).
+  public sessionExpired = signal<boolean>(false);
+
   // Reads configured Google Client ID from backend .env or localStorage
   public googleClientId = signal<string>(
     (localStorage.getItem('NEXUS_GOOGLE_CLIENT_ID') || '').trim()
@@ -57,7 +61,7 @@ export class AuthService {
           // If Google ID Token is expired (exp < current time), clear expired session
           if (payload && payload.exp && payload.exp < currentTimestampSeconds) {
             console.warn('[Google Auth] Saved Google ID Token expired. Clearing session.');
-            this.logout();
+            this.notifySessionExpired();
             return;
           }
         }
@@ -167,6 +171,7 @@ export class AuthService {
 
   private setUserSession(session: UserSession): void {
     this.userSignal.set(session);
+    this.sessionExpired.set(false);
     localStorage.setItem('NEXUS_AUTH_SESSION', JSON.stringify(session));
   }
 
@@ -192,6 +197,17 @@ export class AuthService {
     }
     this.userSignal.set(null);
     localStorage.removeItem('NEXUS_AUTH_SESSION');
+  }
+
+  /** Marks the session as expired (shows the sign-in-again popup) and clears it. */
+  public notifySessionExpired(): void {
+    this.sessionExpired.set(true);
+    this.logout();
+  }
+
+  /** Dismisses the "session expired" popup without signing back in. */
+  public dismissSessionExpired(): void {
+    this.sessionExpired.set(false);
   }
 
   public getIdToken(): string {
