@@ -1,0 +1,5 @@
+# Shell scripts must keep LF line endings regardless of core.autocrlf -
+# a CRLF-corrupted shebang line breaks `exec` inside Linux Docker
+# containers ("no such file or directory") even though the script looks
+# fine on Windows.
+*.sh text eol=lf
