@@ -21,7 +21,18 @@ import { AuthService } from './services/auth.service';
   templateUrl: './app.component.html',
 })
 export class AppComponent {
-  public isSidebarOpen = true;
+  // Matches the `md:` breakpoint the sidebar/backdrop templates key off of.
+  private static readonly MOBILE_BREAKPOINT_PX = 768;
+
+  // Default closed on phone-width viewports so the sidebar doesn't cover
+  // the whole chat on first load; still defaults open on desktop.
+  public isSidebarOpen = window.innerWidth >= AppComponent.MOBILE_BREAKPOINT_PX;
 
   constructor(public authService: AuthService) {}
+
+  public closeSidebarOnMobile(): void {
+    if (window.innerWidth < AppComponent.MOBILE_BREAKPOINT_PX) {
+      this.isSidebarOpen = false;
+    }
+  }
 }

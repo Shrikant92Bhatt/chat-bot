@@ -6,7 +6,7 @@
   <!-- New Chat Action Button -->
   <div class="p-4 border-b border-glassBorder">
     <button
-      (click)="chatService.createNewThread()"
+      (click)="createNewThread()"
       class="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-white/10 to-white/5 hover:from-white/15 hover:to-white/10 border border-white/10 flex items-center justify-center space-x-2 text-sm font-medium transition-all shadow-glass hover:shadow-glow"
     >
       <svg class="w-5 h-5 text-accentCyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -24,7 +24,7 @@
 
     <div *ngFor="let thread of chatService.threads()">
       <button
-        (click)="chatService.selectThread(thread.id)"
+        (click)="selectThread(thread.id)"
         [ngClass]="chatService.activeThreadId() === thread.id ? 'bg-white/10 border-white/20' : ''"
         class="w-full text-left p-3 rounded-xl border border-transparent hover:border-glassBorder hover:bg-white/5 transition-all group flex items-start space-x-3"
       >
