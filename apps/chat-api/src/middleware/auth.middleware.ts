@@ -124,7 +124,17 @@ export async function authenticateToken(
   };
 
   req.user = authenticatedUser;
-  await UserRegistryService.registerOrUpdateUser(authenticatedUser);
+
+  try {
+    await UserRegistryService.registerOrUpdateUser(authenticatedUser);
+  } catch (error) {
+    // Don't let a DB outage take down auth entirely - every authenticated
+    // route goes through this middleware, so an unguarded rejection here
+    // (Express 4 doesn't catch async-middleware errors) hangs every
+    // request until the proxy times it out, surfacing as a blanket
+    // "Service Unavailable" instead of just losing the user-registry write.
+    console.error('[Google Auth Middleware] Failed to record user in registry:', error);
+  }
 
   next();
 }

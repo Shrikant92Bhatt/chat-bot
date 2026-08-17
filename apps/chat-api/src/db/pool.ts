@@ -1,9 +1,16 @@
 import { Pool, PoolConfig } from 'pg';
 import { SCHEMA_SQL } from './schema';
 
+// pg has no default connect timeout (0 = wait forever), so a DB that's
+// unreachable but not actively refusing connections (e.g. a firewalled
+// host, or Cloud SQL not actually wired up on the deployed service) would
+// otherwise hang every request until the proxy in front of it times out -
+// exactly the "Service Unavailable" failure mode this is guarding against.
+const CONNECTION_TIMEOUT_MS = 5000;
+
 function buildPoolConfig(): PoolConfig {
   if (process.env.DATABASE_URL) {
-    return { connectionString: process.env.DATABASE_URL };
+    return { connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: CONNECTION_TIMEOUT_MS };
   }
 
   // Cloud Run + Cloud SQL Auth Proxy sidecar: connect over the mounted
@@ -14,6 +21,7 @@ function buildPoolConfig(): PoolConfig {
       user: process.env.DB_USER,
       password: process.env.DB_PASSWORD,
       database: process.env.DB_NAME,
+      connectionTimeoutMillis: CONNECTION_TIMEOUT_MS,
     };
   }
 
@@ -23,6 +31,7 @@ function buildPoolConfig(): PoolConfig {
     user: process.env.DB_USER || 'postgres',
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_NAME || 'nexusai',
+    connectionTimeoutMillis: CONNECTION_TIMEOUT_MS,
   };
 }
 
