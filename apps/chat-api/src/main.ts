@@ -2,6 +2,7 @@ import './env'; // must be first: loads .env before any other module reads proce
 import express from 'express';
 import cors from 'cors';
 import chatRoutes from './routes/chat.routes';
+import { runMigrations } from './db/pool';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -36,10 +37,19 @@ app.get('/health', (req, res) => {
 // Register Chat Routes
 app.use('/api/chat', chatRoutes);
 
-app.listen(PORT, () => {
-  console.log(`=================================================`);
-  console.log(`🚀 Chat API Express Server running on port ${PORT}`);
-  console.log(`📡 Healthcheck: http://localhost:${PORT}/health`);
-  console.log(`🔑 GOOGLE_CLIENT_ID Loaded: ${process.env.GOOGLE_CLIENT_ID ? 'YES (' + process.env.GOOGLE_CLIENT_ID.slice(0, 12) + '...)' : 'NO (Check .env file)'}`);
-  console.log(`=================================================`);
-});
+runMigrations()
+  .then(() => {
+    console.log('🗄️  Database schema ready.');
+  })
+  .catch((error) => {
+    console.error('[chat-api] Failed to run database migrations:', error);
+  })
+  .finally(() => {
+    app.listen(PORT, () => {
+      console.log(`=================================================`);
+      console.log(`🚀 Chat API Express Server running on port ${PORT}`);
+      console.log(`📡 Healthcheck: http://localhost:${PORT}/health`);
+      console.log(`🔑 GOOGLE_CLIENT_ID Loaded: ${process.env.GOOGLE_CLIENT_ID ? 'YES (' + process.env.GOOGLE_CLIENT_ID.slice(0, 12) + '...)' : 'NO (Check .env file)'}`);
+      console.log(`=================================================`);
+    });
+  });
