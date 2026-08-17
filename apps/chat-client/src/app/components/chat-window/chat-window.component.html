@@ -87,7 +87,7 @@
           </div>
 
           <!-- Markdown HTML Output -->
-          <div class="font-sans leading-relaxed space-y-1" [innerHTML]="renderMarkdown(msg.content)"></div>
+          <div class="markdown-body" [innerHTML]="renderMarkdown(msg.content)"></div>
 
           <!-- Streaming Pulse Indicator -->
           <div *ngIf="chatService.isStreaming() && !msg.content" class="flex items-center space-x-2 py-2">
