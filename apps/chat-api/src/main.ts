@@ -2,6 +2,7 @@ import './env'; // must be first: loads .env before any other module reads proce
 import express from 'express';
 import cors from 'cors';
 import chatRoutes from './routes/chat.routes';
+import authRoutes from './routes/auth.routes';
 import { runMigrations } from './db/pool';
 
 const app = express();
@@ -34,8 +35,9 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), service: 'chat-api' });
 });
 
-// Register Chat Routes
+// Register Routes
 app.use('/api/chat', chatRoutes);
+app.use('/api/auth', authRoutes);
 
 runMigrations()
   .then(() => {
