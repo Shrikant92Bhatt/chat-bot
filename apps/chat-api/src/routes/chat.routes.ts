@@ -79,8 +79,13 @@ router.get('/models', authenticateToken, (req: AuthenticatedRequest, res: Respon
  * Returns list of authenticated application users.
  */
 router.get('/users', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
-  const users = await UserRegistryService.getAllUsers();
-  res.json({ users, count: users.length });
+  try {
+    const users = await UserRegistryService.getAllUsers();
+    res.json({ users, count: users.length });
+  } catch (error) {
+    console.error('[Chat API Route] Failed to load users:', error);
+    res.status(500).json({ error: 'Failed to load users.' });
+  }
 });
 
 /**
