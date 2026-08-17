@@ -44,9 +44,28 @@
     <!-- Chat Messages -->
     <div *ngFor="let msg of chatService.activeMessages()" class="space-y-2">
       <!-- User Message -->
-      <div *ngIf="msg.role === 'user'" class="flex justify-end items-start space-x-3">
-        <div class="max-w-2xl px-5 py-3.5 rounded-3xl bg-gradient-to-r from-accentViolet/30 to-indigo-600/30 border border-accentViolet/30 backdrop-blur-md shadow-glass text-slate-100 text-sm leading-relaxed">
-          {{ msg.content }}
+      <div *ngIf="msg.role === 'user'" class="group flex justify-end items-start space-x-3">
+        <div class="flex flex-col items-end space-y-1 max-w-2xl">
+          <div class="px-5 py-3.5 rounded-3xl bg-gradient-to-r from-accentViolet/30 to-indigo-600/30 border border-accentViolet/30 backdrop-blur-md shadow-glass text-slate-100 text-sm leading-relaxed">
+            {{ msg.content }}
+          </div>
+          <button
+            (click)="copyMessage(msg.id, msg.content)"
+            class="flex items-center space-x-1 text-[11px] text-slate-400 hover:text-accentCyan transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 pr-1"
+          >
+            <ng-container *ngIf="copiedMessageId() === msg.id; else userCopyIcon">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
+              <span>Copied</span>
+            </ng-container>
+            <ng-template #userCopyIcon>
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              <span>Copy</span>
+            </ng-template>
+          </button>
         </div>
         <div class="w-8 h-8 rounded-xl bg-accentViolet/20 border border-accentViolet/40 flex items-center justify-center text-xs font-semibold text-violet-200 shadow-sm shrink-0">
           U
@@ -54,7 +73,7 @@
       </div>
 
       <!-- Assistant Message -->
-      <div *ngIf="msg.role === 'assistant'" class="flex justify-start items-start space-x-3">
+      <div *ngIf="msg.role === 'assistant'" class="group flex justify-start items-start space-x-3">
         <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-accentCyan to-blue-600 flex items-center justify-center text-white shadow-glow shrink-0">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -74,6 +93,27 @@
           <div *ngIf="chatService.isStreaming() && !msg.content" class="flex items-center space-x-2 py-2">
             <span class="w-2 h-2 rounded-full bg-accentCyan animate-ping"></span>
             <span class="text-xs text-slate-400">Synthesizing stream...</span>
+          </div>
+
+          <!-- Copy action -->
+          <div *ngIf="msg.content && !(chatService.isStreaming() && !msg.content)" class="flex justify-end pt-1">
+            <button
+              (click)="copyMessage(msg.id, msg.content)"
+              class="flex items-center space-x-1 text-[11px] text-slate-400 hover:text-accentCyan transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100"
+            >
+              <ng-container *ngIf="copiedMessageId() === msg.id; else assistantCopyIcon">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                </svg>
+                <span>Copied</span>
+              </ng-container>
+              <ng-template #assistantCopyIcon>
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                <span>Copy</span>
+              </ng-template>
+            </button>
           </div>
         </div>
       </div>

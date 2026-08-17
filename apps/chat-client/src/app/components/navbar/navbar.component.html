@@ -1,6 +1,6 @@
-<header class="h-16 px-6 glass-card border-b border-glassBorder flex items-center justify-between z-30 backdrop-blur-md">
+<header class="h-16 px-3 sm:px-6 glass-card border-b border-glassBorder flex items-center justify-between z-30 backdrop-blur-md">
   <!-- Left: Brand & Sidebar Toggle -->
-  <div class="flex items-center space-x-4">
+  <div class="flex items-center space-x-2 sm:space-x-4">
     <!-- Sidebar Toggle Button (Only visible when user is logged in) -->
     <button
       *ngIf="authService.userSignal()"
@@ -26,32 +26,35 @@
   </div>
 
   <!-- Center: Multi-LLM Routing Selector -->
-  <div class="flex items-center space-x-2 bg-slateBg/90 p-1.5 rounded-2xl border border-glassBorder shadow-inner">
+  <div class="flex items-center space-x-1 sm:space-x-2 bg-slateBg/90 p-1.5 rounded-2xl border border-glassBorder shadow-inner">
     <button
       (click)="chatService.setModel('gemini-flash-latest')"
       [ngClass]="{
         'bg-accentCyan/20 text-cyan-300 border border-accentCyan/40 shadow-cyanGlow': chatService.selectedModel().startsWith('gemini')
       }"
-      class="px-4 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 flex items-center space-x-2 hover:text-white"
+      class="px-2.5 sm:px-4 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 flex items-center space-x-1.5 sm:space-x-2 hover:text-white"
     >
-      <span class="w-2 h-2 rounded-full bg-accentCyan animate-pulse"></span>
-      <span>Google Gemini</span>
+      <span class="w-2 h-2 rounded-full bg-accentCyan animate-pulse shrink-0"></span>
+      <span class="sm:hidden">Gemini</span>
+      <span class="hidden sm:inline">Google Gemini</span>
     </button>
 
     <button
+      *ngIf="authService.openAiConfigured()"
       (click)="chatService.setModel('gpt-4o')"
       [ngClass]="{
         'bg-accentViolet/20 text-violet-300 border border-accentViolet/40 shadow-glow': chatService.selectedModel().startsWith('gpt')
       }"
-      class="px-4 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 flex items-center space-x-2 hover:text-white"
+      class="px-2.5 sm:px-4 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 flex items-center space-x-1.5 sm:space-x-2 hover:text-white"
     >
-      <span class="w-2 h-2 rounded-full bg-accentViolet animate-pulse"></span>
-      <span>OpenAI GPT-4o</span>
+      <span class="w-2 h-2 rounded-full bg-accentViolet animate-pulse shrink-0"></span>
+      <span class="sm:hidden">GPT-4o</span>
+      <span class="hidden sm:inline">OpenAI GPT-4o</span>
     </button>
   </div>
 
   <!-- Right: User Auth Profile -->
-  <div class="flex items-center space-x-4">
+  <div class="flex items-center space-x-2 sm:space-x-4">
     <!-- MCP Toggle Pill -->
     <button
       (click)="chatService.toggleMcp()"
@@ -79,12 +82,12 @@
     <ng-template #loginBtn>
       <button
         (click)="authService.loginWithGoogle()"
-        class="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-accentCyan to-accentViolet text-white font-bold shadow-[0_6px_20px_rgba(139,92,246,0.35)] border-t border-white/25 border-b border-black/30 hover:shadow-[0_8px_25px_rgba(6,182,212,0.45)] hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-inner transition-all duration-200 flex items-center justify-center space-x-2.5 cursor-pointer backdrop-blur-sm"
+        class="px-3 sm:px-5 py-2.5 rounded-2xl bg-gradient-to-r from-accentCyan to-accentViolet text-white font-bold shadow-[0_6px_20px_rgba(139,92,246,0.35)] border-t border-white/25 border-b border-black/30 hover:shadow-[0_8px_25px_rgba(6,182,212,0.45)] hover:-translate-y-0.5 active:translate-y-0.5 active:shadow-inner transition-all duration-200 flex items-center justify-center space-x-2 sm:space-x-2.5 cursor-pointer backdrop-blur-sm"
       >
-        <svg class="w-4 h-4 drop-shadow" viewBox="0 0 24 24" fill="currentColor">
+        <svg class="w-4 h-4 drop-shadow shrink-0" viewBox="0 0 24 24" fill="currentColor">
           <path d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.545,6.477,2.545,12s4.476,10,10,10c5.768,0,9.757-4.056,9.757-9.927c0-0.669-0.071-1.317-0.187-1.834H12.545z"/>
         </svg>
-        <span class="drop-shadow-sm">Google Sign In</span>
+        <span class="drop-shadow-sm">Sign In</span>
       </button>
     </ng-template>
   </div>

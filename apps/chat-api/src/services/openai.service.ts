@@ -2,9 +2,16 @@ import OpenAI from 'openai';
 import { ChatStreamRequest } from '@chat-monorepo/shared';
 import { Response } from 'express';
 
-function cleanEnvVar(val?: string): string {
+export function cleanEnvVar(val?: string): string {
   if (!val) return '';
   return val.replace(/^\uFEFF/, '').replace(/\r/g, '').trim();
+}
+
+export function isOpenAiConfigured(): boolean {
+  const key = cleanEnvVar(process.env.OPENAI_API_KEY);
+  // .env.example's convention for every unset secret is a "your_..." placeholder
+  // (e.g. `your_openai_api_key_here`) - treat that the same as unset.
+  return !!key && !key.toLowerCase().startsWith('your_');
 }
 
 export class OpenAIService {
@@ -20,12 +27,12 @@ export class OpenAIService {
   }
 
   async streamChat(request: ChatStreamRequest, res: Response): Promise<void> {
-    const apiKey = cleanEnvVar(process.env.OPENAI_API_KEY);
-
-    if (!apiKey) {
+    if (!isOpenAiConfigured()) {
       await this.mockStream(request, res, 'OpenAI (API Key missing - Mock Stream Mode)');
       return;
     }
+
+    const apiKey = cleanEnvVar(process.env.OPENAI_API_KEY);
 
     try {
       if (!this.client) {

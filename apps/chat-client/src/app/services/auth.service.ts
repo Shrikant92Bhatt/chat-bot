@@ -19,6 +19,10 @@ export class AuthService {
     (localStorage.getItem('NEXUS_GOOGLE_CLIENT_ID') || '').trim()
   );
 
+  // Whether the backend has a real OPENAI_API_KEY configured - drives
+  // whether the OpenAI model option is shown at all.
+  public openAiConfigured = signal<boolean>(false);
+
   private configPromise: Promise<void> | null = null;
 
   constructor() {
@@ -41,6 +45,7 @@ export class AuthService {
             localStorage.setItem('NEXUS_GOOGLE_CLIENT_ID', envClientId);
           }
         }
+        this.openAiConfigured.set(!!data?.openAiConfigured);
       }
     } catch (e) {
       console.error('[Google Auth] Failed to fetch backend config:', e);

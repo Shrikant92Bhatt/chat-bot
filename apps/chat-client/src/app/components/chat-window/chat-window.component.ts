@@ -1,4 +1,4 @@
-import { Component, ElementRef, ViewChild, AfterViewChecked, effect } from '@angular/core';
+import { Component, ElementRef, ViewChild, AfterViewChecked, effect, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { ChatService } from '../../services/chat.service';
@@ -27,6 +27,10 @@ export class ChatWindowComponent implements AfterViewChecked {
   // scroll-up mid-stream.
   private previousMessageCount = 0;
   private previousThreadId: string | null = null;
+
+  // Which message's "Copied" confirmation is currently showing, if any.
+  public copiedMessageId = signal<string | null>(null);
+  private copiedResetTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     public chatService: ChatService,
@@ -62,6 +66,29 @@ export class ChatWindowComponent implements AfterViewChecked {
     try {
       this.scrollContainer.nativeElement.scrollTop = this.scrollContainer.nativeElement.scrollHeight;
     } catch (err) {}
+  }
+
+  /**
+   * Copies a message's raw source (not the rendered HTML) to the clipboard,
+   * matching ChatGPT/Gemini's copy behavior, and briefly shows a "Copied"
+   * confirmation on that message's button.
+   */
+  public async copyMessage(id: string, content: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(content);
+    } catch (e) {
+      console.error('[ChatWindow] Copy to clipboard failed:', e);
+      return;
+    }
+
+    if (this.copiedResetTimeout) {
+      clearTimeout(this.copiedResetTimeout);
+    }
+    this.copiedMessageId.set(id);
+    this.copiedResetTimeout = setTimeout(() => {
+      this.copiedMessageId.set(null);
+      this.copiedResetTimeout = null;
+    }, 2000);
   }
 
   /**

@@ -8,7 +8,7 @@
         name="messageText"
         (keydown.enter)="onKeydown($event)"
         rows="1"
-        placeholder="Type your message... (Press Enter to send, Shift+Enter for new line)"
+        placeholder="Message NexusAI..."
         class="flex-1 bg-transparent border-0 focus:ring-0 text-slate-100 placeholder-slate-400 text-sm px-4 py-3 resize-none max-h-36 overflow-y-auto focus:outline-none"
       ></textarea>
 
@@ -42,7 +42,7 @@
     <!-- Input Footer Metadata -->
     <div class="flex items-center justify-between text-[11px] text-slate-400 px-4 mt-2">
       <span>Routing: <strong class="text-slate-300">{{ chatService.selectedModel() }}</strong></span>
-      <span>Responses are streamed in real time</span>
+      <span class="hidden sm:inline">Press Enter to send, Shift+Enter for a new line</span>
     </div>
   </div>
 </div>

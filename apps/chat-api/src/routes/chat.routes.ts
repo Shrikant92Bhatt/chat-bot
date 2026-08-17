@@ -3,6 +3,7 @@ import { authenticateToken, authenticateOrAllowTrial, AuthenticatedRequest } fro
 import { AIRouterService } from '../services/ai-router.service';
 import { UserRegistryService } from '../services/user-registry.service';
 import { ThreadService } from '../services/thread.service';
+import { isOpenAiConfigured } from '../services/openai.service';
 import { ChatStreamRequest, ChatThread } from '@chat-monorepo/shared';
 
 const router = Router();
@@ -15,6 +16,7 @@ const aiRouterService = new AIRouterService();
 router.get('/config', (req, res) => {
   res.json({
     googleClientId: process.env.GOOGLE_CLIENT_ID || '',
+    openAiConfigured: isOpenAiConfigured(),
   });
 });
 
@@ -60,13 +62,15 @@ router.post('/stream', authenticateOrAllowTrial, async (req: AuthenticatedReques
  * Returns available AI models and features.
  */
 router.get('/models', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+  const models = [
+    { id: 'gemini-pro-latest', name: 'Google Gemini Pro', provider: 'Google', description: 'Advanced reasoning & large context' },
+    { id: 'gemini-flash-latest', name: 'Google Gemini Flash', provider: 'Google', description: 'Fast, lightweight & responsive' },
+    { id: 'gpt-4o', name: 'OpenAI GPT-4o', provider: 'OpenAI', description: 'Flagship multimodal model' },
+    { id: 'gpt-4o-mini', name: 'OpenAI GPT-4o Mini', provider: 'OpenAI', description: 'Affordable, fast intelligent model' },
+  ];
+
   res.json({
-    models: [
-      { id: 'gemini-pro-latest', name: 'Google Gemini Pro', provider: 'Google', description: 'Advanced reasoning & large context' },
-      { id: 'gemini-flash-latest', name: 'Google Gemini Flash', provider: 'Google', description: 'Fast, lightweight & responsive' },
-      { id: 'gpt-4o', name: 'OpenAI GPT-4o', provider: 'OpenAI', description: 'Flagship multimodal model' },
-      { id: 'gpt-4o-mini', name: 'OpenAI GPT-4o Mini', provider: 'OpenAI', description: 'Affordable, fast intelligent model' },
-    ],
+    models: isOpenAiConfigured() ? models : models.filter((m) => m.provider !== 'OpenAI'),
   });
 });
 
