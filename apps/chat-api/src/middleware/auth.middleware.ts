@@ -1,61 +1,129 @@
 import { Request, Response, NextFunction } from 'express';
 import { OAuth2Client } from 'google-auth-library';
-import { UserRegistryService } from '../services/user-registry.service';
+import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { AnonUsageService } from '../services/anon-usage.service';
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
-export interface AuthenticatedRequest extends Request {
-  user?: {
-    uid: string;
-    email?: string;
-    name?: string;
-    picture?: string;
-  };
+// Signs/verifies the app's OWN session token (see mintAppSessionToken below).
+// Falls back to a random secret generated once per process if unset, so
+// local dev works out of the box - but that means every restart/deploy
+// invalidates all sessions, so production must set a real persistent value.
+const APP_SESSION_SECRET = process.env.APP_SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+if (!process.env.APP_SESSION_SECRET) {
+  console.warn(
+    '[Auth] APP_SESSION_SECRET is not set - using a random secret generated for this process only. ' +
+      'Every restart/deploy will invalidate all existing sessions. Set APP_SESSION_SECRET in production.'
+  );
 }
+const APP_SESSION_EXPIRY = '7d';
 
-interface VerifiedPayload {
-  sub: string;
+export interface AppUser {
+  uid: string;
   email?: string;
   name?: string;
   picture?: string;
 }
 
-/**
- * Verifies a Google OAuth2 access token (opaque, non-JWT) via Google's
- * tokeninfo endpoint. This is the token type issued by the client-side
- * `initTokenClient` fallback when Google's One Tap ID-token prompt is
- * skipped/blocked, so the backend must accept it too or every user routed
- * through that fallback gets rejected on their very first request.
- */
-async function verifyAccessToken(accessToken: string): Promise<VerifiedPayload> {
-  const res = await fetch(
-    `https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=${encodeURIComponent(accessToken)}`
-  );
-
-  if (!res.ok) {
-    throw new Error('Access token rejected by Google tokeninfo endpoint.');
-  }
-
-  const info = await res.json();
-
-  if (GOOGLE_CLIENT_ID && info.aud !== GOOGLE_CLIENT_ID) {
-    throw new Error('Access token audience does not match GOOGLE_CLIENT_ID.');
-  }
-
-  if (!info.sub) {
-    throw new Error('Access token has no subject claim.');
-  }
-
-  return { sub: info.sub, email: info.email };
+export interface AuthenticatedRequest extends Request {
+  user?: AppUser;
 }
 
 /**
- * Enterprise Production Middleware for Google OAuth 2.0 Token Verification.
- * Accepts either a signed Google ID token (JWT) or a Google OAuth2 access
- * token, since the frontend can issue either depending on which sign-in
- * path it takes.
+ * Verifies a Google OAuth2 access token (opaque, non-JWT) via Google's
+ * tokeninfo endpoint, then enriches it with the full profile (tokeninfo
+ * doesn't include name/picture) via the userinfo endpoint - this is now
+ * the only place that resolves a Google profile, so the frontend doesn't
+ * need its own separate userinfo call for this sign-in path anymore.
+ */
+async function verifyGoogleAccessToken(accessToken: string): Promise<AppUser> {
+  const tokenInfoRes = await fetch(
+    `https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=${encodeURIComponent(accessToken)}`
+  );
+
+  if (!tokenInfoRes.ok) {
+    throw new Error('Access token rejected by Google tokeninfo endpoint.');
+  }
+
+  const tokenInfo = await tokenInfoRes.json();
+
+  if (GOOGLE_CLIENT_ID && tokenInfo.aud !== GOOGLE_CLIENT_ID) {
+    throw new Error('Access token audience does not match GOOGLE_CLIENT_ID.');
+  }
+
+  if (!tokenInfo.sub) {
+    throw new Error('Access token has no subject claim.');
+  }
+
+  let name: string | undefined;
+  let picture: string | undefined;
+  try {
+    const profileRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (profileRes.ok) {
+      const profile = await profileRes.json();
+      name = profile.name;
+      picture = profile.picture;
+    }
+  } catch {
+    // Profile enrichment is best-effort - uid/email from tokeninfo is
+    // already enough to authenticate the user.
+  }
+
+  return { uid: tokenInfo.sub, email: tokenInfo.email, name, picture };
+}
+
+/**
+ * Verifies a Google credential (ID token OR OAuth2 access token) obtained
+ * directly from Google Identity Services on the frontend. Only used by the
+ * one-time session-exchange endpoint (POST /api/auth/session) - NOT on
+ * every request. Every authenticated route instead verifies the app's own
+ * session token (see authenticateToken below), so the app no longer
+ * depends on Google's servers, or on Google's own ~1hr token lifetime,
+ * for every single API call - this was the root cause of frequent forced
+ * re-logins.
+ */
+export async function verifyGoogleToken(token: string): Promise<AppUser> {
+  let idTokenError: unknown;
+
+  try {
+    const ticket = await googleClient.verifyIdToken({
+      idToken: token,
+      audience: GOOGLE_CLIENT_ID || undefined,
+    });
+    const payload = ticket.getPayload();
+    if (payload) {
+      return { uid: payload.sub, email: payload.email, name: payload.name, picture: payload.picture };
+    }
+  } catch (error) {
+    idTokenError = error;
+  }
+
+  try {
+    return await verifyGoogleAccessToken(token);
+  } catch (accessTokenError) {
+    console.error(
+      '[Auth] Google token verification failed as both ID token and access token:',
+      idTokenError,
+      accessTokenError
+    );
+    throw idTokenError ?? accessTokenError;
+  }
+}
+
+/** Mints the app's own long-lived session token for an already-verified user. */
+export function mintAppSessionToken(user: AppUser): string {
+  return jwt.sign(user, APP_SESSION_SECRET, { expiresIn: APP_SESSION_EXPIRY });
+}
+
+/**
+ * Verifies the app's own session token (issued by POST /api/auth/session,
+ * see mintAppSessionToken) on every authenticated request. Purely local
+ * verification - no network call to Google - so it's fast and doesn't fail
+ * just because Google's short-lived token would have expired by now.
  */
 export async function authenticateToken(
   req: AuthenticatedRequest,
@@ -67,76 +135,24 @@ export async function authenticateToken(
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     res.status(401).json({
       error: 'Unauthorized',
-      message: 'Missing or malformed Authorization header. Expected: Bearer <Google_ID_Token>',
+      message: 'Missing or malformed Authorization header. Expected: Bearer <session_token>',
     });
     return;
   }
 
-  const idToken = authHeader.split('Bearer ')[1].trim();
-
-  if (!GOOGLE_CLIENT_ID) {
-    console.warn('[Google Auth Middleware] GOOGLE_CLIENT_ID environment variable is not set.');
-  }
-
-  let payload: VerifiedPayload | undefined;
-  let idTokenError: unknown;
+  const token = authHeader.split('Bearer ')[1].trim();
 
   try {
-    const ticket = await googleClient.verifyIdToken({
-      idToken,
-      audience: GOOGLE_CLIENT_ID || undefined,
+    const payload = jwt.verify(token, APP_SESSION_SECRET) as AppUser & jwt.JwtPayload;
+    req.user = { uid: payload.uid, email: payload.email, name: payload.name, picture: payload.picture };
+    next();
+  } catch (error) {
+    const isExpired = error instanceof jwt.TokenExpiredError;
+    res.status(401).json({
+      error: isExpired ? 'TokenExpired' : 'Unauthorized',
+      message: isExpired ? 'Your session has expired. Please sign in again.' : 'Invalid session token.',
     });
-    payload = ticket.getPayload() ?? undefined;
-  } catch (error) {
-    idTokenError = error;
   }
-
-  if (!payload) {
-    try {
-      payload = await verifyAccessToken(idToken);
-    } catch (accessTokenError) {
-      console.error(
-        '[Google Auth Middleware] Token verification failed as both ID token and access token:',
-        idTokenError,
-        accessTokenError
-      );
-      const errMsg = (idTokenError as Error)?.message || '';
-      if (errMsg.includes('Token used too late') || errMsg.includes('expired')) {
-        res.status(401).json({
-          error: 'TokenExpired',
-          message: 'Your Google Sign-In session has expired. Please click "Sign in with Google" to refresh your session.',
-        });
-        return;
-      }
-      res.status(403).json({
-        error: 'Forbidden',
-        message: 'Failed to verify Google token: ' + errMsg,
-      });
-      return;
-    }
-  }
-
-  const authenticatedUser = {
-    uid: payload.sub,
-    email: payload.email,
-    name: payload.name,
-    picture: payload.picture,
-  };
-
-  req.user = authenticatedUser;
-
-  try {
-    await UserRegistryService.registerOrUpdateUser(authenticatedUser);
-  } catch (error) {
-    // Don't let a DB outage take down auth entirely - every authenticated
-    // route goes through this middleware, so an unguarded rejection here
-    // (Express 4 doesn't catch async-middleware errors) hangs every
-    // request until the proxy times it out, surfacing as a blanket
-    // "Service Unavailable" instead of just losing the user-registry write.
-    console.error('[Google Auth Middleware] Failed to record user in registry:', error);
-  }
-
-  next();
 }
 
 /**

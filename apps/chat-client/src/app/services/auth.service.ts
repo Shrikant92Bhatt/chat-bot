@@ -126,7 +126,7 @@ export class AuthService {
           scope: 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
           callback: (tokenResponse: any) => {
             if (tokenResponse && tokenResponse.access_token) {
-              this.fetchUserInfoWithAccessToken(tokenResponse.access_token);
+              this.exchangeGoogleTokenForSession(tokenResponse.access_token);
             }
           },
         });
@@ -137,40 +137,41 @@ export class AuthService {
     }
   }
 
-  private async fetchUserInfoWithAccessToken(accessToken: string): Promise<void> {
-    try {
-      const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      if (res.ok) {
-        const userinfo = await res.json();
-        const session: UserSession = {
-          uid: userinfo.sub,
-          email: userinfo.email || '',
-          displayName: userinfo.name || 'Google User',
-          photoURL: userinfo.picture || '',
-          idToken: accessToken,
-        };
-        this.setUserSession(session);
-      }
-    } catch (e) {
-      console.error('[Google Auth] Failed to fetch userinfo:', e);
+  public handleGoogleCredentialResponse(response: any): void {
+    if (response && response.credential) {
+      this.exchangeGoogleTokenForSession(response.credential);
     }
   }
 
-  public handleGoogleCredentialResponse(response: any): void {
-    if (response && response.credential) {
-      const payload = this.decodeJwtPayload(response.credential);
-
+  /**
+   * Exchanges a raw Google credential (ID token or OAuth2 access token) for
+   * the app's own long-lived session token via POST /api/auth/session. The
+   * backend resolves the full profile (including, for the access-token
+   * path, a Google userinfo lookup this service used to do itself) and
+   * returns it alongside the session token, so this is the only place a
+   * session gets established from either sign-in path.
+   */
+  private async exchangeGoogleTokenForSession(googleToken: string): Promise<void> {
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/api/auth/session`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${googleToken}` },
+      });
+      if (!res.ok) {
+        console.error('[Google Auth] Failed to exchange Google token for an app session:', res.status);
+        return;
+      }
+      const data = await res.json();
       const session: UserSession = {
-        uid: payload.sub,
-        email: payload.email || '',
-        displayName: payload.name || 'Google User',
-        photoURL: payload.picture || '',
-        idToken: response.credential,
+        uid: data.user.uid,
+        email: data.user.email || '',
+        displayName: data.user.name || 'Google User',
+        photoURL: data.user.picture || '',
+        idToken: data.sessionToken,
       };
-
       this.setUserSession(session);
+    } catch (e) {
+      console.error('[Google Auth] Session exchange failed:', e);
     }
   }
 
