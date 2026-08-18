@@ -59,9 +59,15 @@ export class ChatService {
   }
 
   /**
-   * Loads saved chat history from the backend (Postgres) for authenticated users.
+   * Loads saved chat history from the backend for authenticated users. On a
+   * transient failure (e.g. the API restarting), retries once before
+   * falling back to a local-only thread - a dev server blip should never
+   * make it look like saved history is gone. (The backend's save is also
+   * now a pure upsert, so even a stale/partial local state can no longer
+   * delete real data - this retry is about avoiding a misleading blank
+   * screen, not data safety.)
    */
-  private async loadUserThreadHistory(): Promise<void> {
+  private async loadUserThreadHistory(attempt = 1): Promise<void> {
     try {
       const response = await fetch(`${this.apiUrl}/threads`, {
         headers: { Authorization: `Bearer ${this.authService.getIdToken()}` },
@@ -92,8 +98,16 @@ export class ChatService {
           this.activeThreadId.set(freshThread.id);
           return;
         }
+        // Genuinely confirmed empty (successful response, no saved threads) - fall through.
+      } else if (attempt < 2) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        return this.loadUserThreadHistory(attempt + 1);
       }
     } catch (e) {
+      if (attempt < 2) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        return this.loadUserThreadHistory(attempt + 1);
+      }
       console.error('[ChatService] Failed to load thread history:', e);
     }
     this.createInitialThread();
