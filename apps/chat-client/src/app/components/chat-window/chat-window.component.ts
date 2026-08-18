@@ -128,4 +128,17 @@ export class ChatWindowComponent implements AfterViewChecked {
   public openImage(imageUrl: string): void {
     window.open(imageUrl, '_blank', 'noopener');
   }
+
+  /**
+   * Re-scrolls to bottom once an async image finishes loading. Images grow
+   * the container's scrollHeight only after their own network/decode
+   * completes, which happens after ngAfterViewChecked's scroll already ran
+   * - without this, a generated image (or any late-loading content) is left
+   * cut off below the fold even though "auto-scroll" fired on schedule.
+   */
+  public onContentLoad(): void {
+    if (this.shouldAutoScroll) {
+      this.scrollToBottom();
+    }
+  }
 }
