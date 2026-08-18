@@ -15,6 +15,8 @@ export interface ChatMessage {
   timestamp: number;
   model?: AIModelType;
   error?: boolean;
+  /** Suggested follow-up questions, attached to the final assistant message of a turn. */
+  suggestions?: string[];
 }
 
 export interface ChatThread {
@@ -52,5 +54,12 @@ export interface AIProviderResponse {
   usage?: {
     promptTokens: number;
     completionTokens: number;
+  };
+  /** Follow-up question suggestions, sent once on the final (done: true) event. */
+  suggestions?: string[];
+  /** Emitted when the model invokes an MCP tool mid-turn, before the tool's result is streamed back. */
+  toolCall?: {
+    name: string;
+    args: Record<string, unknown>;
   };
 }
