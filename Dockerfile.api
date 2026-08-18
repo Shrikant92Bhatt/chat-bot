@@ -6,10 +6,11 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Copy monorepo configuration files
-COPY package.json nx.json tsconfig.base.json ./
+COPY package.json package-lock.json nx.json tsconfig.base.json ./
 
-# Install Linux & cross-platform dependencies
-RUN npm install
+# Install exact locked versions (npm install without the lockfile can
+# re-resolve to newer transitive deps with incompatible peer requirements)
+RUN npm ci
 
 # Copy full source code
 COPY apps ./apps

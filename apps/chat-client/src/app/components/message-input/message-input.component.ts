@@ -1,6 +1,7 @@
-import { Component } from '@angular/core';
+import { Component, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { AIModelType, SELECTABLE_MODELS } from '@chat-monorepo/shared';
 import { ChatService } from '../../services/chat.service';
 
 @Component({
@@ -11,6 +12,9 @@ import { ChatService } from '../../services/chat.service';
 })
 export class MessageInputComponent {
   public messageText = '';
+  public isModelDropdownOpen = false;
+
+  public availableModels = SELECTABLE_MODELS;
 
   constructor(public chatService: ChatService) {}
 
@@ -21,10 +25,42 @@ export class MessageInputComponent {
     }
   }
 
+  get placeholder(): string {
+    return this.chatService.chatMode() === 'image' ? 'Describe an image you want to create...' : 'Message NexusAI...';
+  }
+
   send() {
     if (!this.messageText.trim() || this.chatService.isStreaming()) return;
     const text = this.messageText;
     this.messageText = '';
-    this.chatService.sendMessage(text);
+
+    if (this.chatService.chatMode() === 'image') {
+      this.chatService.generateImage(text);
+    } else {
+      this.chatService.sendMessage(text);
+    }
+  }
+
+  setMode(mode: 'chat' | 'image'): void {
+    this.chatService.setChatMode(mode);
+  }
+
+  getModelDisplayName(): string {
+    const active = this.chatService.selectedModel();
+    const model = this.availableModels.find((m) => m.id === active);
+    return model ? model.name : 'Gemini Flash';
+  }
+
+  selectModel(id: string): void {
+    this.chatService.setModel(id as AIModelType);
+    this.isModelDropdownOpen = false;
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent) {
+    const target = event.target as HTMLElement;
+    if (!target.closest('.model-selector')) {
+      this.isModelDropdownOpen = false;
+    }
   }
 }

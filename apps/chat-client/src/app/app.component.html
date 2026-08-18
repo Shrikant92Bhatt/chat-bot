@@ -1,35 +1,27 @@
 <div class="h-screen w-screen flex flex-col bg-obsidian text-slate-100 overflow-hidden relative font-sans">
-  <!-- Top Navigation Bar -->
-  <app-navbar (toggleSidebar)="isSidebarOpen = !isSidebarOpen"></app-navbar>
+  <app-navbar (toggleSidebar)="isSidebarOpen = !isSidebarOpen" (openSettings)="openSettings()"></app-navbar>
 
-  <!-- Main Layout Body (Sidebar + Chat Area) -->
   <div class="flex-1 flex overflow-hidden relative z-10">
-    <!-- Sidebar is ONLY visible when user is logged in -->
     <app-sidebar
       *ngIf="authService.userSignal()"
       [isOpen]="isSidebarOpen"
       (threadSelected)="closeSidebarOnMobile()"
+      (settingsClicked)="openSettings()"
     ></app-sidebar>
 
-    <!-- Mobile backdrop: tapping outside the open sidebar closes it (md:hidden - desktop layout is unaffected).
-         z-[15]: must beat the chat window's inner scroll container (z-10, and since <main> doesn't
-         establish its own stacking context that z-10 competes directly with siblings here) while
-         staying below the sidebar itself (z-20). -->
     <div
       *ngIf="isSidebarOpen && authService.userSignal()"
       (click)="isSidebarOpen = false"
       class="fixed inset-0 bg-black/50 z-[15] md:hidden"
     ></div>
 
-    <main class="flex-1 flex flex-col h-full overflow-hidden bg-gradient-to-b from-obsidian via-slate-950 to-obsidian">
+    <main class="flex-1 flex flex-col h-full overflow-hidden bg-obsidian">
       <app-chat-window class="flex-1 overflow-hidden"></app-chat-window>
       <app-message-input></app-message-input>
     </main>
   </div>
 
-  <!-- Popup shown when a signed-in user's Google session has expired -->
   <app-session-expired-modal *ngIf="authService.sessionExpired()"></app-session-expired-modal>
-
-  <!-- Toast shown when a login attempt fails, so failures are never silent -->
   <app-login-error-toast *ngIf="authService.loginError()"></app-login-error-toast>
+  <app-settings-modal *ngIf="isSettingsOpen" (closeModal)="closeSettings()"></app-settings-modal>
 </div>

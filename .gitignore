@@ -28,3 +28,5 @@ Thumbs.db
 # Downloaded service account keys - never commit
 service-account.json
 *.serviceaccount.json
+# GCP's default downloaded-key filename pattern: <project-id>-<hash>.json
+chat-bot-*.json

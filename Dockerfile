@@ -5,8 +5,8 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-COPY package.json nx.json tsconfig.base.json ./
-RUN npm install
+COPY package.json package-lock.json nx.json tsconfig.base.json ./
+RUN npm ci
 
 COPY apps ./apps
 COPY libs ./libs

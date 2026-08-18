@@ -1,10 +1,23 @@
 export type AIModelType =
-  | 'gemini-1.5-pro'
-  | 'gemini-1.5-flash'
   | 'gemini-pro-latest'
   | 'gemini-flash-latest'
   | 'gpt-4o'
-  | 'gpt-4o-mini';
+  | 'gpt-4o-mini'
+  | 'claude-sonnet'
+  | 'llama-4-maverick'
+  | 'grok'
+  | 'omniroute-default';
+
+/** Single source of truth for the model picker UI - avoids the id/label pairs drifting out of sync between components. */
+export const SELECTABLE_MODELS: ReadonlyArray<{ id: AIModelType; name: string }> = [
+  { id: 'gemini-flash-latest', name: 'Gemini Flash' },
+  { id: 'gemini-pro-latest', name: 'Gemini Pro' },
+  { id: 'gpt-4o', name: 'GPT-4o' },
+  { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
+  { id: 'claude-sonnet', name: 'Claude Sonnet 5' },
+  { id: 'llama-4-maverick', name: 'Llama 4 Maverick' },
+  { id: 'grok', name: 'Grok 4.6' },
+];
 
 export type MessageRole = 'user' | 'assistant' | 'system';
 
@@ -17,6 +30,7 @@ export interface ChatMessage {
   error?: boolean;
   /** Suggested follow-up questions, attached to the final assistant message of a turn. */
   suggestions?: string[];
+  imageUrl?: string;
 }
 
 export interface ChatThread {
@@ -62,4 +76,38 @@ export interface AIProviderResponse {
     name: string;
     args: Record<string, unknown>;
   };
+  /** Set when a generate_image tool call produced an image this turn. */
+  imageUrl?: string;
+}
+
+export interface StorageMetricsResponse {
+  bucketName: string;
+  totalSizeBytes: number;
+  totalSizeMB: string;
+  totalSizeGB: string;
+  objectCount: number;
+  estimatedMonthlyCostUSD: string;
+  lastUpdated: string;
+  configured: boolean;
+}
+
+export interface ImageGenerationRequest {
+  prompt: string;
+  style?: string;
+  model?: AIModelType;
+}
+
+export interface ImageGenerationResponse {
+  success: boolean;
+  imageUrl: string;
+  prompt: string;
+  storagePath?: string;
+  generatedAt: number;
+}
+
+export interface SystemDiagnostics {
+  mcpAdapter: { status: 'ready' | 'offline'; toolCount: number };
+  ragEngine: { status: 'active' | 'offline'; vectorDbConnected: boolean };
+  omniRoute: { status: 'connected' | 'offline'; baseUrl: string };
+  gcsStorage: { status: 'connected' | 'offline'; bucketName: string };
 }

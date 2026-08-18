@@ -1,7 +1,6 @@
 import { Component, EventEmitter, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../../services/auth.service';
-import { ChatService } from '../../services/chat.service';
 
 @Component({
   selector: 'app-navbar',
@@ -11,9 +10,7 @@ import { ChatService } from '../../services/chat.service';
 })
 export class NavbarComponent {
   @Output() toggleSidebar = new EventEmitter<void>();
+  @Output() openSettings = new EventEmitter<void>();
 
-  constructor(
-    public authService: AuthService,
-    public chatService: ChatService
-  ) {}
+  constructor(public authService: AuthService) {}
 }

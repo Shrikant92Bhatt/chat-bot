@@ -97,8 +97,8 @@ jobs:
             --region=asia-south1 \
             --platform=managed \
             --allow-unauthenticated \
-            --set-env-vars="GOOGLE_CLIENT_ID=953232172604-iukeghd5021k56htjq7ep332bvtvppot.apps.googleusercontent.com,ALLOWED_ORIGIN=https://nexusai-gcp.duckdns.org,FIRESTORE_DATABASE_ID=nexus-ai" \
-            --set-secrets="GEMINI_API_KEY=GEMINI_API_KEY:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest,APP_SESSION_SECRET=APP_SESSION_SECRET:latest"
+            --set-env-vars="GOOGLE_CLIENT_ID=953232172604-iukeghd5021k56htjq7ep332bvtvppot.apps.googleusercontent.com,ALLOWED_ORIGIN=https://nexusai-gcp.duckdns.org,FIRESTORE_DATABASE_ID=nexus-ai,GCS_BUCKET_NAME=nexusai-generated-images,OPENROUTER_BASE_URL=https://openrouter.ai/api/v1" \
+            --set-secrets="GEMINI_API_KEY=GEMINI_API_KEY:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest,APP_SESSION_SECRET=APP_SESSION_SECRET:latest,OPENROUTER_API_KEY=OPENROUTER_API_KEY:latest"
 
       - name: Deploy chat-client
         run: |
