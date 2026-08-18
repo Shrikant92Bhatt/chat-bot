@@ -15,7 +15,21 @@ module.exports = {
         accentEmerald: '#10b981',
       },
       fontFamily: {
-        sans: ['Plus Jakarta Sans', 'Inter', 'sans-serif'],
+        // Plus Jakarta Sans/Inter/sans-serif have no emoji glyphs, so without
+        // an explicit color-emoji fallback the browser picks whatever emoji
+        // font it lands on inconsistently - some render full-color, others
+        // fall back to a small monochrome glyph. This is the standard emoji
+        // font stack (same one GitHub/Slack/etc. use) so it's consistent
+        // everywhere across platforms.
+        sans: [
+          'Plus Jakarta Sans',
+          'Inter',
+          'sans-serif',
+          'Apple Color Emoji',
+          'Segoe UI Emoji',
+          'Segoe UI Symbol',
+          'Noto Color Emoji',
+        ],
       },
       backdropBlur: {
         xs: '2px',
