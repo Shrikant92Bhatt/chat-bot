@@ -109,4 +109,22 @@ export class ChatWindowComponent implements AfterViewChecked {
     const cleanHtml = DOMPurify.sanitize(rawHtml);
     return this.sanitizer.sanitize(SecurityContext.HTML, cleanHtml) ?? '';
   }
+
+  public getUserDisplayName(): string {
+    return this.authService.userSignal()?.displayName || 'You';
+  }
+
+  public getUserPhotoURL(): string | null {
+    return this.authService.userSignal()?.photoURL || null;
+  }
+
+  public getUserInitial(): string {
+    const name = this.authService.userSignal()?.displayName;
+    return name ? name.charAt(0).toUpperCase() : 'U';
+  }
+
+  /** Opens a generated image full-size in a new tab (works for both data: URIs and real URLs). */
+  public openImage(imageUrl: string): void {
+    window.open(imageUrl, '_blank', 'noopener');
+  }
 }

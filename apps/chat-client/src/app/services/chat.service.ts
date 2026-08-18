@@ -11,11 +11,13 @@ export class ChatService {
     return `${getApiBaseUrl()}/api/chat`;
   }
 
-  public selectedModel = signal<AIModelType>('gemini-1.5-flash');
+  public selectedModel = signal<AIModelType>('gemini-flash-latest');
   public threads = signal<ChatThread[]>([]);
   public activeThreadId = signal<string | null>(null);
   public isStreaming = signal<boolean>(false);
-  public mcpEnabled = signal<boolean>(false);
+  // On by default so tool calls (image generation, calculator) work out of
+  // the box - users can still switch it off in Settings.
+  public mcpEnabled = signal<boolean>(true);
 
   // Tracks unauthenticated user message limit (Max 1 message allowed without sign-in)
   public unauthUserMessageCount = signal<number>(0);
@@ -74,8 +76,20 @@ export class ChatService {
         const data = await response.json();
         const loadedThreads: ChatThread[] = data.threads;
         if (loadedThreads && loadedThreads.length > 0) {
-          this.threads.set(loadedThreads);
-          this.activeThreadId.set(loadedThreads[0].id);
+          // Every fresh load starts a new chat rather than resuming the
+          // last one - history is still there in the sidebar to pick up.
+          // Not persisted until the user actually sends a message, so an
+          // idle page load doesn't clutter saved history with empties.
+          const freshThread: ChatThread = {
+            id: 'thread-' + Date.now(),
+            title: 'New Chat',
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            model: this.selectedModel(),
+            messages: [],
+          };
+          this.threads.set([freshThread, ...loadedThreads]);
+          this.activeThreadId.set(freshThread.id);
           return;
         }
       }
@@ -123,7 +137,7 @@ export class ChatService {
           role: 'assistant',
           content: "Hello! I'm NexusAI, your intelligent assistant. Ask me anything — I'm here to help with questions, ideas, writing, and code.",
           timestamp: Date.now(),
-          model: 'gemini-1.5-flash',
+          model: 'gemini-flash-latest',
         },
       ],
     };
@@ -151,12 +165,88 @@ export class ChatService {
     this.persistUserThreadHistory();
   }
 
+  // Dedicated image-generation mode (separate from normal chat, like
+  // ChatGPT/Gemini's image tool) - switches the composer's placeholder and
+  // routes submissions straight to POST /generate-image instead of the
+  // chat stream, so it doesn't depend on the model deciding to call a tool.
+  public chatMode = signal<'chat' | 'image'>('chat');
+
   public setModel(model: AIModelType) {
     this.selectedModel.set(model);
   }
 
   public toggleMcp() {
     this.mcpEnabled.update((v) => !v);
+  }
+
+  public setChatMode(mode: 'chat' | 'image') {
+    this.chatMode.set(mode);
+  }
+
+  async generateImage(prompt: string): Promise<void> {
+    const currentThreadId = this.activeThreadId();
+    if (!currentThreadId || !prompt.trim() || this.isStreaming()) return;
+
+    const userMessage: ChatMessage = {
+      id: 'msg-' + Date.now(),
+      role: 'user',
+      content: prompt.trim(),
+      timestamp: Date.now(),
+    };
+    const assistantMessageId = 'msg-ai-' + Date.now();
+    const assistantPlaceholder: ChatMessage = {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      timestamp: Date.now(),
+      model: this.selectedModel(),
+    };
+
+    const isAuthenticated = !!this.authService.userSignal();
+
+    this.threads.update((threadsList) =>
+      threadsList.map((t) => {
+        if (t.id === currentThreadId) {
+          const updatedTitle = t.messages.length <= 1 ? '🖼️ ' + prompt.trim().slice(0, 28) : t.title;
+          return { ...t, title: updatedTitle, updatedAt: Date.now(), messages: [...t.messages, userMessage, assistantPlaceholder] };
+        }
+        return t;
+      })
+    );
+
+    this.isStreaming.set(true);
+
+    try {
+      const response = await fetch(`${this.apiUrl}/generate-image`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.authService.getIdToken()}`,
+        },
+        body: JSON.stringify({ prompt: prompt.trim() }),
+      });
+
+      if (response.status === 401) {
+        this.authService.notifySessionExpired();
+        this.updateAssistantMessage(currentThreadId, assistantMessageId, '🔒 Please sign in to generate images.');
+        return;
+      }
+
+      const data = await response.json();
+      if (response.ok && data.success && data.imageUrl) {
+        this.setMessageImageUrl(currentThreadId, assistantMessageId, data.imageUrl);
+      } else {
+        this.updateAssistantMessage(currentThreadId, assistantMessageId, `⚠️ ${data.error || 'Image generation failed.'}`);
+      }
+    } catch (error: any) {
+      console.error('[ChatService] Image generation error:', error);
+      this.updateAssistantMessage(currentThreadId, assistantMessageId, `⚠️ Failed to generate image: ${error.message}`);
+    } finally {
+      this.isStreaming.set(false);
+      if (isAuthenticated) {
+        this.persistUserThreadHistory();
+      }
+    }
   }
 
   async sendMessage(userContent: string): Promise<void> {
@@ -287,6 +377,10 @@ export class ChatService {
 
               this.updateAssistantMessage(currentThreadId, assistantMessageId, accumulatedContent);
 
+              if (data.imageUrl) {
+                this.setMessageImageUrl(currentThreadId, assistantMessageId, data.imageUrl);
+              }
+
               if (data.done && Array.isArray(data.suggestions) && data.suggestions.length > 0) {
                 this.setMessageSuggestions(currentThreadId, assistantMessageId, data.suggestions);
               }
@@ -348,6 +442,18 @@ export class ChatService {
       threadsList.map((t) => {
         if (t.id === threadId) {
           const updatedMessages = t.messages.map((m) => (m.id === messageId ? { ...m, suggestions } : m));
+          return { ...t, messages: updatedMessages };
+        }
+        return t;
+      })
+    );
+  }
+
+  private setMessageImageUrl(threadId: string, messageId: string, imageUrl: string) {
+    this.threads.update((threadsList) =>
+      threadsList.map((t) => {
+        if (t.id === threadId) {
+          const updatedMessages = t.messages.map((m) => (m.id === messageId ? { ...m, imageUrl } : m));
           return { ...t, messages: updatedMessages };
         }
         return t;

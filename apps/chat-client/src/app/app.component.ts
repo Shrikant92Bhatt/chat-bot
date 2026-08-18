@@ -6,6 +6,7 @@ import { ChatWindowComponent } from './components/chat-window/chat-window.compon
 import { MessageInputComponent } from './components/message-input/message-input.component';
 import { SessionExpiredModalComponent } from './components/session-expired-modal/session-expired-modal.component';
 import { LoginErrorToastComponent } from './components/login-error-toast/login-error-toast.component';
+import { SettingsModalComponent } from './components/settings-modal/settings-modal.component';
 import { AuthService } from './services/auth.service';
 
 @Component({
@@ -19,10 +20,20 @@ import { AuthService } from './services/auth.service';
     MessageInputComponent,
     SessionExpiredModalComponent,
     LoginErrorToastComponent,
+    SettingsModalComponent,
   ],
   templateUrl: './app.component.html',
 })
 export class AppComponent {
+  public isSettingsOpen = false;
+
+  public openSettings() {
+    this.isSettingsOpen = true;
+  }
+
+  public closeSettings() {
+    this.isSettingsOpen = false;
+  }
   // Matches the `md:` breakpoint the sidebar/backdrop templates key off of.
   private static readonly MOBILE_BREAKPOINT_PX = 768;
 

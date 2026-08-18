@@ -1,0 +1,52 @@
+# OmniRoute AI Gateway — LiteLLM Proxy configuration.
+#
+# model_name values are the SAME model IDs the chat-client already sends
+# (see libs/shared/src/interfaces/chat.interface.ts AIModelType), so
+# apps/chat-api/src/llm/client.ts can pass them straight through with no
+# translation layer.
+#
+# Underlying Gemini model names match apps/chat-api/src/services/gemini.service.ts
+# (gemini-pro-latest / gemini-flash-latest) — the versioned gemini-1.5-* names
+# have been retired by Google and 404 against this project's API key.
+model_list:
+  - model_name: gemini-pro-latest
+    litellm_params:
+      model: gemini/gemini-pro-latest
+      api_key: os.environ/GEMINI_API_KEY
+
+  - model_name: gemini-flash-latest
+    litellm_params:
+      model: gemini/gemini-flash-latest
+      api_key: os.environ/GEMINI_API_KEY
+
+  - model_name: gemini-1.5-pro
+    litellm_params:
+      model: gemini/gemini-pro-latest
+      api_key: os.environ/GEMINI_API_KEY
+
+  - model_name: gemini-1.5-flash
+    litellm_params:
+      model: gemini/gemini-flash-latest
+      api_key: os.environ/GEMINI_API_KEY
+
+  - model_name: gpt-4o
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: gpt-4o-mini
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+
+  # Default routed model when the client requests 'omniroute-default'.
+  - model_name: omniroute-default
+    litellm_params:
+      model: gemini/gemini-flash-latest
+      api_key: os.environ/GEMINI_API_KEY
+
+litellm_settings:
+  drop_params: true
+
+general_settings:
+  master_key: os.environ/OMNIROUTE_API_KEY

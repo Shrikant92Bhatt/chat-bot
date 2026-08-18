@@ -11,6 +11,7 @@ import { ChatService } from '../../services/chat.service';
 export class SidebarComponent {
   @Input() isOpen = true;
   @Output() threadSelected = new EventEmitter<void>();
+  @Output() settingsClicked = new EventEmitter<void>();
 
   constructor(public chatService: ChatService) {}
 

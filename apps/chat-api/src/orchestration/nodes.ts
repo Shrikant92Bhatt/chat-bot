@@ -1,0 +1,62 @@
+import { AIMessage, ToolMessage } from '@langchain/core/messages';
+import { AgentState, AgentStateUpdate } from './state';
+import { createOmniRouteChatModel } from '../llm/client';
+import { McpAdapter } from '../mcp/adapter';
+
+const mcpAdapter = new McpAdapter();
+
+/**
+ * Calls the OmniRoute-backed chat model with the current conversation,
+ * binding MCP tools so the model can request tool calls via real
+ * OpenAI-style function calling (not string matching).
+ */
+export async function agentNode(state: AgentState): Promise<AgentStateUpdate> {
+  const model = createOmniRouteChatModel(state.model, state.temperature);
+  const modelWithTools = state.mcpEnabled ? model.bindTools(mcpAdapter.getTools()) : model;
+
+  const response = await modelWithTools.invoke(state.messages);
+  return { messages: [response] };
+}
+
+/**
+ * Executes whichever tools the last AIMessage requested and appends their
+ * results as ToolMessages so the agent node can incorporate them next turn.
+ */
+export async function toolsNode(state: AgentState): Promise<AgentStateUpdate> {
+  const lastMessage = state.messages[state.messages.length - 1] as AIMessage;
+  const toolCalls = lastMessage.tool_calls || [];
+
+  const toolMessages: ToolMessage[] = [];
+  let generatedImageUrl: string | null = state.generatedImageUrl ?? null;
+
+  for (const call of toolCalls) {
+    const result = await mcpAdapter.executeTool(call.name, call.args as Record<string, unknown>);
+
+    if (call.name === 'generate_image') {
+      try {
+        const parsed = JSON.parse(result);
+        if (parsed.imageUrl) {
+          generatedImageUrl = parsed.imageUrl;
+        }
+      } catch {
+        // Tool result wasn't parseable JSON — still hand it to the model below.
+      }
+    }
+
+    toolMessages.push(new ToolMessage({ content: result, tool_call_id: call.id ?? call.name }));
+  }
+
+  return { messages: toolMessages, generatedImageUrl };
+}
+
+/**
+ * Routes to the tools node when the model requested a tool call, otherwise
+ * ends the graph run.
+ */
+export function shouldContinue(state: AgentState): 'tools' | 'end' {
+  const lastMessage = state.messages[state.messages.length - 1] as AIMessage;
+  if (lastMessage?.tool_calls && lastMessage.tool_calls.length > 0) {
+    return 'tools';
+  }
+  return 'end';
+}
