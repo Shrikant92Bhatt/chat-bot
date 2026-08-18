@@ -6,5 +6,11 @@
     "types": ["node"]
   },
   "exclude": ["**/*.spec.ts"],
-  "include": ["src/**/*.ts", "../../libs/shared/src/**/*.ts"]
+  "include": [
+    "src/**/*.ts",
+    "../../libs/shared/src/**/*.ts"
+  ],
+  "angularCompilerOptions": {
+    "strictTemplates": false
+  }
 }

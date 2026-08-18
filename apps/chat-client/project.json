@@ -11,10 +11,18 @@
         "outputPath": "dist/apps/chat-client",
         "index": "apps/chat-client/src/index.html",
         "browser": "apps/chat-client/src/main.ts",
-        "polyfills": ["zone.js"],
+        "polyfills": [
+          "zone.js"
+        ],
         "tsConfig": "apps/chat-client/tsconfig.app.json",
-        "assets": ["apps/chat-client/src/favicon.ico", "apps/chat-client/src/favicon.svg", "apps/chat-client/src/assets"],
-        "styles": ["apps/chat-client/src/styles.css"],
+        "assets": [
+          "apps/chat-client/src/favicon.ico",
+          "apps/chat-client/src/favicon.svg",
+          "apps/chat-client/src/assets"
+        ],
+        "styles": [
+          "apps/chat-client/src/styles.css"
+        ],
         "scripts": [],
         "outputHashing": "all"
       }
@@ -24,7 +32,8 @@
       "options": {
         "buildTarget": "chat-client:build",
         "port": 4200
-      }
+      },
+      "continuous": true
     }
   }
 }

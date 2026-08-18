@@ -3,5 +3,10 @@
   "compilerOptions": {
     "module": "commonjs"
   },
-  "include": ["**/*.ts"]
+  "include": [
+    "**/*.ts"
+  ],
+  "angularCompilerOptions": {
+    "strictTemplates": false
+  }
 }

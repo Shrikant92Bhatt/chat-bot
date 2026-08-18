@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../../services/auth.service';
 
@@ -6,6 +6,7 @@ import { AuthService } from '../../services/auth.service';
   selector: 'app-session-expired-modal',
   standalone: true,
   imports: [CommonModule],
+  changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './session-expired-modal.component.html',
 })
 export class SessionExpiredModalComponent {

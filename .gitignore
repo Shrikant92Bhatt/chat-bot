@@ -7,6 +7,7 @@ yarn-error.log
 dist/
 tmp/
 .nx/
+.angular/
 
 # Environment files
 .env
@@ -30,3 +31,6 @@ service-account.json
 *.serviceaccount.json
 # GCP's default downloaded-key filename pattern: <project-id>-<hash>.json
 chat-bot-*.json
+
+.claude/worktrees
+.claude/settings.local.json
