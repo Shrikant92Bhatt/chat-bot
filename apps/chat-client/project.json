@@ -13,9 +13,10 @@
         "browser": "apps/chat-client/src/main.ts",
         "polyfills": ["zone.js"],
         "tsConfig": "apps/chat-client/tsconfig.app.json",
-        "assets": ["apps/chat-client/src/favicon.ico", "apps/chat-client/src/assets"],
+        "assets": ["apps/chat-client/src/favicon.ico", "apps/chat-client/src/favicon.svg", "apps/chat-client/src/assets"],
         "styles": ["apps/chat-client/src/styles.css"],
-        "scripts": []
+        "scripts": [],
+        "outputHashing": "all"
       }
     },
     "serve": {
