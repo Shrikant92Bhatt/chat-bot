@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { getFirestore } from 'firebase-admin/firestore';
 
 if (!admin.apps.length) {
   // FIREBASE_SERVICE_ACCOUNT_KEY: JSON-stringified service-account key,
@@ -16,4 +17,8 @@ if (!admin.apps.length) {
   }
 }
 
-export const firestore = admin.firestore();
+// Database ID, not "(default)" - admin.firestore() only ever targets the
+// database literally named "(default)", so a non-default database (e.g.
+// "nexus-ai") must be selected explicitly via getFirestore(app, databaseId).
+const databaseId = process.env.FIRESTORE_DATABASE_ID || '(default)';
+export const firestore = getFirestore(admin.app(), databaseId);

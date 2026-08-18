@@ -14,6 +14,11 @@ export class AuthService {
   // user's Google ID token has expired (detected on load or on a 401 from the API).
   public sessionExpired = signal<boolean>(false);
 
+  // User-visible message for a failed sign-in attempt (popup blocked, backend
+  // unreachable, token rejected, etc). Previously these failures were only
+  // console.error'd, so a broken login looked like nothing happened at all.
+  public loginError = signal<string | null>(null);
+
   // Reads configured Google Client ID from backend .env or localStorage
   public googleClientId = signal<string>(
     (localStorage.getItem('NEXUS_GOOGLE_CLIENT_ID') || '').trim()
@@ -81,6 +86,7 @@ export class AuthService {
    * Triggers Google Identity Services OAuth 2.0 flow directly using configured Client ID.
    */
   public async loginWithGoogle(): Promise<void> {
+    this.loginError.set(null);
     let currentClientId = this.googleClientId().trim();
 
     if (!currentClientId) {
@@ -92,7 +98,9 @@ export class AuthService {
       currentClientId = this.googleClientId().trim();
     }
     if (!currentClientId) {
+      const message = 'Could not reach the sign-in service. Check your connection and try again.';
       console.error('[Google Auth] No Google Client ID available. Ensure GOOGLE_CLIENT_ID is set in .env.');
+      this.loginError.set(message);
       return;
     }
 
@@ -114,7 +122,9 @@ export class AuthService {
         this.triggerOAuth2TokenClient(currentClientId);
       }
     } else {
+      const message = 'Sign-in is still loading. Please try again in a moment.';
       console.error('[Google Auth] Google Identity Services script not loaded');
+      this.loginError.set(message);
     }
   }
 
@@ -127,12 +137,21 @@ export class AuthService {
           callback: (tokenResponse: any) => {
             if (tokenResponse && tokenResponse.access_token) {
               this.exchangeGoogleTokenForSession(tokenResponse.access_token);
+            } else {
+              this.loginError.set('Google sign-in did not return a token. Please try again.');
             }
+          },
+          error_callback: (err: any) => {
+            console.error('[Google Auth] OAuth2 popup failed:', err);
+            this.loginError.set(
+              'The Google sign-in popup was blocked or closed. Please allow popups for this site and try again.'
+            );
           },
         });
         client.requestAccessToken();
       } catch (e) {
         console.error('[Google Auth] OAuth2 Token client failed:', e);
+        this.loginError.set('Google sign-in failed to start. Please try again.');
       }
     }
   }
@@ -159,6 +178,11 @@ export class AuthService {
       });
       if (!res.ok) {
         console.error('[Google Auth] Failed to exchange Google token for an app session:', res.status);
+        this.loginError.set(
+          res.status === 403
+            ? 'Sign-in was rejected by the server. Please try again or contact support.'
+            : `Sign-in failed (server returned ${res.status}). Please try again.`
+        );
         return;
       }
       const data = await res.json();
@@ -172,12 +196,14 @@ export class AuthService {
       this.setUserSession(session);
     } catch (e) {
       console.error('[Google Auth] Session exchange failed:', e);
+      this.loginError.set('Could not reach the server to complete sign-in. Please check your connection and try again.');
     }
   }
 
   private setUserSession(session: UserSession): void {
     this.userSignal.set(session);
     this.sessionExpired.set(false);
+    this.loginError.set(null);
     localStorage.setItem('NEXUS_AUTH_SESSION', JSON.stringify(session));
   }
 
@@ -214,6 +240,11 @@ export class AuthService {
   /** Dismisses the "session expired" popup without signing back in. */
   public dismissSessionExpired(): void {
     this.sessionExpired.set(false);
+  }
+
+  /** Dismisses the login-failure toast. */
+  public dismissLoginError(): void {
+    this.loginError.set(null);
   }
 
   public getIdToken(): string {

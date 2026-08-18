@@ -5,6 +5,7 @@ import { SidebarComponent } from './components/sidebar/sidebar.component';
 import { ChatWindowComponent } from './components/chat-window/chat-window.component';
 import { MessageInputComponent } from './components/message-input/message-input.component';
 import { SessionExpiredModalComponent } from './components/session-expired-modal/session-expired-modal.component';
+import { LoginErrorToastComponent } from './components/login-error-toast/login-error-toast.component';
 import { AuthService } from './services/auth.service';
 
 @Component({
@@ -17,6 +18,7 @@ import { AuthService } from './services/auth.service';
     ChatWindowComponent,
     MessageInputComponent,
     SessionExpiredModalComponent,
+    LoginErrorToastComponent,
   ],
   templateUrl: './app.component.html',
 })

@@ -29,4 +29,7 @@
 
   <!-- Popup shown when a signed-in user's Google session has expired -->
   <app-session-expired-modal *ngIf="authService.sessionExpired()"></app-session-expired-modal>
+
+  <!-- Toast shown when a login attempt fails, so failures are never silent -->
+  <app-login-error-toast *ngIf="authService.loginError()"></app-login-error-toast>
 </div>
