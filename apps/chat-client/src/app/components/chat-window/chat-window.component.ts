@@ -1,4 +1,4 @@
-import { Component, ElementRef, ViewChild, AfterViewChecked, effect, signal, SecurityContext } from '@angular/core';
+import { Component, ElementRef, ViewChild, AfterViewChecked, effect, signal, SecurityContext, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { DomSanitizer } from '@angular/platform-browser';
 import { marked } from 'marked';
@@ -12,6 +12,7 @@ marked.setOptions({ gfm: true, breaks: true });
   selector: 'app-chat-window',
   standalone: true,
   imports: [CommonModule],
+  changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './chat-window.component.html',
 })
 export class ChatWindowComponent implements AfterViewChecked {

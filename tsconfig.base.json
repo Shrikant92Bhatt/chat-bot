@@ -4,7 +4,7 @@
     "rootDir": ".",
     "sourceMap": true,
     "declaration": false,
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "emitDecoratorMetadata": true,
@@ -15,9 +15,8 @@
     "lib": ["es2022", "dom"],
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
-    "baseUrl": ".",
     "paths": {
-      "@chat-monorepo/shared": ["libs/shared/src/index.ts"]
+      "@chat-monorepo/shared": ["./libs/shared/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]

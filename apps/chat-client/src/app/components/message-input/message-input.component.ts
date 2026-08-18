@@ -1,4 +1,4 @@
-import { Component, HostListener } from '@angular/core';
+import { Component, HostListener, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AIModelType, SELECTABLE_MODELS } from '@chat-monorepo/shared';
@@ -8,6 +8,7 @@ import { ChatService } from '../../services/chat.service';
   selector: 'app-message-input',
   standalone: true,
   imports: [CommonModule, FormsModule],
+  changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './message-input.component.html',
 })
 export class MessageInputComponent {

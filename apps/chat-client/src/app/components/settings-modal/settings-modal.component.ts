@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Output, OnInit, signal } from '@angular/core';
+import { Component, EventEmitter, Output, OnInit, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ChatService } from '../../services/chat.service';
 import { AuthService } from '../../services/auth.service';
@@ -8,6 +8,7 @@ import { getApiBaseUrl } from '../../core/runtime-config';
   selector: 'app-settings-modal',
   standalone: true,
   imports: [CommonModule],
+  changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './settings-modal.component.html',
 })
 export class SettingsModalComponent implements OnInit {
