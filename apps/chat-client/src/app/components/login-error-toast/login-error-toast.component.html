@@ -1,0 +1,28 @@
+<div
+  class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-full max-w-md px-4"
+  role="alert"
+  aria-live="assertive"
+>
+  <div class="glass-card rounded-2xl p-4 border border-red-500/30 shadow-glass flex items-start gap-3">
+    <svg class="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+    </svg>
+    <div class="flex-1 min-w-0">
+      <p class="text-sm text-slate-200">{{ authService.loginError() }}</p>
+      <div class="mt-2 flex gap-3">
+        <button
+          (click)="retry()"
+          class="text-xs font-semibold text-accentCyan hover:text-accentViolet transition-colors cursor-pointer"
+        >
+          Try again
+        </button>
+        <button
+          (click)="dismiss()"
+          class="text-xs text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
+        >
+          Dismiss
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

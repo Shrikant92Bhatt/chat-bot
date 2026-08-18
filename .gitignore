@@ -24,3 +24,7 @@ Thumbs.db
 
 # Firebase local cache
 .firebase/
+
+# Downloaded service account keys - never commit
+service-account.json
+*.serviceaccount.json
