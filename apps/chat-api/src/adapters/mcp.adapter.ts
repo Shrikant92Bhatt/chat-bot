@@ -1,3 +1,5 @@
+import { FunctionDeclaration, SchemaType } from '@google/generative-ai';
+
 export interface MCPToolDefinition {
   name: string;
   description: string;
@@ -26,6 +28,28 @@ export class McpAdapter {
         parameters: { expression: 'string' },
       },
     ];
+  }
+
+  /**
+   * Converts the tool registry into Gemini's function-declaration schema so
+   * the model can actually invoke these tools mid-conversation, instead of
+   * the registry just existing unreachable. Every current tool's parameters
+   * are simple strings, so each maps directly to a STRING schema property.
+   */
+  async getGeminiFunctionDeclarations(): Promise<FunctionDeclaration[]> {
+    const tools = await this.getAvailableTools();
+
+    return tools.map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      parameters: {
+        type: SchemaType.OBJECT,
+        properties: Object.fromEntries(
+          Object.keys(tool.parameters).map((key) => [key, { type: SchemaType.STRING }])
+        ),
+        required: Object.keys(tool.parameters),
+      },
+    }));
   }
 
   async executeTool(toolName: string, args: Record<string, any>): Promise<any> {

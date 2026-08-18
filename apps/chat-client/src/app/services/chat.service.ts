@@ -272,13 +272,24 @@ export class ChatService {
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6));
+
               if (data.error) {
                 accumulatedContent += `\n⚠️ Error: ${data.error}`;
-              } else if (data.chunk) {
+              }
+
+              if (data.toolCall) {
+                accumulatedContent += `\n\n> 🔧 Using **${data.toolCall.name}**...\n\n`;
+              }
+
+              if (data.chunk) {
                 accumulatedContent += data.chunk;
               }
 
               this.updateAssistantMessage(currentThreadId, assistantMessageId, accumulatedContent);
+
+              if (data.done && Array.isArray(data.suggestions) && data.suggestions.length > 0) {
+                this.setMessageSuggestions(currentThreadId, assistantMessageId, data.suggestions);
+              }
             } catch (e) {
               // Ignore partial chunk parse failures
             }
@@ -326,6 +337,18 @@ export class ChatService {
             ...t,
             messages: [...t.messages, noticeMessage],
           };
+        }
+        return t;
+      })
+    );
+  }
+
+  private setMessageSuggestions(threadId: string, messageId: string, suggestions: string[]) {
+    this.threads.update((threadsList) =>
+      threadsList.map((t) => {
+        if (t.id === threadId) {
+          const updatedMessages = t.messages.map((m) => (m.id === messageId ? { ...m, suggestions } : m));
+          return { ...t, messages: updatedMessages };
         }
         return t;
       })
