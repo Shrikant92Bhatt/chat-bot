@@ -12,17 +12,16 @@ export class ThreadService {
   }
 
   /**
-   * Replaces the full thread list for a user in one batch, mirroring the
-   * "save the whole array" pattern the frontend already uses.
+   * Upserts each thread the client sends. Deliberately NOT a delete-then-
+   * write replace: a client that sends an incomplete array (e.g. after a
+   * failed history load) must never be able to erase threads it doesn't
+   * know about. There is no delete-thread feature, so nothing needs the
+   * old destructive-replace behavior.
    */
   public static async saveThreadsForUser(uid: string, threads: ChatThread[]): Promise<void> {
     const collection = this.threadsCollection(uid);
-    const existingSnapshot = await collection.get();
-
     const batch = firestore.batch();
-    existingSnapshot.docs.forEach((doc) => batch.delete(doc.ref));
     threads.forEach((thread) => batch.set(collection.doc(thread.id), thread));
-
     await batch.commit();
   }
 }
