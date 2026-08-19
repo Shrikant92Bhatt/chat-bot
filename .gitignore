@@ -34,3 +34,21 @@ chat-bot-*.json
 
 .claude/worktrees
 .claude/settings.local.json
+
+# Terraform (infra/terraform/) - local state, plugin cache, and per-operator
+# variable files that may contain real project IDs/secrets
+**/.terraform/
+**/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+!**/terraform.tfvars.example
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc

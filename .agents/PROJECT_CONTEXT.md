@@ -128,3 +128,12 @@ npm run build:all      # Build all apps
 npx nx serve chat-api  # API only
 npx nx serve chat-client # Client only
 ```
+
+## Infrastructure (Terraform)
+Code-only Terraform scaffold lives under `infra/terraform/` (`environments/{dev,staging,prod}` +
+`modules/{cloud-run,firestore,storage,pubsub,redis,iam,secret-manager,artifact-registry,monitoring}`).
+It mirrors what `.github/workflows/ci-cd.yml` and `cloudbuild.yaml` already deploy via raw `gcloud`
+commands (same region `asia-south1`, same Artifact Registry repo `chat-repo`, same Firestore DB
+`nexus-ai`, same bucket `nexusai-generated-images` in prod) — see `infra/terraform/README.md` for the
+full module-to-resource mapping and how an operator applies it. Nothing has been provisioned with it;
+`pubsub` and `redis` are scaffolded for future async/rate-limiting work and aren't wired to app code yet.
