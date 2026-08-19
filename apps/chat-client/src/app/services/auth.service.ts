@@ -192,6 +192,7 @@ export class AuthService {
         displayName: data.user.name || 'Google User',
         photoURL: data.user.picture || '',
         idToken: data.sessionToken,
+        role: data.user.role === 'admin' ? 'admin' : 'user',
       };
       this.setUserSession(session);
     } catch (e) {

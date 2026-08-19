@@ -2,6 +2,10 @@
 module.exports = {
   content: [
     './apps/chat-client/src/**/*.{html,ts}',
+    // admin-analytics lib is consumed directly into this app's bundle (see
+    // .agents/PROJECT_CONTEXT.md) - its classes need scanning here too,
+    // since Tailwind only generates CSS for classes it can see at build time.
+    '../../libs/frontend/admin-analytics/src/**/*.{html,ts}',
   ],
   theme: {
     extend: {
@@ -13,6 +17,8 @@ module.exports = {
         accentCyan: '#06b6d4',
         accentViolet: '#8b5cf6',
         accentEmerald: '#10b981',
+        accentAmber: '#f59e0b',
+        accentRose: '#f43f5e',
       },
       fontFamily: {
         // Plus Jakarta Sans/Inter/sans-serif have no emoji glyphs, so without

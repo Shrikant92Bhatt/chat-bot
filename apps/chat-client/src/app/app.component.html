@@ -1,5 +1,9 @@
 <div class="h-screen w-screen flex flex-col bg-obsidian text-slate-100 overflow-hidden relative font-sans">
-  <app-navbar (toggleSidebar)="isSidebarOpen = !isSidebarOpen" (openSettings)="openSettings()"></app-navbar>
+  <app-navbar
+    (toggleSidebar)="isSidebarOpen = !isSidebarOpen"
+    (openSettings)="openSettings()"
+    (openAdmin)="openAdminView()"
+  ></app-navbar>
 
   <div class="flex-1 flex overflow-hidden relative z-10">
     <app-sidebar
@@ -26,4 +30,8 @@
   <app-login-error-toast *ngIf="authService.loginError()"></app-login-error-toast>
   <app-settings-modal *ngIf="isSettingsOpen" (closeModal)="closeSettings()"></app-settings-modal>
   <app-projects-modal *ngIf="isProjectsOpen" (closeModal)="closeProjects()"></app-projects-modal>
+
+  <div *ngIf="isAdminViewOpen" class="fixed inset-0 z-50 bg-obsidian overflow-y-auto">
+    <lib-admin-dashboard (close)="closeAdminView()"></lib-admin-dashboard>
+  </div>
 </div>

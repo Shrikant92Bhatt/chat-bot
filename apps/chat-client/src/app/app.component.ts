@@ -8,6 +8,7 @@ import { SessionExpiredModalComponent } from './components/session-expired-modal
 import { LoginErrorToastComponent } from './components/login-error-toast/login-error-toast.component';
 import { SettingsModalComponent } from './components/settings-modal/settings-modal.component';
 import { ProjectsModalComponent } from './components/projects-modal/projects-modal.component';
+import { AdminDashboardComponent } from '@chat-monorepo/admin-analytics';
 import { AuthService } from './services/auth.service';
 
 @Component({
@@ -23,6 +24,7 @@ import { AuthService } from './services/auth.service';
     LoginErrorToastComponent,
     SettingsModalComponent,
     ProjectsModalComponent,
+    AdminDashboardComponent,
   ],
   changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './app.component.html',
@@ -30,6 +32,24 @@ import { AuthService } from './services/auth.service';
 export class AppComponent {
   public isSettingsOpen = false;
   public isProjectsOpen = false;
+
+  // Entry point visibility only - never the real authorization boundary.
+  // Every admin API call independently re-checks the role server-side (see
+  // requireAdmin), so a stale/wrong client-side role here can hide or show
+  // the button but can never actually grant access.
+  public isAdminViewOpen = false;
+
+  public get canSeeAdminEntry(): boolean {
+    return this.authService.userSignal()?.role === 'admin';
+  }
+
+  public openAdminView(): void {
+    this.isAdminViewOpen = true;
+  }
+
+  public closeAdminView(): void {
+    this.isAdminViewOpen = false;
+  }
 
   public openSettings() {
     this.isSettingsOpen = true;

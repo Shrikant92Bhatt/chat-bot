@@ -133,6 +133,10 @@ export interface UserSession {
   displayName: string | null;
   photoURL: string | null;
   idToken: string;
+  /** Display/UX only - e.g. whether to show the Admin entry point. Never
+   *  the authorization boundary; every admin API call re-reads the role
+   *  fresh from Firestore server-side regardless of what this says. */
+  role?: 'user' | 'admin';
 }
 
 export interface AIProviderResponse {
