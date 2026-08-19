@@ -1,4 +1,5 @@
 import { Annotation, MessagesAnnotation } from '@langchain/langgraph';
+import { AssembledContext, EMPTY_CONTEXT } from '../prompt/prompt-manager';
 
 /**
  * LangGraph state for the chat orchestration graph.
@@ -24,6 +25,31 @@ export const AgentStateAnnotation = Annotation.Root({
     default: () => [],
   }),
   generatedImageUrl: Annotation<string | null>({
+    reducer: (_left, right) => right,
+    default: () => null,
+  }),
+  /**
+   * Everything the context-assembly step gathered before the run started
+   * (project instructions, long-term memories, RAG excerpts, conversation
+   * summary). Built once per request by context/context-builder.ts and read
+   * by `agentNode` on every pass of the agent<->tools loop, so the system
+   * prompt stays identical across tool round-trips.
+   */
+  assembledContext: Annotation<AssembledContext>({
+    reducer: (_left, right) => right,
+    default: () => EMPTY_CONTEXT,
+  }),
+  /** Owner uid — null for anonymous/trial turns. */
+  userId: Annotation<string | null>({
+    reducer: (_left, right) => right,
+    default: () => null,
+  }),
+  /** Project the conversation is scoped to, if any. */
+  projectId: Annotation<string | null>({
+    reducer: (_left, right) => right,
+    default: () => null,
+  }),
+  threadId: Annotation<string | null>({
     reducer: (_left, right) => right,
     default: () => null,
   }),

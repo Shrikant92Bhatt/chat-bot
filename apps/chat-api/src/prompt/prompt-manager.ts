@@ -1,0 +1,107 @@
+import { PROMPT_TEMPLATES, PromptTemplate } from './templates';
+
+/**
+ * Prompt Manager — the single place that turns the assembled context
+ * (project instructions, long-term memories, RAG excerpts, conversation
+ * summary) into the system message the orchestrator sends to the LLM.
+ *
+ * Everything that used to be an inline prompt string in orchestration/
+ * nodes.ts, rag/retriever.ts and the services layer is rendered from the
+ * versioned registry in templates.ts instead.
+ */
+
+export function getTemplate(key: string): PromptTemplate {
+  const template = PROMPT_TEMPLATES[key];
+  if (!template) {
+    throw new Error(`[PromptManager] Unknown prompt template "${key}".`);
+  }
+  return template;
+}
+
+/** Renders `{{var}}` placeholders. A missing variable renders as an empty string. */
+export function renderPrompt(key: string, variables: Record<string, string | undefined> = {}): string {
+  const { template } = getTemplate(key);
+  return template.replace(/\{\{(\w+)\}\}/g, (_match, name: string) => variables[name] ?? '');
+}
+
+/** Lists the registry, for diagnostics/settings UIs. */
+export function listPromptTemplates(): Array<{ key: string; id: string; version: string; description: string }> {
+  return Object.entries(PROMPT_TEMPLATES).map(([key, t]) => ({
+    key,
+    id: t.id,
+    version: t.version,
+    description: t.description,
+  }));
+}
+
+/** Rough token estimate (~4 chars/token) — good enough for budget decisions. */
+export function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+/**
+ * Everything the context-assembly step gathers before the LLM call.
+ * Produced by context/context-builder.ts, consumed here.
+ */
+export interface AssembledContext {
+  projectName?: string | null;
+  projectInstructions?: string | null;
+  /** Durable user-level facts from long-term memory. */
+  memories?: string[];
+  /** RAG excerpts (user knowledge base + project files). */
+  ragContext?: string[];
+  /** Rolling summary of the conversation turns that were dropped from the window. */
+  conversationSummary?: string | null;
+}
+
+export const EMPTY_CONTEXT: AssembledContext = {};
+
+/**
+ * Builds the single system message for a turn.
+ *
+ * Block order is deliberate — most durable/authoritative first, most
+ * volatile last, so later blocks read as "for this turn" rather than as
+ * standing instructions:
+ *   system identity -> tool policy -> project instructions -> memories ->
+ *   RAG excerpts -> conversation summary.
+ *
+ * Returns null when there is nothing at all to say (never happens today,
+ * since system:v1 is unconditional, but keeps callers honest).
+ */
+export function buildSystemPrompt(context: AssembledContext, options: { mcpEnabled?: boolean } = {}): string | null {
+  const blocks: string[] = [renderPrompt('system:v1')];
+
+  if (options.mcpEnabled) {
+    blocks.push(renderPrompt('tool_selection:v1'));
+  }
+
+  if (context.projectInstructions && context.projectInstructions.trim()) {
+    blocks.push(
+      renderPrompt('project:v1', {
+        name: context.projectName || 'Untitled project',
+        instructions: context.projectInstructions.trim(),
+      })
+    );
+  }
+
+  if (context.memories && context.memories.length > 0) {
+    blocks.push(
+      renderPrompt('memory:v1', {
+        memories: context.memories.map((m) => `- ${m}`).join('\n'),
+      })
+    );
+  }
+
+  if (context.ragContext && context.ragContext.length > 0) {
+    blocks.push(renderPrompt('rag:v1', { context: context.ragContext.join('\n\n---\n\n') }));
+  }
+
+  if (context.conversationSummary && context.conversationSummary.trim()) {
+    blocks.push(renderPrompt('conversation_summary:v1', { summary: context.conversationSummary.trim() }));
+  }
+
+  const joined = blocks.filter(Boolean).join('\n\n');
+  if (!joined.trim()) return null;
+
+  return renderPrompt('chat:v1', { blocks: joined });
+}

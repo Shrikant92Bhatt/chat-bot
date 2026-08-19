@@ -1,0 +1,23 @@
+# Copy to terraform.tfvars (gitignored) and fill in real values before
+# `terraform plan`. Do not commit terraform.tfvars.
+#
+# Values below mirror what .github/workflows/ci-cd.yml already deploys by
+# hand today, so that adopting Terraform against the existing prod project
+# produces a plan that matches current reality as closely as possible
+# (import the existing resources first — see infra/terraform/README.md).
+
+project_id = "chat-bot-505613"
+region     = "asia-south1"
+
+bucket_name            = "nexusai-generated-images"
+firestore_database_id  = "nexus-ai"
+
+# Leave unset to default to ":latest" in the Terraform-managed Artifact
+# Registry repo, or pin explicitly, e.g.:
+# api_image    = "asia-south1-docker.pkg.dev/chat-bot-505613/chat-repo/chat-api:latest"
+# client_image = "asia-south1-docker.pkg.dev/chat-bot-505613/chat-repo/chat-client:latest"
+
+google_client_id = "953232172604-iukeghd5021k56htjq7ep332bvtvppot.apps.googleusercontent.com"
+allowed_origin    = "https://nexusai-gcp.duckdns.org"
+
+enable_redis = false

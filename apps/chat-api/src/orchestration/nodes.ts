@@ -1,12 +1,39 @@
-import { AIMessage, ToolMessage } from '@langchain/core/messages';
+import { AIMessage, BaseMessage, SystemMessage, ToolMessage } from '@langchain/core/messages';
 import { AgentState, AgentStateUpdate } from './state';
 import { createOmniRouteChatModel } from '../llm/client';
 import { McpAdapter } from '../mcp/adapter';
+import { buildSystemPrompt } from '../prompt/prompt-manager';
 
 const mcpAdapter = new McpAdapter();
 
 /**
- * Calls the OmniRoute-backed chat model with the current conversation,
+ * Context assembly for a single model call.
+ *
+ * This is the one place where the four context sources — project
+ * instructions, long-term memory, RAG excerpts and the conversation summary
+ * — are turned into what the LLM actually sees. The gathering (Firestore
+ * reads, retrieval, the summarization call) happens once per request in
+ * context/context-builder.ts and lands in `state.assembledContext`; this
+ * function is pure and cheap, so re-running it on every pass of the
+ * agent<->tools loop is free and keeps the system prompt stable across
+ * tool round-trips.
+ *
+ * The prompt text itself lives in the versioned registry under prompt/ —
+ * no inline prompt strings here.
+ */
+export function assembleAgentMessages(state: AgentState): BaseMessage[] {
+  const systemPrompt = buildSystemPrompt(state.assembledContext ?? {}, { mcpEnabled: state.mcpEnabled });
+
+  // Drop any SystemMessages already in the history: the Prompt Manager owns
+  // the system layer now, and a client-supplied one would silently compete
+  // with project instructions and memories.
+  const conversation = (state.messages || []).filter((m) => m.getType?.() !== 'system');
+
+  return systemPrompt ? [new SystemMessage(systemPrompt), ...conversation] : conversation;
+}
+
+/**
+ * Calls the OmniRoute-backed chat model with the assembled context,
  * binding MCP tools so the model can request tool calls via real
  * OpenAI-style function calling (not string matching).
  */
@@ -14,7 +41,7 @@ export async function agentNode(state: AgentState): Promise<AgentStateUpdate> {
   const model = createOmniRouteChatModel(state.model, state.temperature);
   const modelWithTools = state.mcpEnabled ? model.bindTools(mcpAdapter.getTools()) : model;
 
-  const response = await modelWithTools.invoke(state.messages);
+  const response = await modelWithTools.invoke(assembleAgentMessages(state));
   return { messages: [response] };
 }
 

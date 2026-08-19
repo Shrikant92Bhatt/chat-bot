@@ -1,0 +1,161 @@
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+  <div class="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-3xl shadow-2xl flex flex-col overflow-hidden">
+    <!-- Header -->
+    <div class="flex items-center justify-between px-6 py-4 border-b border-white/5">
+      <div>
+        <h2 class="text-lg font-semibold text-slate-100">Projects</h2>
+        <p class="text-xs text-slate-400">Custom instructions and files, scoped to a workspace.</p>
+      </div>
+      <button (click)="closeModal.emit()" class="text-slate-400 hover:text-white transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+
+    <div class="flex flex-col sm:flex-row h-[460px]">
+      <!-- Project list -->
+      <div class="w-full sm:w-56 border-b sm:border-b-0 sm:border-r border-white/5 p-2 flex flex-col gap-1 overflow-y-auto">
+        <button
+          (click)="startCreating()"
+          class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-200 hover:bg-white/5 transition-colors"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+          </svg>
+          New project
+        </button>
+
+        <div *ngIf="isCreating()" class="px-1 py-1.5">
+          <input
+            [(ngModel)]="newProjectName"
+            (keydown.enter)="confirmCreate()"
+            placeholder="Project name"
+            class="w-full bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-slate-500/50"
+          />
+          <div class="flex gap-1.5 mt-1.5">
+            <button
+              (click)="confirmCreate()"
+              [disabled]="!newProjectName.trim()"
+              class="flex-1 px-2 py-1 rounded-lg bg-white text-slate-900 text-xs font-medium disabled:opacity-40 hover:bg-slate-200 transition-all"
+            >
+              Create
+            </button>
+            <button (click)="isCreating.set(false)" class="px-2 py-1 rounded-lg text-xs text-slate-400 hover:bg-white/5">
+              Cancel
+            </button>
+          </div>
+        </div>
+
+        <div *ngIf="projectService.isLoading()" class="px-3 py-2 text-xs text-slate-500">Loading…</div>
+
+        <div
+          *ngIf="!projectService.isLoading() && projectService.projects().length === 0 && !isCreating()"
+          class="px-3 py-2 text-xs text-slate-500"
+        >
+          No projects yet.
+        </div>
+
+        <button
+          *ngFor="let project of projectService.projects()"
+          (click)="select(project.id)"
+          [ngClass]="projectService.selectedProjectId() === project.id ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/5'"
+          class="w-full text-left px-3 py-2 rounded-lg text-sm transition-colors"
+        >
+          <div class="truncate">{{ project.name }}</div>
+          <div class="text-[11px] text-slate-500">{{ project.fileCount || 0 }} file(s)</div>
+        </button>
+      </div>
+
+      <!-- Detail pane -->
+      <div class="flex-1 p-5 overflow-y-auto">
+        <div *ngIf="!projectService.selectedProject()" class="h-full flex items-center justify-center text-sm text-slate-500 text-center px-6">
+          Select a project to edit its instructions and files, or create one to get started.
+        </div>
+
+        <div *ngIf="projectService.selectedProject() as project" class="space-y-5">
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1.5">Name</label>
+            <input
+              [(ngModel)]="draftName"
+              class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-slate-500/50"
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1.5">Custom instructions</label>
+            <textarea
+              [(ngModel)]="draftInstructions"
+              rows="6"
+              placeholder="e.g. Always answer as a senior TypeScript reviewer. Prefer concise code samples."
+              class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-slate-100 placeholder-slate-500 resize-y focus:outline-none focus:border-slate-500/50"
+            ></textarea>
+            <p class="text-[11px] text-slate-500 mt-1">
+              Injected into every conversation scoped to this project.
+            </p>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button
+              (click)="save()"
+              [disabled]="isSaving()"
+              class="px-3 py-1.5 rounded-xl bg-white text-slate-900 text-sm font-medium disabled:opacity-40 hover:bg-slate-200 transition-all"
+            >
+              {{ isSaving() ? 'Saving…' : 'Save' }}
+            </button>
+            <button
+              (click)="startChatInProject()"
+              class="px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 text-sm text-slate-200 hover:bg-white/10 transition-all"
+            >
+              Start chat in project
+            </button>
+            <span *ngIf="savedAt()" class="text-[11px] text-emerald-400">Saved</span>
+            <button (click)="remove()" class="ml-auto text-xs text-red-400 hover:text-red-300 transition-colors">
+              Delete
+            </button>
+          </div>
+
+          <div class="border-t border-white/5 pt-4">
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="text-xs font-semibold text-slate-400">Project files</h3>
+              <button
+                (click)="projectFileInput.click()"
+                [disabled]="projectService.isUploadingFile()"
+                class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 text-xs text-slate-200 hover:bg-white/10 disabled:opacity-40 transition-all"
+              >
+                <svg *ngIf="!projectService.isUploadingFile()" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                </svg>
+                <svg *ngIf="projectService.isUploadingFile()" class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+                Upload
+              </button>
+              <input #projectFileInput type="file" hidden accept=".txt,.md,.csv,.json,.pdf" (change)="onFileSelected($event)" />
+            </div>
+
+            <div *ngIf="projectService.selectedProjectFiles().length === 0" class="text-[11px] text-slate-500">
+              No files yet. Uploaded files are only retrievable inside this project.
+            </div>
+
+            <div class="space-y-1">
+              <div
+                *ngFor="let file of projectService.selectedProjectFiles()"
+                class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/5 text-xs text-slate-300"
+              >
+                <svg class="w-3.5 h-3.5 text-slate-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span class="truncate">{{ file.fileName }}</span>
+                <span class="ml-auto text-slate-500 shrink-0">{{ formatDate(file.uploadedAt) }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div *ngIf="projectService.error()" class="text-[11px] text-red-400">{{ projectService.error() }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

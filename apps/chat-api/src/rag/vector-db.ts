@@ -8,9 +8,21 @@ export interface VectorQueryResult {
 interface StoredDocument {
   id: string;
   ownerId: string;
+  /**
+   * Project this document belongs to, or null for the user's personal
+   * knowledge base. Project documents are only ever retrievable from a
+   * conversation scoped to that same project (see similaritySearch).
+   */
+  projectId: string | null;
   content: string;
   vector: number[];
   metadata?: Record<string, unknown>;
+}
+
+export interface SearchScope {
+  ownerId: string;
+  /** When set, project documents for this project become visible alongside the personal KB. */
+  projectId?: string | null;
 }
 
 const EMBEDDING_DIMS = 256;
@@ -52,18 +64,39 @@ export class VectorDbAdapter {
     return vector.map((v) => v / norm);
   }
 
-  async addDocument(id: string, ownerId: string, content: string, metadata?: Record<string, unknown>): Promise<void> {
+  async addDocument(
+    id: string,
+    ownerId: string,
+    content: string,
+    metadata?: Record<string, unknown>,
+    projectId: string | null = null
+  ): Promise<void> {
     const vector = await this.embedText(content);
-    this.documents.push({ id, ownerId, content, vector, metadata });
+    // Re-ingesting the same id (e.g. after a project rehydration) replaces
+    // rather than duplicates the document.
+    this.documents = this.documents.filter((d) => d.id !== id);
+    this.documents.push({ id, ownerId, projectId, content, vector, metadata });
   }
 
-  async similaritySearch(ownerId: string, queryVector: number[], topK = 5): Promise<VectorQueryResult[]> {
-    const owned = this.documents.filter((doc) => doc.ownerId === ownerId);
-    if (owned.length === 0) {
+  /**
+   * Visibility rule: a document is searchable when the requester owns it AND
+   * it is either personal (projectId === null) or belongs to the project the
+   * conversation is scoped to. A project's files therefore never surface in
+   * a conversation outside that project, nor in another project.
+   */
+  private inScope(doc: StoredDocument, scope: SearchScope): boolean {
+    if (doc.ownerId !== scope.ownerId) return false;
+    if (doc.projectId === null) return true;
+    return !!scope.projectId && doc.projectId === scope.projectId;
+  }
+
+  async similaritySearch(scope: SearchScope, queryVector: number[], topK = 5): Promise<VectorQueryResult[]> {
+    const visible = this.documents.filter((doc) => this.inScope(doc, scope));
+    if (visible.length === 0) {
       return [];
     }
 
-    const scored = owned.map((doc) => ({
+    const scored = visible.map((doc) => ({
       id: doc.id,
       content: doc.content,
       metadata: doc.metadata,
@@ -77,8 +110,13 @@ export class VectorDbAdapter {
     return true;
   }
 
-  size(ownerId?: string): number {
-    return ownerId ? this.documents.filter((d) => d.ownerId === ownerId).length : this.documents.length;
+  size(scope?: SearchScope): number {
+    if (!scope) return this.documents.length;
+    return this.documents.filter((d) => this.inScope(d, scope)).length;
+  }
+
+  hasProjectDocuments(projectId: string): boolean {
+    return this.documents.some((d) => d.projectId === projectId);
   }
 }
 
