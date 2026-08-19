@@ -4,6 +4,7 @@ import cors from 'cors';
 import chatRoutes from './routes/chat.routes';
 import authRoutes from './routes/auth.routes';
 import projectRoutes from './routes/project.routes';
+import adminRoutes from './routes/admin.routes';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -42,6 +43,9 @@ app.get('/health', (req, res) => {
 app.use('/api/chat', chatRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/v1/projects', projectRoutes);
+// Admin analytics API. Every route inside is behind authenticateToken +
+// requireAdmin (router-level, see routes/admin.routes.ts).
+app.use('/api/v1/admin', adminRoutes);
 
 app.listen(PORT, () => {
   console.log(`=================================================`);
