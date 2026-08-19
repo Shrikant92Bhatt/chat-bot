@@ -18,11 +18,25 @@ marked.setOptions({ gfm: true, breaks: true });
 export class ChatWindowComponent implements AfterViewChecked {
   @ViewChild('scrollContainer') private scrollContainer!: ElementRef<HTMLElement>;
 
-  // Only auto-scroll while the user is already at (or near) the bottom, so
-  // scrolling up to read earlier messages during a stream doesn't keep
-  // getting yanked back down on every change-detection pass.
+  // Only auto-scroll while the user is already at (or very near) the
+  // bottom, so scrolling up to read earlier messages during a stream
+  // doesn't keep getting yanked back down on every change-detection pass.
+  //
+  // Kept deliberately tight (not a few dozen px): onUserScrollIntent()
+  // disables auto-follow the instant a wheel/touch gesture starts, but
+  // onScroll() re-enables it whenever the resulting position is "close
+  // enough" to the bottom - a generous threshold here means even a single
+  // small scroll-up tick (common on trackpads/precision mice, which often
+  // move well under 20-30px per event) still lands inside the "close
+  // enough" window and gets immediately re-armed, cancelling the very
+  // gesture that just tried to disable it. That's what "scroll up once
+  // does nothing, twice works" looks like: the first tick's disable gets
+  // undone before it's visible, the second tick finally moves far enough
+  // to stay outside the window. A tight threshold means resuming
+  // auto-follow requires actually reaching the bottom, not just
+  // approaching it - standard behavior for chat UIs.
   private shouldAutoScroll = true;
-  private readonly bottomThresholdPx = 96;
+  private readonly bottomThresholdPx = 8;
 
   // activeMessages() gets a new array/object reference on every streamed
   // token (not just when a message is added), so an effect reading it would
