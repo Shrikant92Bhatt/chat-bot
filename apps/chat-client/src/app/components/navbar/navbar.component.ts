@@ -12,6 +12,7 @@ import { AuthService } from '../../services/auth.service';
 export class NavbarComponent {
   @Output() toggleSidebar = new EventEmitter<void>();
   @Output() openSettings = new EventEmitter<void>();
+  @Output() openAdmin = new EventEmitter<void>();
 
   constructor(public authService: AuthService) {}
 }

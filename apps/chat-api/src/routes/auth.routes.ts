@@ -27,14 +27,19 @@ router.post('/session', async (req, res: Response) => {
   try {
     const user = await verifyGoogleToken(googleToken);
 
+    // role is display/UX only from here on (e.g. showing the Admin entry
+    // point) - the JWT itself never carries it, and every admin API call
+    // re-reads the role fresh from Firestore regardless of this response.
+    let role: 'user' | 'admin' = 'user';
     try {
-      await UserRegistryService.registerOrUpdateUser(user);
+      const registered = await UserRegistryService.registerOrUpdateUser(user);
+      role = registered.role ?? 'user';
     } catch (error) {
       console.error('[Auth Route] Failed to record user in registry:', error);
     }
 
     const sessionToken = mintAppSessionToken(user);
-    res.json({ sessionToken, user });
+    res.json({ sessionToken, user: { ...user, role } });
   } catch (error) {
     console.error('[Auth Route] Google token verification failed:', error);
     res.status(403).json({

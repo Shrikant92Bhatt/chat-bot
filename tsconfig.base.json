@@ -16,7 +16,10 @@
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
     "paths": {
-      "@chat-monorepo/shared": ["./libs/shared/src/index.ts"]
+      "@chat-monorepo/shared": ["./libs/shared/src/index.ts"],
+      "@chat-monorepo/admin-analytics": [
+        "./libs/frontend/admin-analytics/src/index.ts"
+      ]
     }
   },
   "exclude": ["node_modules", "tmp"]
