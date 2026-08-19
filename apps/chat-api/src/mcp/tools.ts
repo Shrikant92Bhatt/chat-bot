@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { tool } from '@langchain/core/tools';
 import { generateImage } from '../llm/image-gen';
+import { performWebSearch } from '../llm/web-search';
 
 /**
  * Evaluates a restricted arithmetic expression (digits, + - * / ( ) . and
@@ -34,18 +35,17 @@ const calculatorTool = tool(
 
 const webSearchTool = tool(
   async ({ query }: { query: string }) => {
-    // No search provider is configured (e.g. Tavily/Bing/SerpAPI). Report
-    // this plainly instead of fabricating results the model would present
-    // as real.
-    console.warn(`[mcp/tools] web_search called for "${query}" but no search provider is configured.`);
-    return JSON.stringify({
-      available: false,
-      message: 'Web search is not configured on this deployment. No live results are available.',
-    });
+    try {
+      const { answer, citations } = await performWebSearch(query);
+      return JSON.stringify({ available: true, answer, citations });
+    } catch (error) {
+      console.error(`[mcp/tools] web_search failed for "${query}":`, error);
+      return JSON.stringify({ available: false, message: (error as Error).message });
+    }
   },
   {
     name: 'web_search',
-    description: 'Searches the web for real-time information. Returns an "unavailable" result if no search provider is configured.',
+    description: 'Searches the web for real-time, current information (e.g. weather, news, prices, recent events) and returns a grounded answer with sources.',
     schema: z.object({
       query: z.string().describe('The search query.'),
     }),

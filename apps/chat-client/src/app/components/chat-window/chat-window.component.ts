@@ -61,7 +61,15 @@ export class ChatWindowComponent implements AfterViewChecked {
     }
   }
 
+  // scrollToBottom() setting scrollTop fires a native 'scroll' event just
+  // like a real user scroll would - without this guard, onScroll() reads
+  // "distance from bottom = 0" right after our own programmatic scroll and
+  // re-arms shouldAutoScroll, so a manual scroll-up gets undone within the
+  // same stream and the view is permanently pinned to the bottom.
+  private isProgrammaticScroll = false;
+
   onScroll(): void {
+    if (this.isProgrammaticScroll) return;
     const el = this.scrollContainer.nativeElement;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     this.shouldAutoScroll = distanceFromBottom < this.bottomThresholdPx;
@@ -69,8 +77,14 @@ export class ChatWindowComponent implements AfterViewChecked {
 
   private scrollToBottom(): void {
     try {
+      this.isProgrammaticScroll = true;
       this.scrollContainer.nativeElement.scrollTop = this.scrollContainer.nativeElement.scrollHeight;
-    } catch (err) {}
+      requestAnimationFrame(() => {
+        this.isProgrammaticScroll = false;
+      });
+    } catch (err) {
+      this.isProgrammaticScroll = false;
+    }
   }
 
   /**
@@ -127,5 +141,18 @@ export class ChatWindowComponent implements AfterViewChecked {
   /** Opens a generated image full-size in a new tab (works for both data: URIs and real URLs). */
   public openImage(imageUrl: string): void {
     window.open(imageUrl, '_blank', 'noopener');
+  }
+
+  /**
+   * Re-scrolls to bottom once an async image finishes loading. Images grow
+   * the container's scrollHeight only after their own network/decode
+   * completes, which happens after ngAfterViewChecked's scroll already ran
+   * - without this, a generated image (or any late-loading content) is left
+   * cut off below the fold even though "auto-scroll" fired on schedule.
+   */
+  public onContentLoad(): void {
+    if (this.shouldAutoScroll) {
+      this.scrollToBottom();
+    }
   }
 }

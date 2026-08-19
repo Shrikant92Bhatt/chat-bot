@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import multer from 'multer';
 import { authenticateToken, authenticateOrAllowTrial, AuthenticatedRequest } from '../middleware/auth.middleware';
 import { AIRouterService } from '../services/ai-router.service';
 import { UserRegistryService } from '../services/user-registry.service';
@@ -9,9 +10,12 @@ import { streamGraphResponse } from '../orchestration/graph';
 import { StorageMetricsService } from '../storage/metrics';
 import { generateImage } from '../llm/image-gen';
 import { isOmniRouteConfigured } from '../llm/client';
+import { extractDocumentText } from '../rag/document-extractor';
+import { RagRetriever } from '../rag/retriever';
 
 const router = Router();
 const aiRouterService = new AIRouterService();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB
 
 /**
  * GET /api/chat/config
@@ -53,7 +57,7 @@ router.post('/stream', authenticateOrAllowTrial, async (req: AuthenticatedReques
 
   try {
     try {
-      await streamGraphResponse(streamRequest, res);
+      await streamGraphResponse(streamRequest, res, req.user?.uid);
       return;
     } catch (graphError) {
       console.warn('[Chat API Route] LangGraph stream failed, falling back to AIRouterService', graphError);
@@ -171,6 +175,34 @@ router.post('/generate-image', authenticateToken, async (req: AuthenticatedReque
   } catch (error) {
     console.error('[Chat API Route] Image generation error:', error);
     res.status(500).json({ error: 'Failed to generate image.' });
+  }
+});
+
+/**
+ * POST /api/chat/documents
+ * Uploads a file (.txt, .md, .csv, .json, .pdf) into the authenticated
+ * user's RAG knowledge base - future chat turns automatically get
+ * relevant excerpts injected as context (see RagRetriever.retrieveContext,
+ * called from orchestration/graph.ts).
+ */
+router.post('/documents', authenticateToken, upload.single('file'), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({ error: 'No file was uploaded (expected multipart field "file").' });
+      return;
+    }
+
+    const text = await extractDocumentText(file.buffer, file.originalname, file.mimetype);
+
+    const ragRetriever = new RagRetriever();
+    const docId = `doc-${Date.now()}-${file.originalname}`;
+    await ragRetriever.ingest(docId, req.user!.uid, text, { fileName: file.originalname });
+
+    res.json({ success: true, fileName: file.originalname, characters: text.length });
+  } catch (error) {
+    console.error('[Chat API Route] Document upload error:', error);
+    res.status(400).json({ error: (error as Error).message || 'Failed to process document.' });
   }
 });
 
