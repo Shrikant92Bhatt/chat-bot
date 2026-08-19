@@ -68,6 +68,12 @@ variable "client_image" {
   default     = null
 }
 
+variable "admin_image" {
+  description = "Full admin-analytics image ref (the admin console SPA, built from Dockerfile.admin)."
+  type        = string
+  default     = null
+}
+
 variable "min_instance_count" {
   description = "Kept at 0 by default to stay free-tier-safe. Bump to 1 in terraform.tfvars once cold-start latency matters more than idle cost."
   type        = number

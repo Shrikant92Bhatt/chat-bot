@@ -70,6 +70,37 @@ variable "client_env_vars" {
 }
 
 # ---------------------------------------------------------------------------
+# admin-analytics (apps/admin-analytics, built from Dockerfile.admin, NGINX,
+# PORT=8080). Public at the infra layer by design - see main.tf for why.
+# ---------------------------------------------------------------------------
+
+variable "admin_service_name" {
+  type    = string
+  default = "admin-analytics"
+}
+
+variable "admin_image" {
+  description = "Full image ref, e.g. asia-south1-docker.pkg.dev/PROJECT/chat-repo/admin-analytics:latest"
+  type        = string
+}
+
+variable "admin_env_vars" {
+  description = <<-EOT
+    Extra/override env vars for admin-analytics. API_URL defaults to the
+    chat-api service's own Cloud Run URL (see main.tf) — only set this if
+    you're fronting chat-api with a custom domain, matching how ci-cd.yml
+    sets API_URL=https://nexusai-gcp.duckdns.org.
+
+    NOTE: after the first apply, the resulting admin_url output must be added
+    manually to (a) chat-api's ALLOWED_ORIGIN (comma-separated) and (b) the
+    Google OAuth client's Authorized JavaScript origins. Neither can be set
+    before the URL exists.
+  EOT
+  type    = map(string)
+  default = {}
+}
+
+# ---------------------------------------------------------------------------
 # Shared sizing / scaling (kept free-tier-safe: 0 min instances everywhere by
 # default so idle environments cost nothing beyond storage/Firestore reads).
 # ---------------------------------------------------------------------------

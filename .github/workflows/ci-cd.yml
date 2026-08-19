@@ -57,6 +57,10 @@ jobs:
         run: |
           docker build -t chat-client:test -f Dockerfile.client .
 
+      - name: Build Admin Analytics NGINX Container
+        run: |
+          docker build -t admin-analytics:test -f Dockerfile.admin .
+
       # GCP steps only run on pushes to main (not on PRs, which have no GCP creds needed).
       # Note: the "secrets" context is not available in step-level `if:` conditions,
       # so gating is done on github.ref/event_name here instead.
@@ -104,6 +108,32 @@ jobs:
         run: |
           gcloud run deploy chat-client \
             --image=asia-south1-docker.pkg.dev/chat-bot-505613/chat-repo/chat-client:latest \
+            --region=asia-south1 \
+            --platform=managed \
+            --allow-unauthenticated \
+            --set-env-vars="API_URL=https://nexusai-gcp.duckdns.org"
+
+      # --allow-unauthenticated is correct here even though this is the ADMIN
+      # console: authorization is enforced in-app (Google Sign-In -> app session
+      # JWT -> the API's requireAdmin, which re-reads the role from Firestore on
+      # every request), exactly like chat-client. Putting Cloud Run IAM in front
+      # of it instead would block the anonymous GET /api/chat/config and the
+      # sign-in flow itself. The served bundle contains no secrets - every
+      # number on the dashboard comes from an admin-gated API call.
+      #
+      # MANUAL FOLLOW-UP once this service has a URL (it cannot be done before
+      # the first deploy, and neither step is automatable from here):
+      #   1. Append the admin-analytics URL to ALLOWED_ORIGIN on the chat-api
+      #      service (it already accepts a comma-separated list - see the CORS
+      #      setup in apps/chat-api/src/main.ts). Until then every admin API
+      #      call fails CORS preflight in the browser.
+      #   2. Add the same URL to the Google Cloud Console OAuth client's
+      #      "Authorized JavaScript origins". Until then Google Sign-In refuses
+      #      to initialise on this origin.
+      - name: Deploy admin-analytics
+        run: |
+          gcloud run deploy admin-analytics \
+            --image=asia-south1-docker.pkg.dev/chat-bot-505613/chat-repo/admin-analytics:latest \
             --region=asia-south1 \
             --platform=managed \
             --allow-unauthenticated \

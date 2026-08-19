@@ -1,8 +1,8 @@
 # NexusAI Enterprise Chat — Agent Reference
 
 ## System Overview
-- Nx Monorepo: `apps/chat-client` (Angular 18 + Tailwind), `apps/chat-api` (Express TS), `libs/shared`
-- Auth: Google OAuth2 -> App session JWT (7d)
+- Nx Monorepo: `apps/chat-client` (Angular + Tailwind), `apps/admin-analytics` (Angular + Tailwind, admin-only console), `apps/chat-api` (Express TS), `libs/shared`
+- Auth: Google OAuth2 -> App session JWT (7d). Authorization: a `role` field (`'user' | 'admin'`) on the `users` doc, re-read from Firestore on every admin request (never a JWT claim)
 - DB: Firestore — collections: `users` (registry) / `users/{uid}/threads` (conversations + rolling summary), `projects` (+ `projects/{id}/files` subcollection), `memories` (long-term user facts)
 - Streaming: SSE via Express
 
@@ -114,6 +114,12 @@ Do not re-add inline prompt strings to `nodes.ts` / `graph.ts` — add a templat
 - `GET /api/chat/usage` (Bearer) returns the current user's most recent records, newest first (`?limit=` param, capped at 200). Query is `where('userId','==',uid).orderBy('timestamp','desc')`, which needs a Firestore composite index on the `usage` collection (`userId` ASC + `timestamp` DESC) - Firestore returns a console link to auto-create it on first use if it doesn't exist yet; there's no `firestore.indexes.json` checked into this repo to provision it ahead of time.
 - The legacy `AIRouterService` fallback path (direct Gemini/OpenAI SDKs, only reached if the LangGraph gateway call fails before any token is streamed) does NOT log usage yet.
 
+### Admin Analytics (`middleware/admin.middleware.ts`, `routes/admin.routes.ts`, `services/analytics.service.ts`)
+- **Authorization**: `requireAdmin` runs AFTER `authenticateToken` and does a **fresh Firestore read** of `users/{uid}.role` on every request. The role is deliberately NOT a JWT claim — the session token lives 7 days, so a baked-in claim would keep a demoted admin privileged for up to a week. It **fails closed**: a Firestore error denies rather than degrades (the opposite of the fail-soft context-assembly paths, on purpose). Non-admins get `403 {error:'Forbidden', message:'Admin access required.'}`.
+- `admin.routes.ts` applies `router.use(authenticateToken, requireAdmin)` at the router level, so a route added later can't be left unguarded by accident.
+- **Last-admin guard**: `PATCH /users/:uid/role` counts current admins before a demotion and rejects with `400 LastAdmin` if the target is the only one left. There is currently exactly one admin, so this is a live safety net, not a hypothetical.
+- `AnalyticsService` aggregates the `usage` collection **in process** — Firestore has no server-side GROUP BY. Every query filters on `timestamp` only (single field ⇒ no composite index needed, per the Firestore query rules below); per-user/per-model narrowing happens in memory for the same reason. Cost/latency grow linearly with logged requests: `MAX_RECORDS_SCANNED` (20k) caps the blast radius and responses carry `truncated: true` when it's hit rather than silently reporting a partial total as complete. **A scheduled BigQuery export is the intended path at real volume** (Firestore for app-level, BigQuery for large-scale — the pattern architecture.md already calls out).
+
 ### Existing Services (kept as fallback)
 - `services/gemini.service.ts`: Direct Gemini SDK streaming
 - `services/openai.service.ts`: Direct OpenAI SDK streaming
@@ -131,7 +137,7 @@ Do not re-add inline prompt strings to `nodes.ts` / `graph.ts` — add a templat
 - `message-input.component`: Auto-resize textarea, send/stop buttons, disclaimer footer. Bottom padding includes `env(safe-area-inset-bottom)` (needs `viewport-fit=cover` in `index.html`, already set) for iOS home-indicator clearance.
 
 ### Modals
-- `settings-modal.component`: Tabs (General, Diagnostics, Storage) — MCP/RAG/OmniRoute status, GCS metrics
+- `settings-modal.component`: Tabs (General, Diagnostics) — MCP/RAG/OmniRoute status. The old **Storage** tab was removed; GCS metrics are admin-facing operational data and now live in `apps/admin-analytics` behind `GET /api/v1/admin/storage`. The backend's `GET /api/chat/storage/metrics` route is deliberately left in place (still a valid authenticated endpoint; removing it would be an unrelated breaking change).
 - `projects-modal.component`: Projects workspace — list / create / rename, custom-instructions textarea, per-project file upload + file list, delete, "Start chat in project"
 - `session-expired-modal.component`: Re-authentication prompt
 - `login-error-toast.component`: Sign-in failure toast
@@ -144,6 +150,14 @@ Do not re-add inline prompt strings to `nodes.ts` / `graph.ts` — add a templat
 ### Where the Projects UI lives
 - Sidebar: a "Projects" section above thread history (click a project = new chat scoped to it; `+` opens the modal). Threads show their project name as a sub-label.
 - Message input: a project badge in the composer's top row when the conversation is scoped.
+
+## Admin Analytics Frontend (`apps/admin-analytics/`)
+A **separately deployed** Angular app (own origin, own build, own login) — NOT sharing runtime or state with chat-client, and deliberately NOT using Module Federation (rejected as too risky on this Angular version's esbuild builder).
+- **Auth**: `services/admin-auth.service.ts` is an intentional duplicate of chat-client's `auth.service.ts` — same `GOOGLE_CLIENT_ID` (from the public `GET /api/chat/config`), same `POST /api/auth/session` exchange, only the localStorage key differs (`NEXUS_ADMIN_SESSION`), so signing out of one app never disturbs the other. Marked "could extract to `libs/frontend/auth` later"; the extraction was deliberately deferred rather than done now.
+- **Screen selection is signal-driven, not a router guard**: not signed in → login; signed in but an admin call 403'd → access-denied (naming the signed-in email, so a two-account operator can see *which* identity was rejected); otherwise → dashboard. A `canActivate` guard would have to fire its own probe request and, on failure, redirect to a login screen the valid session immediately bounces off — the classic loop. The client-side check is presentation only; the real boundary is the server's 403.
+- **Dashboard**: one filter row (7/30/90-day presets) scoping everything below it; KPI row with exactly one hero figure (estimated cost); an inline-SVG time series; per-user table (sortable, rows expand into that user's individual request records); per-model breakdown; storage panel; user management with promote/demote surfacing the backend's `LastAdmin` rejection verbatim.
+- All six endpoints load via `Promise.allSettled`, so one failing panel degrades that panel only.
+- **Charts are hand-written inline SVG** — no charting library is installed and none was added. Design follows the `dataviz` skill: one series at a time (never a dual axis), a re-stepped `accentCyan` (`#0891b2`) validated against this app's glass surface (`#0d1220`) for the OKLCH lightness band / chroma floor / CVD separation / ≥3:1 contrast, crosshair + keyboard arrow-key navigation, and a table-view twin so the tooltip never gates a value.
 
 ## API Endpoints
 | Method | Path | Auth | Description |
@@ -170,6 +184,13 @@ Do not re-add inline prompt strings to `nodes.ts` / `graph.ts` — add a templat
 | DELETE | /api/v1/projects/:id | Bearer | Delete project + its files subcollection |
 | GET | /api/v1/projects/:id/files | Bearer | Project file metadata |
 | POST | /api/v1/projects/:id/files | Bearer | Upload a file into the project's knowledge base |
+| GET | /api/v1/admin/users | Bearer + **admin** | All registered users with their role |
+| PATCH | /api/v1/admin/users/:uid/role | Bearer + **admin** | Set a user's role; refuses to demote the last admin |
+| GET | /api/v1/admin/usage/summary?days= | Bearer + **admin** | KPI totals + dense daily series |
+| GET | /api/v1/admin/usage/by-user?days= | Bearer + **admin** | Per-user tokens/cost/last activity |
+| GET | /api/v1/admin/usage/by-model?days= | Bearer + **admin** | Per-model requests/tokens/cost |
+| GET | /api/v1/admin/usage/records?userId=&limit=&days= | Bearer + **admin** | Raw session-level usage records |
+| GET | /api/v1/admin/storage | Bearer + **admin** | GCS bucket size/cost (moved off chat-client's Settings modal) |
 
 > CORS `methods` in `main.ts` must include PUT/PATCH/DELETE — the thread-save and project CRUD routes preflight-fail in production without them.
 
@@ -252,4 +273,6 @@ If `node_modules` in a worktree is a junction/symlink to the main checkout, Nx r
 - On the legacy fallback path (`AIRouterService`, used when the LangGraph call fails before any token is written), the assembled context is NOT re-applied — that turn loses project instructions/memories/summary, and usage is not logged.
 - Memory extraction only reads the latest **user** message; facts stated by the assistant are never stored.
 - `summarizedThroughIndex` indexes into the message array the client sends. There is no edit/regenerate feature, so indices are stable; adding one would need this revisited.
-- `GET /api/chat/usage` needs a Firestore composite index (`userId` ASC + `timestamp` DESC on the `usage` collection) that isn't provisioned anywhere — Firestore will prompt with a console link to create it on first real use.
+- `GET /api/chat/usage` needs a Firestore composite index (`userId` ASC + `timestamp` DESC on the `usage` collection) that isn't provisioned anywhere — Firestore will prompt with a console link to create it on first real use. The admin API deliberately avoids that shape (timestamp-only query + in-process filtering), so it needs no index.
+- Admin analytics aggregates read the whole date-filtered `usage` set into memory (capped at 20k docs). Fine at current volume, not a design that scales — see the BigQuery note in the Admin Analytics section.
+- **Deploying `admin-analytics` needs two manual, post-deploy steps** that can't be done before its URL exists: adding that URL to chat-api's `ALLOWED_ORIGIN` (comma-separated), and to the Google OAuth client's "Authorized JavaScript origins". Until both are done, the console will fail CORS preflight and Google Sign-In won't initialise.

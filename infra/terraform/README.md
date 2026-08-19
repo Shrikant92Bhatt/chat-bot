@@ -1,12 +1,12 @@
 # Terraform IaC — NexusAI Enterprise Chat
 
-Code-only Terraform scaffold for the GCP resources behind `apps/chat-api` and
-`apps/chat-client`. **Nothing has been provisioned or planned with this yet** —
+Code-only Terraform scaffold for the GCP resources behind `apps/chat-api`,
+`apps/chat-client` and `apps/admin-analytics`. **Nothing has been provisioned or planned with this yet** —
 no `terraform init`/`plan`/`apply` has been run against any real project.
 
 This is deliberately additive: the app already runs today via
 `.github/workflows/ci-cd.yml` calling `gcloud builds submit` / `gcloud run
-deploy` directly, and `cloudbuild.yaml` builds the two Docker images. This
+deploy` directly, and `cloudbuild.yaml` builds the three Docker images. This
 Terraform describes the same target state as code, so it can eventually
 replace those imperative `gcloud` steps — see "Adopting against an existing
 project" below for how to do that without downtime or resource duplication.
@@ -21,8 +21,8 @@ infra/terraform/
     backend.tf                       # empty `backend "gcs" {}` — operator supplies bucket
     terraform.tfvars.example         # copy to terraform.tfvars (gitignored) and fill in
   modules/
-    artifact-registry/   # one Docker repo (default "chat-repo") for both images
-    cloud-run/            # two google_cloud_run_v2_service: chat-api + chat-client
+    artifact-registry/   # one Docker repo (default "chat-repo") for all three images
+    cloud-run/            # three google_cloud_run_v2_service: chat-api + chat-client + admin-analytics
     firestore/            # one Native-mode Firestore database
     storage/              # one GCS bucket (uploads + generated images)
     iam/                  # chat-api runtime service account, least-privilege roles
@@ -44,11 +44,11 @@ and `.github/workflows/ci-cd.yml` — not guessed:
 
 | Module | Real resource | Backs |
 |---|---|---|
-| `cloud-run` | `chat-api`, `chat-client` services | The two images `cloudbuild.yaml` builds from `Dockerfile.api` / `Dockerfile.client`. Both listen on `PORT=8080` (see `ENV PORT=8080` / `EXPOSE 8080` in the Dockerfiles). |
+| `cloud-run` | `chat-api`, `chat-client`, `admin-analytics` services | The three images `cloudbuild.yaml` builds from `Dockerfile.api` / `Dockerfile.client` / `Dockerfile.admin`. All listen on `PORT=8080` (see `ENV PORT=8080` / `EXPOSE 8080` in the Dockerfiles). `admin-analytics` is public at the infra layer by design — authorization is enforced in-app by the API's `requireAdmin` middleware, which re-reads the user's role from Firestore per request. **After the first apply, the `admin_url` output must be added manually to chat-api's `ALLOWED_ORIGIN` and to the Google OAuth client's Authorized JavaScript origins.** |
 | `firestore` | Native-mode DB, ID `nexus-ai` | `FIRESTORE_DATABASE_ID` env var, already set in `ci-cd.yml`'s `gcloud run deploy chat-api` step. Backs the user registry + thread history (AGENTS.md: "DB: Firestore"). |
 | `storage` | bucket `nexusai-generated-images` | `GCS_BUCKET_NAME`, read by `apps/chat-api/src/storage/uploader.ts` and `metrics.ts`. |
 | `secret-manager` | secrets for the 5 keys below | `apps/chat-api`'s env var table in PROJECT_CONTEXT.md. |
-| `iam` | `chat-api-sa` service account | Runtime identity for the `chat-api` Cloud Run service, scoped to exactly what `uploader.ts`/`metrics.ts` (Storage), the Firestore client, and Secret Manager reads actually need. `chat-client` is static NGINX with no GCP API calls, so it keeps the Cloud Run default compute identity — no dedicated SA. |
+| `iam` | `chat-api-sa` service account | Runtime identity for the `chat-api` Cloud Run service, scoped to exactly what `uploader.ts`/`metrics.ts` (Storage), the Firestore client, and Secret Manager reads actually need. `chat-client` and `admin-analytics` are static NGINX with no GCP API calls, so they keep the Cloud Run default compute identity — no dedicated SA. |
 | `artifact-registry` | repo `chat-repo` | Already hardcoded in `cloudbuild.yaml` and `ci-cd.yml`'s image tags. |
 | `pubsub` | topics `file.uploaded`, `document.processing`, `document.embedding` | **Not called from app code yet.** `rag/retriever.ts` and `vector-db.ts` currently run in-process/synchronously; nothing publishes or subscribes to Pub/Sub today. Provisioned ahead of time per the task spec, for a future async ingestion pipeline. |
 | `redis` | Memorystore instance | **Not called from app code yet.** AGENTS.md's feature matrix lists rate limiting as already working without Redis. Disabled by default (`enable_redis = false` in every environment) since Memorystore has no free tier — flip it on only once a distributed limiter is actually built. |
