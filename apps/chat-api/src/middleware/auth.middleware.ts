@@ -156,9 +156,12 @@ export async function authenticateToken(
 }
 
 /**
- * Allows one anonymous message per IP (tracked server-side so it survives a
- * page reload or cleared browser storage), then requires Google Sign-In.
- * A valid Bearer token always bypasses the trial limit.
+ * Allows a limited number of anonymous messages per IP per day (tracked
+ * server-side via Firestore so it survives a page reload, cleared browser
+ * storage, a redeploy, AND is consistent across Cloud Run's multiple
+ * concurrent instances), then requires Google Sign-In. A valid Bearer token
+ * bypasses the anonymous trial limit but is subject to its own per-user
+ * daily limit instead (see AnonUsageService.checkAuthDailyLimit).
  */
 export async function authenticateOrAllowTrial(
   req: AuthenticatedRequest,
@@ -169,19 +172,31 @@ export async function authenticateOrAllowTrial(
   const hasToken = authHeader && authHeader.startsWith('Bearer ') && authHeader.split('Bearer ')[1].trim();
 
   if (hasToken) {
-    return authenticateToken(req, res, next);
+    return authenticateToken(req, res, async () => {
+      const uid = req.user!.uid;
+      const result = await AnonUsageService.checkAuthDailyLimit(uid);
+      if (!result.allowed) {
+        res.status(429).json({
+          error: 'RateLimitExceeded',
+          message: `Daily message limit (${result.limit} messages/day) reached. Please try again later.`,
+          resetAt: result.resetAt,
+        });
+        return;
+      }
+      next();
+    });
   }
 
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const result = await AnonUsageService.checkAnonTrial(ip);
 
-  if (!AnonUsageService.hasFreeMessagesRemaining(ip)) {
+  if (!result.allowed) {
     res.status(401).json({
       error: 'SignInRequired',
-      message: 'Free trial limit reached (1 message without sign-in). Please sign in with Google to continue chatting.',
+      message: `Free trial limit reached (${result.limit} message${result.limit === 1 ? '' : 's'} without sign-in). Please sign in with Google to continue chatting.`,
     });
     return;
   }
 
-  AnonUsageService.recordUsage(ip);
   next();
 }

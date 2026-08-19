@@ -51,6 +51,21 @@ chat-client -> /api/chat/stream -> LangGraph Orchestrator -> OmniRoute AI Gatewa
 - `isolated-vm@7` ships prebuilt native binaries for `linux-x64-musl` (matches `node:24-alpine`, the base image in `Dockerfile.api`) and `win32-x64` (local dev), so no C++ build toolchain is required at Docker build time.
 - Python execution is NOT implemented (stretch goal, skipped — `node:24-alpine` has no `python3` runtime by default and OS-level resource limits for a subprocess couldn't be verified without changing the base image).
 
+### Rate Limiting (`services/anon-usage.service.ts`)
+- Firestore-backed (`rateLimits/{key}` collection), atomic check-and-increment via `firestore.runTransaction` - correct under concurrent Cloud Run instances, unlike the old in-memory `Map` it replaced (which reset on every redeploy and wasn't shared across instances).
+- Two keyspaces: `anon:<ip>` (unauthenticated trial, checked in `authenticateOrAllowTrial` before any Bearer token exists) and `user:<uid>` (authenticated daily quota, checked once the token is verified). Both use a rolling window (`RATE_LIMIT_WINDOW_HOURS`, default 24h) rather than calendar-day reset.
+- Limits are env-configurable: `ANON_TRIAL_MESSAGE_LIMIT` (default 1) and `AUTH_DAILY_MESSAGE_LIMIT` (default 20) - see Environment Variables below.
+- Exceeding the anon limit returns 401 `SignInRequired` (existing behavior); exceeding the authenticated limit returns 429 `RateLimitExceeded` (new - previously signed-in users had no limit at all).
+
+### Usage & Cost Tracking (`services/usage.service.ts`)
+- Firestore-backed (`usage` collection, one document per completed chat request), doc ID = `requestId` (a generated UUID).
+- Logged from `orchestration/graph.ts`'s `streamGraphResponse`, after the SSE response has fully ended (a Firestore write failure here is caught/logged, never surfaced to the client or allowed to delay the response).
+- Record shape: `requestId, userId, tenantId (always null - no tenant/org model exists yet), conversationId (from the client's thread id, or null), model, inputTokens, outputTokens, latencyMs, estimatedCostUsd, timestamp`.
+- Token counts come from LangChain's `on_chat_model_end` `usage_metadata`, which `@langchain/openai` populates from the gateway's real `usage` field (`ChatOpenAI` defaults `streamUsage: true`, sending `stream_options: {include_usage: true}`) - **verified working against OpenRouter**. The local/self-hosted OmniRoute gateway's support for `stream_options.include_usage` is **not verified** - if it doesn't return usage, `inputTokens`/`outputTokens`/`estimatedCostUsd` are logged as explicit `null` rather than guessed.
+- `estimatedCostUsd` comes from a rough $/1K-token table per model (`MODEL_COST_PER_1K` in usage.service.ts), sourced from published list pricing at write-time, not queried live - treat it as directionally useful, not billing-accurate.
+- `GET /api/chat/usage` (Bearer) returns the current user's most recent records, newest first (`?limit=` param, capped at 200). Query is `where('userId','==',uid).orderBy('timestamp','desc')`, which needs a Firestore composite index on the `usage` collection (`userId` ASC + `timestamp` DESC) - Firestore returns a console link to auto-create it on first use if it doesn't exist yet; there's no `firestore.indexes.json` checked into this repo to provision it ahead of time.
+- The legacy `AIRouterService` fallback path (direct Gemini/OpenAI SDKs, only reached if the LangGraph gateway call fails before any token is streamed) does NOT log usage yet.
+
 ### Existing Services (kept as fallback)
 - `services/gemini.service.ts`: Direct Gemini SDK streaming
 - `services/openai.service.ts`: Direct OpenAI SDK streaming
@@ -89,6 +104,8 @@ chat-client -> /api/chat/stream -> LangGraph Orchestrator -> OmniRoute AI Gatewa
 | POST | /api/auth/session | Bearer (Google) | Exchange Google token for app session |
 | GET | /api/chat/storage/metrics | Bearer/None | GCS bucket size & cost |
 | POST | /api/chat/generate-image | Bearer | Image generation + GCS upload |
+| POST | /api/chat/documents | Bearer | Upload a file into the user's RAG knowledge base |
+| GET | /api/chat/usage | Bearer | Current user's recent usage/cost records (see Usage & Cost Tracking) |
 
 ## Shared Types (`libs/shared/src/interfaces/chat.interface.ts`)
 - AIModelType: gemini-1.5-pro | gemini-1.5-flash | gemini-pro-latest | gemini-flash-latest | gpt-4o | gpt-4o-mini | omniroute-default
@@ -112,6 +129,11 @@ chat-client -> /api/chat/stream -> LangGraph Orchestrator -> OmniRoute AI Gatewa
 | CODE_SANDBOX_MEMORY_MB | No | 64 | `code_interpreter` per-execution V8 isolate memory limit, clamped server-side to [8, 128]MB — not client/model-overridable |
 | APP_SESSION_SECRET | Prod | random | JWT signing secret |
 | ALLOWED_ORIGIN | No | * | CORS allowed origins |
+| ANON_TRIAL_MESSAGE_LIMIT | No | 1 | Free messages an unauthenticated visitor (by IP) gets before sign-in is required |
+| AUTH_DAILY_MESSAGE_LIMIT | No | 20 | Daily message quota per signed-in user (by uid) |
+| RATE_LIMIT_WINDOW_HOURS | No | 24 | Rolling window (hours) both rate limits reset on |
+| FIRESTORE_DATABASE_ID | No | (default) | Non-default Firestore database name, if one was created |
+| FIREBASE_SERVICE_ACCOUNT_KEY | No | — | JSON-stringified service-account key (alternative to GOOGLE_APPLICATION_CREDENTIALS / Cloud Run ADC) |
 
 ## Feature Parity Matrix (ChatGPT / Gemini)
 | Feature | Status |
@@ -127,7 +149,8 @@ chat-client -> /api/chat/stream -> LangGraph Orchestrator -> OmniRoute AI Gatewa
 | Image generation | ✅ real, via OpenRouter `google/gemini-2.5-flash-image` + GCS (or inline data URI if GCS unconfigured) |
 | Tool/function calling (MCP) | ⚠️ real function calling; code_interpreter runs real sandboxed JS/TS (isolate-level, not OS-level isolation) via `isolated-vm`; web_search still has no backing provider |
 | RAG context injection | ⚠️ real similarity search; nothing calls ingest() yet, so context is empty |
-| Rate limiting (anon trial) | ✅ |
+| Rate limiting (anon trial + per-user daily) | ✅ Firestore-backed, consistent across Cloud Run instances |
+| Usage/cost tracking | ✅ real token counts when the gateway returns them, estimated $ cost |
 | Session persistence (JWT) | ✅ |
 | Docker deployment | ✅ |
 

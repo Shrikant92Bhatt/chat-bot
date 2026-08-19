@@ -51,6 +51,26 @@ export interface ChatStreamRequest {
   temperature?: number;
   mcpEnabled?: boolean;
   ragContext?: string[];
+  /** Client-side thread id, used to attribute usage/cost records (see
+   *  services/usage.service.ts) to a conversation. Optional - older
+   *  clients that don't send it just get a null conversationId logged. */
+  conversationId?: string;
+}
+
+/** One row logged per completed chat request - see
+ *  apps/chat-api/src/services/usage.service.ts (UsageRecord) for the
+ *  server-side source of truth this mirrors, and GET /api/chat/usage. */
+export interface UsageRecordDto {
+  requestId: string;
+  userId: string | null;
+  tenantId: string | null;
+  conversationId: string | null;
+  model: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  latencyMs: number;
+  estimatedCostUsd: number | null;
+  timestamp: number;
 }
 
 export interface UserSession {

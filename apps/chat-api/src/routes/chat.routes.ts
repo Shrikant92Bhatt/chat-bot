@@ -12,6 +12,7 @@ import { generateImage } from '../llm/image-gen';
 import { isOmniRouteConfigured } from '../llm/client';
 import { extractDocumentText } from '../rag/document-extractor';
 import { RagRetriever } from '../rag/retriever';
+import { UsageService } from '../services/usage.service';
 
 const router = Router();
 const aiRouterService = new AIRouterService();
@@ -203,6 +204,25 @@ router.post('/documents', authenticateToken, upload.single('file'), async (req: 
   } catch (error) {
     console.error('[Chat API Route] Document upload error:', error);
     res.status(400).json({ error: (error as Error).message || 'Failed to process document.' });
+  }
+});
+
+/**
+ * GET /api/chat/usage
+ * Returns the authenticated user's most recent usage/cost records (token
+ * counts + estimated cost per completed chat request). See
+ * services/usage.service.ts - inputTokens/outputTokens/estimatedCostUsd
+ * are null on records where the gateway didn't return real usage data
+ * (never fabricated).
+ */
+router.get('/usage', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const records = await UsageService.getRecentUsageForUser(req.user!.uid, limit);
+    res.json({ records, count: records.length });
+  } catch (error) {
+    console.error('[Chat API Route] Failed to load usage records:', error);
+    res.status(500).json({ error: 'Failed to load usage records.' });
   }
 });
 
