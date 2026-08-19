@@ -36,8 +36,15 @@ chat-client -> /api/chat/stream -> LangGraph Orchestrator -> OmniRoute AI Gatewa
 - No image-generation model (DALL-E/Imagen) is wired in yet — `generate_image` tool and `/generate-image` route upload a 1x1 placeholder PNG so the storage path is real; swap the placeholder for an actual image-gen call when a provider is chosen
 
 ### `/rag/` — Retrieval-Augmented Generation
-- `retriever.ts`: `RagRetriever.ingest()/retrieveContext()/enrichPrompt()` — real cosine-similarity search over documents added via `ingest()`
-- `vector-db.ts`: `VectorDbAdapter` — in-memory store with a dependency-free hashing embedding (bag-of-words → 256-dim, L2-normalized). This is a working implementation, not a stub — but it's in-process (resets on restart) and not backed by a managed vector DB (no Pinecone/Weaviate/etc. provisioned). Nothing currently calls `ingest()`, so `retrieveContext()` returns `[]` until a document-loading path is added.
+- Flow: `Vector Search → Fusion → Reranker → Top K Chunks`, all inside `RagRetriever.retrieveContext()`.
+  1. **Vector Search**: `VectorDbAdapter.similaritySearch()` does cosine similarity over the hashing embedding, over-fetching `max(topK * 4, 10)` candidates (not just `topK`) so the reranker has real material to reorder instead of just re-sorting an already-truncated top-3. Candidates below `RagRetriever.RELEVANCE_THRESHOLD` (0.12, tuned to the raw cosine score) are dropped here, before reranking.
+  2. **Fusion + Reranker**: `reranker.ts`'s `hybridRerank()` — blends the vector-similarity ranking with an independent lexical signal (BM25-style term overlap, corpus-relative IDF computed over just the candidate pool, English stopwords filtered from the query terms) via **Reciprocal Rank Fusion (RRF)**. RRF combines by rank position rather than raw score, which matters because cosine (0..1, dense) and BM25 (unbounded, sparse) live on incomparable scales — fusing by rank avoids hand-tuned score normalization.
+  3. **Top K Chunks**: fused ranking is truncated to `topK` and returned as `string[]` (unchanged external contract — `enrichPrompt()` and `chat.routes.ts`/`orchestration/graph.ts` callers are unaffected).
+  - **Why lexical fusion, not a second embeddings pass**: the hashing embedding (see below) isn't a real semantic model, so re-embedding and comparing again would just reproduce the same cosine ranking with hash noise — no new signal. A cheap, independent lexical signal (BM25 has no IDF-blindness the way raw cosine-on-term-frequency does) is where the actual correction comes from. Manually verified: a short, genuinely on-topic chunk can be outranked by cosine alone by a longer chunk that happens to repeat common query words (no IDF in the hashing embedding) — hybrid reranking correctly promotes the on-topic chunk back to #1.
+  - **Latency**: reranking is O(candidates × queryTerms), in-process, no I/O — negligible against the project's <300ms RAG retrieval budget (candidate pools here are a handful of chunks per user).
+  - **Optional LLM reranker** (`reranker.ts`'s `llmRerank()`, via `llm/client.ts`'s gateway): explicit opt-in only, via `retrieveContext(ownerId, query, topK, { useLlmRerank: true })`. NOT on the default path — a non-streaming LLM call is easily 500ms–2s+, well over the latency budget, so it's layered on top of the hybrid-reranked shortlist for callers who want it for higher-value queries, not wired into the hot path.
+- `retriever.ts`: `RagRetriever.ingest()/retrieveContext()/enrichPrompt()` — real cosine-similarity search + hybrid rerank over documents added via `ingest()`
+- `vector-db.ts`: `VectorDbAdapter` — in-memory store with a dependency-free hashing embedding (bag-of-words → 256-dim, L2-normalized). This is a working implementation, not a stub — but it's in-process (resets on restart) and not backed by a managed vector DB (no Pinecone/Weaviate/etc. provisioned).
 
 ### `/mcp/` — Model Context Protocol
 - `adapter.ts`: `McpAdapter.getTools()` (LangChain tool objects for binding) / `executeTool()`
@@ -148,7 +155,7 @@ chat-client -> /api/chat/stream -> LangGraph Orchestrator -> OmniRoute AI Gatewa
 | Chat thread history | ✅ |
 | Image generation | ✅ real, via OpenRouter `google/gemini-2.5-flash-image` + GCS (or inline data URI if GCS unconfigured) |
 | Tool/function calling (MCP) | ⚠️ real function calling; code_interpreter runs real sandboxed JS/TS (isolate-level, not OS-level isolation) via `isolated-vm`; web_search still has no backing provider |
-| RAG context injection | ⚠️ real similarity search; nothing calls ingest() yet, so context is empty |
+| RAG context injection | ✅ real similarity search + hybrid rerank; wired end-to-end via `POST /api/chat/documents` → `ingest()` |
 | Rate limiting (anon trial + per-user daily) | ✅ Firestore-backed, consistent across Cloud Run instances |
 | Usage/cost tracking | ✅ real token counts when the gateway returns them, estimated $ cost |
 | Session persistence (JWT) | ✅ |
