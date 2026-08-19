@@ -61,50 +61,41 @@ export class ChatWindowComponent implements AfterViewChecked {
     }
   }
 
-  // scrollToBottom() setting scrollTop fires a native 'scroll' event just
-  // like a real user scroll would - without this guard, onScroll() reads
-  // "distance from bottom = 0" right after our own programmatic scroll and
-  // re-arms shouldAutoScroll, so a manual scroll-up gets undone within the
-  // same stream and the view is permanently pinned to the bottom.
-  private isProgrammaticScroll = false;
-
-  onScroll(): void {
-    if (this.isProgrammaticScroll) return;
-    const el = this.scrollContainer.nativeElement;
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    this.shouldAutoScroll = distanceFromBottom < this.bottomThresholdPx;
+  // First fix (see git history) tried to tell "our own programmatic scroll"
+  // apart from "a real user scroll" by flagging our own scrollTop write and
+  // ignoring the 'scroll' event it triggers. That works once the view is
+  // settled, but falls apart the moment content is genuinely growing (i.e.
+  // mid-stream): every arriving token makes scrollToBottom() a REAL scroll,
+  // not a no-op, so the flag gets re-armed on every single token - during
+  // active streaming, a user's manual scroll-up basically never wins the
+  // race against the next token's auto-scroll. That's the case a real user
+  // hits constantly (scrolling up *while* a reply is still being generated)
+  // and the one the first fix never actually tested.
+  //
+  // Correct fix: stop trying to infer intent from the 'scroll' event at all.
+  // Listen for the actual user-input events that start a scroll gesture
+  // (wheel / touchstart) and treat those as the sole authority for "the user
+  // wants manual control now" - decided the instant input happens, with no
+  // dependency on distinguishing it from a programmatic scroll afterward.
+  // onScroll() is now only used to RE-ENABLE auto-follow once the user
+  // scrolls back down to the bottom themselves.
+  onUserScrollIntent(): void {
+    this.shouldAutoScroll = false;
   }
 
-  // ngAfterViewChecked fires on every Angular change-detection cycle, not
-  // just when a message actually arrives - with ChangeDetectionStrategy
-  // Default/Eager + zone.js, that's frequent (any zone-patched task
-  // anywhere in the app). Without this early-return, every one of those
-  // cycles would re-arm isProgrammaticScroll and schedule a fresh rAF while
-  // shouldAutoScroll is true; since that rAF callback is itself a
-  // zone-patched task, running it triggers another change-detection cycle,
-  // which (shouldAutoScroll still true) calls scrollToBottom() again -
-  // a self-sustaining loop that keeps isProgrammaticScroll effectively
-  // always true. onScroll() only updates shouldAutoScroll while
-  // isProgrammaticScroll is false, so that loop starves it of the window it
-  // needs to ever see a real user scroll-up: manual scrolling becomes
-  // unreliable to completely broken. Skipping the no-op case (already at
-  // the bottom) breaks the loop - confirmed by reproducing the stuck-scroll
-  // behavior with a real wheel gesture, then confirming this fix resolves
-  // it, before committing.
+  onScroll(): void {
+    const el = this.scrollContainer.nativeElement;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distanceFromBottom < this.bottomThresholdPx) {
+      this.shouldAutoScroll = true;
+    }
+  }
+
   private scrollToBottom(): void {
     const el = this.scrollContainer?.nativeElement;
     if (!el) return;
     if (el.scrollTop >= el.scrollHeight - el.clientHeight - 1) return;
-
-    try {
-      this.isProgrammaticScroll = true;
-      el.scrollTop = el.scrollHeight;
-      requestAnimationFrame(() => {
-        this.isProgrammaticScroll = false;
-      });
-    } catch (err) {
-      this.isProgrammaticScroll = false;
-    }
+    el.scrollTop = el.scrollHeight;
   }
 
   /**
