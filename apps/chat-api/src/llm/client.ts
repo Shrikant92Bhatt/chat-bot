@@ -25,8 +25,18 @@ const OPENROUTER_MODEL_SLUG_MAP: Record<string, string> = {
   'omniroute-default': 'google/gemini-2.5-flash',
 };
 
-/** Model used for the generate_image tool (OpenRouter's image-output models require `modalities: ["image","text"]`). Only valid on OpenRouter. */
-export const IMAGE_GENERATION_MODEL = 'google/gemini-2.5-flash-image';
+/**
+ * Model used for the generate_image tool (OpenRouter's image-output models
+ * require `modalities: ["image","text"]`). Only valid on OpenRouter — see
+ * llm/image-gen.ts's isUsingOpenRouter() guard.
+ *
+ * Verified live against OpenRouter's /models catalog: 'google/gemini-2.5-flash-image'
+ * still resolves and still generates real images, but two newer generations
+ * exist now ('google/gemini-3.1-flash-image', 'google/gemini-3-pro-image').
+ * Using the newer flash model - also verified live (real 200 + real image
+ * bytes back), same latency/cost class as 2.5, newer generation quality.
+ */
+export const IMAGE_GENERATION_MODEL = 'google/gemini-3.1-flash-image';
 
 interface GatewayConfig {
   baseUrl: string;

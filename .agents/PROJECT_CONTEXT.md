@@ -124,11 +124,11 @@ Do not re-add inline prompt strings to `nodes.ts` / `graph.ts` — add a templat
 ### Layout
 - `app.component`: Root shell — navbar, sidebar, chat-window, message-input, modals
 - `navbar.component`: Brand, model dropdown selector, settings gear, user profile
-- `sidebar.component`: Thread history list, new thread button, settings button
+- `sidebar.component`: Thread history list (skeleton-loader placeholder while `chatService.isLoadingThreads()`), new thread button, settings button
 
 ### Chat
-- `chat-window.component`: Stream-aligned message rendering (no card borders), user profile identity, markdown rendering, copy, suggestions
-- `message-input.component`: Auto-resize textarea, send/stop buttons, disclaimer footer
+- `chat-window.component`: Stream-aligned message rendering (no card borders), user profile identity, markdown rendering, copy, suggestions. `scrollToBottom()` early-returns when already at bottom — without it, `ngAfterViewChecked` (fires every CD cycle, not just on new messages) re-arms a flag on every tick whose own reset (`requestAnimationFrame`) is itself zone-tracked, so it retriggers itself in a loop that starves manual scroll-up. Fixed + verified live in a real browser.
+- `message-input.component`: Auto-resize textarea, send/stop buttons, disclaimer footer. Bottom padding includes `env(safe-area-inset-bottom)` (needs `viewport-fit=cover` in `index.html`, already set) for iOS home-indicator clearance.
 
 ### Modals
 - `settings-modal.component`: Tabs (General, Diagnostics, Storage) — MCP/RAG/OmniRoute status, GCS metrics

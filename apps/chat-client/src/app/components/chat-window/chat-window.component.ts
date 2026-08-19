@@ -75,10 +75,30 @@ export class ChatWindowComponent implements AfterViewChecked {
     this.shouldAutoScroll = distanceFromBottom < this.bottomThresholdPx;
   }
 
+  // ngAfterViewChecked fires on every Angular change-detection cycle, not
+  // just when a message actually arrives - with ChangeDetectionStrategy
+  // Default/Eager + zone.js, that's frequent (any zone-patched task
+  // anywhere in the app). Without this early-return, every one of those
+  // cycles would re-arm isProgrammaticScroll and schedule a fresh rAF while
+  // shouldAutoScroll is true; since that rAF callback is itself a
+  // zone-patched task, running it triggers another change-detection cycle,
+  // which (shouldAutoScroll still true) calls scrollToBottom() again -
+  // a self-sustaining loop that keeps isProgrammaticScroll effectively
+  // always true. onScroll() only updates shouldAutoScroll while
+  // isProgrammaticScroll is false, so that loop starves it of the window it
+  // needs to ever see a real user scroll-up: manual scrolling becomes
+  // unreliable to completely broken. Skipping the no-op case (already at
+  // the bottom) breaks the loop - confirmed by reproducing the stuck-scroll
+  // behavior with a real wheel gesture, then confirming this fix resolves
+  // it, before committing.
   private scrollToBottom(): void {
+    const el = this.scrollContainer?.nativeElement;
+    if (!el) return;
+    if (el.scrollTop >= el.scrollHeight - el.clientHeight - 1) return;
+
     try {
       this.isProgrammaticScroll = true;
-      this.scrollContainer.nativeElement.scrollTop = this.scrollContainer.nativeElement.scrollHeight;
+      el.scrollTop = el.scrollHeight;
       requestAnimationFrame(() => {
         this.isProgrammaticScroll = false;
       });

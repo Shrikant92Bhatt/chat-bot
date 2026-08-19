@@ -14,6 +14,10 @@ export class ChatService {
   public selectedModel = signal<AIModelType>('gemini-flash-latest');
   public threads = signal<ChatThread[]>([]);
   public activeThreadId = signal<string | null>(null);
+  // True only while the initial fetch of saved thread history is in flight
+  // (including its one retry) - the sidebar shows a skeleton instead of a
+  // misleadingly-empty list during this window.
+  public isLoadingThreads = signal<boolean>(false);
   public isStreaming = signal<boolean>(false);
   // On by default so tool calls (image generation, calculator) work out of
   // the box - users can still switch it off in Settings.
@@ -46,7 +50,12 @@ export class ChatService {
       () => {
         const user = this.authService.userSignal();
         if (user && user.uid) {
-          this.loadUserThreadHistory();
+          // loadUserThreadHistory() returns a promise that only settles once
+          // its full retry chain finishes (each retry `return`s the next
+          // call, so the chain of promises resolves together) - .finally()
+          // here correctly waits for that whole chain, not just the first attempt.
+          this.isLoadingThreads.set(true);
+          this.loadUserThreadHistory().finally(() => this.isLoadingThreads.set(false));
         } else {
           this.clearUnauthenticatedHistory();
         }
