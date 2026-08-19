@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import chatRoutes from './routes/chat.routes';
 import authRoutes from './routes/auth.routes';
+import projectRoutes from './routes/project.routes';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -22,7 +23,10 @@ const allowedOrigins = (process.env.ALLOWED_ORIGIN || '*')
 app.use(
   cors({
     origin: allowedOrigins.includes('*') ? '*' : allowedOrigins,
-    methods: ['GET', 'POST', 'OPTIONS'],
+    // PUT/PATCH/DELETE are used by the thread-save and project CRUD routes;
+    // without them listed here the browser's preflight rejects those calls
+    // whenever ALLOWED_ORIGIN is set to a real origin (i.e. in production).
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
@@ -37,6 +41,7 @@ app.get('/health', (req, res) => {
 // Register Routes
 app.use('/api/chat', chatRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/v1/projects', projectRoutes);
 
 app.listen(PORT, () => {
   console.log(`=================================================`);

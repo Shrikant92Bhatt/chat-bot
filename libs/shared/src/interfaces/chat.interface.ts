@@ -40,6 +40,17 @@ export interface ChatThread {
   updatedAt: number;
   messages: ChatMessage[];
   model: AIModelType;
+  /** Project this conversation is scoped to (project instructions + project files are injected into context). */
+  projectId?: string | null;
+  /**
+   * Rolling LLM-generated summary of the messages that have been dropped
+   * from the live context window. Written server-side by
+   * SummarizationService; the client persists it back verbatim.
+   */
+  summary?: string | null;
+  /** Number of leading messages of `messages` that `summary` already covers. */
+  summarizedThroughIndex?: number;
+  summaryUpdatedAt?: number;
 }
 
 export interface ChatStreamRequest {
@@ -51,10 +62,13 @@ export interface ChatStreamRequest {
   temperature?: number;
   mcpEnabled?: boolean;
   ragContext?: string[];
-  /** Client-side thread id, used to attribute usage/cost records (see
-   *  services/usage.service.ts) to a conversation. Optional - older
+  /** Thread id — lets the backend persist/reuse a conversation summary for
+   *  this thread, and is what usage/cost records (see
+   *  services/usage.service.ts) are attributed to. Optional - older
    *  clients that don't send it just get a null conversationId logged. */
-  conversationId?: string;
+  threadId?: string;
+  /** When set, project instructions + project-scoped RAG documents are injected into context. */
+  projectId?: string | null;
 }
 
 /** One row logged per completed chat request - see
@@ -71,6 +85,46 @@ export interface UsageRecordDto {
   latencyMs: number;
   estimatedCostUsd: number | null;
   timestamp: number;
+}
+
+/** A user workspace: custom instructions + its own scoped file/knowledge set. */
+export interface Project {
+  id: string;
+  ownerId: string;
+  name: string;
+  /** Custom instructions injected into every conversation scoped to this project. */
+  instructions: string;
+  createdAt: number;
+  updatedAt: number;
+  fileCount: number;
+}
+
+/** Metadata for a file ingested into a project's knowledge base. */
+export interface ProjectFile {
+  id: string;
+  projectId: string;
+  fileName: string;
+  characters: number;
+  uploadedAt: number;
+  /** GCS object URL, when GCS is configured. */
+  storageUrl?: string | null;
+}
+
+export type ProjectListResponse = { projects: Project[] };
+export type ProjectFileListResponse = { files: ProjectFile[] };
+
+/** Durable, user-level fact/preference remembered across conversations. */
+export type MemoryKind = 'identity' | 'preference' | 'fact' | 'instruction';
+
+export interface MemoryEntry {
+  id: string;
+  userId: string;
+  content: string;
+  kind: MemoryKind;
+  createdAt: number;
+  updatedAt: number;
+  /** Thread the memory was extracted from, for provenance. */
+  sourceThreadId?: string | null;
 }
 
 export interface UserSession {

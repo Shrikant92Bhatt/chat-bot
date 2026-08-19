@@ -1,8 +1,9 @@
-import { Component, HostListener, ChangeDetectionStrategy } from '@angular/core';
+import { Component, HostListener, ChangeDetectionStrategy, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AIModelType, SELECTABLE_MODELS } from '@chat-monorepo/shared';
 import { ChatService } from '../../services/chat.service';
+import { ProjectService } from '../../services/project.service';
 
 @Component({
   selector: 'app-message-input',
@@ -17,7 +18,12 @@ export class MessageInputComponent {
 
   public availableModels = SELECTABLE_MODELS;
 
-  constructor(public chatService: ChatService) {}
+  /** Name of the project this conversation is scoped to, or null. */
+  public activeProjectName = computed(() =>
+    this.projectService.getProjectName(this.chatService.activeProjectId())
+  );
+
+  constructor(public chatService: ChatService, private projectService: ProjectService) {}
 
   onKeydown(event: KeyboardEvent) {
     if (event.key === 'Enter' && !event.shiftKey) {

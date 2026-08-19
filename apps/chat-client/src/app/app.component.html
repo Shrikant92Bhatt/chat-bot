@@ -7,6 +7,7 @@
       [isOpen]="isSidebarOpen"
       (threadSelected)="closeSidebarOnMobile()"
       (settingsClicked)="openSettings()"
+      (projectsClicked)="openProjects()"
     ></app-sidebar>
 
     <div
@@ -24,4 +25,5 @@
   <app-session-expired-modal *ngIf="authService.sessionExpired()"></app-session-expired-modal>
   <app-login-error-toast *ngIf="authService.loginError()"></app-login-error-toast>
   <app-settings-modal *ngIf="isSettingsOpen" (closeModal)="closeSettings()"></app-settings-modal>
+  <app-projects-modal *ngIf="isProjectsOpen" (closeModal)="closeProjects()"></app-projects-modal>
 </div>

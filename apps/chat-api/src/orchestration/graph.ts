@@ -5,7 +5,7 @@ import { AIMessage, BaseMessage, HumanMessage, SystemMessage } from '@langchain/
 import { ChatStreamRequest, AIModelType } from '@chat-monorepo/shared';
 import { AgentState, AgentStateAnnotation } from './state';
 import { agentNode, toolsNode, shouldContinue } from './nodes';
-import { RagRetriever } from '../rag/retriever';
+import { buildContext, recordTurnMemories } from '../context/context-builder';
 import { generateFollowUpSuggestions } from '../services/suggestions.service';
 import { UsageService } from '../services/usage.service';
 
@@ -41,19 +41,29 @@ function toBaseMessages(messages: Array<{ role: string; content: string }>): Bas
  */
 export async function streamGraphResponse(request: ChatStreamRequest, res: Response, ownerId?: string): Promise<void> {
   const requestStartedAt = Date.now();
-  const ragRetriever = new RagRetriever();
-  const lastUserMessage = [...(request.messages || [])].reverse().find((m) => m.role === 'user');
-  const ragContext = lastUserMessage ? await ragRetriever.retrieveContext(ownerId, lastUserMessage.content) : [];
-  const enrichedMessages = await ragRetriever.enrichPrompt(request.messages || [], ragContext);
+  // Single context-assembly step: project instructions + long-term memory +
+  // RAG + conversation summarization, gathered once per request. The
+  // resulting bundle is handed to the graph in state and turned into the
+  // system prompt by nodes.ts `assembleAgentMessages` (via the Prompt Manager).
+  const { context, messages: windowedMessages } = await buildContext({
+    uid: ownerId,
+    threadId: request.threadId,
+    projectId: request.projectId ?? null,
+    messages: request.messages || [],
+  });
 
   const model: AIModelType = request.model || 'gemini-flash-latest';
 
   const initialState: Partial<AgentState> = {
-    messages: toBaseMessages(enrichedMessages),
+    messages: toBaseMessages(windowedMessages),
     model,
     temperature: request.temperature ?? 0.7,
     mcpEnabled: request.mcpEnabled ?? false,
-    ragContext,
+    ragContext: context.ragContext ?? [],
+    assembledContext: context,
+    userId: ownerId ?? null,
+    projectId: request.projectId ?? null,
+    threadId: request.threadId ?? null,
   };
 
   const eventStream = compiledGraph.streamEvents(initialState, { version: 'v2' });
@@ -111,6 +121,10 @@ export async function streamGraphResponse(request: ChatStreamRequest, res: Respo
     return;
   }
 
+  // Long-term memory write-back: deliberately AFTER the stream, and not
+  // awaited, so the extraction gate/LLM call never adds latency to a turn.
+  recordTurnMemories({ uid: ownerId, threadId: request.threadId, messages: request.messages || [] });
+
   const suggestions = await generateFollowUpSuggestions(request.messages || [], fullText);
   res.write(`data: ${JSON.stringify({ chunk: '', done: true, model, suggestions })}\n\n`);
   res.end();
@@ -122,7 +136,7 @@ export async function streamGraphResponse(request: ChatStreamRequest, res: Respo
     await UsageService.logUsage({
       userId: ownerId ?? null,
       tenantId: null,
-      conversationId: request.conversationId ?? null,
+      conversationId: request.threadId ?? null,
       model,
       inputTokens: sawUsageMetadata ? inputTokens : null,
       outputTokens: sawUsageMetadata ? outputTokens : null,

@@ -17,13 +17,27 @@ This repository is an enterprise-grade **Nx Monorepo** containing:
 - **SSE Stream Consumption**: Use standard `fetch` with `ReadableStream` for parsing `data:` chunks from the backend.
 
 ### 2. Backend (Node.js Express)
-- **Google OAuth2 Middleware**: All protected endpoints under `/api/chat/*` validate Google ID Tokens passed via `Authorization: Bearer` headers.
+- **Google OAuth2 Middleware**: All protected endpoints under `/api/chat/*` and `/api/v1/*` validate the app session token passed via `Authorization: Bearer` headers (`authenticateToken`).
 - **Multi-LLM Router**: `AIRouterService` dynamically dispatches streaming requests to Google Gemini (`@google/generative-ai`) or OpenAI (`openai`).
 - **Extension Adapters**: Keep MCP (`mcp.adapter.ts`), RAG (`rag.adapter.ts`), and Vector DB (`vector-db.adapter.ts`) decoupled for future enhancements.
+- **CORS**: `main.ts` must keep PUT/PATCH/DELETE in the allowed `methods` — project CRUD and thread saves preflight-fail without them once `ALLOWED_ORIGIN` is a real origin.
+
+### 2a. Prompt & context rules (non-negotiable)
+- **No inline prompt strings.** Every prompt the backend sends to an LLM is a versioned entry in `apps/chat-api/src/prompt/templates.ts`, keyed `<id>:<version>`. Changing wording means adding/editing a template, not typing a string into a node or service. Roll a change out by adding `:v2` and flipping the key at the call site.
+- **One context-assembly path.** Anything that wants to add context to a chat turn (a new retriever, a new instruction source) extends `context/context-builder.ts` `buildContext()` and adds a template block in `prompt-manager.ts` `buildSystemPrompt()`. Do not prepend messages in `graph.ts`, in a route, or in the client.
+- **Fail soft.** Every context source is gathered under `Promise.allSettled` and every Firestore/LLM side-call is try/caught. A missing key or an unreachable Firestore must degrade the answer, never break the turn. Never fabricate a value to fill a gap — return empty and log.
+- **No silent truncation.** If summarization can't run, send the full history rather than dropping turns.
+- **Never store every message.** Memory extraction goes through the `looksMemorable()` regex gate before any LLM call; only durable first-person facts/preferences/explicit "remember this" qualify.
+
+### 2b. Firestore query rules
+- Prefer **single-field** `where()` filters and sort/score in process (see `MemoryService`, `ProjectService`). Adding an `orderBy` to a filtered query silently requires a composite index that nobody has provisioned.
+- Ownership is checked in the service layer on every read/write. A resource owned by another user must return 404, not 403 — don't make ids probeable.
 
 ### 3. Build & DevOps Standard
 - **Parallel Start**: Use `npm start` (`nx run-many -t serve --parallel=2`) for local dev.
 - **Build Verification**: Run `npx nx run-many -t build` to ensure 100% compilation across all apps and shared libraries.
+- **Worktree builds**: when `node_modules` is a junction/symlink into the main checkout, Nx resolves the workspace root through the real path and builds the *main checkout* instead — a green build then proves nothing about your changes. Pass `NX_WORKSPACE_ROOT_PATH=<worktree absolute path>` and confirm `dist/` lands inside the worktree.
+- **Shared types**: `libs/shared` is imported by both apps. Change an interface there and rebuild both — a client-only or api-only build will not catch the drift.
 - **Docker Containers**:
   - `Dockerfile.api`: Node.js 20 LTS multi-stage production image for Express backend.
   - `Dockerfile.client`: Multi-stage build with NGINX (`nginx:alpine`) for Angular SPA static asset hosting and client-side routing fallback.

@@ -169,7 +169,12 @@ export class ChatService {
     this.activeThreadId.set(threadId);
   }
 
-  public createNewThread() {
+  /**
+   * Starts a new conversation, optionally scoped to a project — the
+   * project's custom instructions and its uploaded files are then injected
+   * into every turn's context server-side.
+   */
+  public createNewThread(projectId: string | null = null) {
     const newThread: ChatThread = {
       id: 'thread-' + Date.now(),
       title: 'New Chat Thread',
@@ -177,12 +182,16 @@ export class ChatService {
       updatedAt: Date.now(),
       model: this.selectedModel(),
       messages: [],
+      projectId,
     };
 
     this.threads.update((curr) => [newThread, ...curr]);
     this.activeThreadId.set(newThread.id);
     this.persistUserThreadHistory();
   }
+
+  /** Project the active conversation is scoped to, if any. */
+  public activeProjectId = computed(() => this.activeThread()?.projectId ?? null);
 
   // Dedicated image-generation mode (separate from normal chat, like
   // ChatGPT/Gemini's image tool) - switches the composer's placeholder and
@@ -384,7 +393,12 @@ export class ChatService {
           model: this.selectedModel(),
           temperature: 0.7,
           mcpEnabled: this.mcpEnabled(),
-          conversationId: currentThreadId,
+          // threadId lets the backend persist/reuse this thread's rolling
+          // conversation summary instead of re-summarizing every turn, and is
+          // what usage/cost records are attributed to; projectId pulls in
+          // the project's instructions + files.
+          threadId: currentThreadId,
+          projectId: activeThread?.projectId ?? null,
         }),
         signal: this.abortController.signal,
       });

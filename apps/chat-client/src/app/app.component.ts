@@ -7,6 +7,7 @@ import { MessageInputComponent } from './components/message-input/message-input.
 import { SessionExpiredModalComponent } from './components/session-expired-modal/session-expired-modal.component';
 import { LoginErrorToastComponent } from './components/login-error-toast/login-error-toast.component';
 import { SettingsModalComponent } from './components/settings-modal/settings-modal.component';
+import { ProjectsModalComponent } from './components/projects-modal/projects-modal.component';
 import { AuthService } from './services/auth.service';
 
 @Component({
@@ -21,12 +22,14 @@ import { AuthService } from './services/auth.service';
     SessionExpiredModalComponent,
     LoginErrorToastComponent,
     SettingsModalComponent,
+    ProjectsModalComponent,
   ],
   changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './app.component.html',
 })
 export class AppComponent {
   public isSettingsOpen = false;
+  public isProjectsOpen = false;
 
   public openSettings() {
     this.isSettingsOpen = true;
@@ -34,6 +37,14 @@ export class AppComponent {
 
   public closeSettings() {
     this.isSettingsOpen = false;
+  }
+
+  public openProjects() {
+    this.isProjectsOpen = true;
+  }
+
+  public closeProjects() {
+    this.isProjectsOpen = false;
   }
   // Matches the `lg:` breakpoint the sidebar/backdrop templates key off of -
   // keeps the sidebar as a full overlay (not sharing width with the chat)

@@ -13,6 +13,8 @@ import { isOmniRouteConfigured } from '../llm/client';
 import { extractDocumentText } from '../rag/document-extractor';
 import { RagRetriever } from '../rag/retriever';
 import { UsageService } from '../services/usage.service';
+import { MemoryService } from '../memory/memory.service';
+import { listPromptTemplates } from '../prompt/prompt-manager';
 
 const router = Router();
 const aiRouterService = new AIRouterService();
@@ -35,7 +37,7 @@ router.get('/config', (req, res) => {
  * Protected by Google ID Token middleware.
  */
 router.post('/stream', authenticateOrAllowTrial, async (req: AuthenticatedRequest, res: Response) => {
-  const { messages, model, temperature, mcpEnabled, ragContext } = req.body as ChatStreamRequest;
+  const { messages, model, temperature, mcpEnabled, ragContext, threadId, projectId } = req.body as ChatStreamRequest;
 
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     res.status(400).json({ error: 'Invalid request: "messages" array is required.' });
@@ -54,6 +56,8 @@ router.post('/stream', authenticateOrAllowTrial, async (req: AuthenticatedReques
     temperature: temperature ?? 0.7,
     mcpEnabled: mcpEnabled ?? false,
     ragContext,
+    threadId,
+    projectId: projectId ?? null,
   };
 
   try {
@@ -224,6 +228,47 @@ router.get('/usage', authenticateToken, async (req: AuthenticatedRequest, res: R
     console.error('[Chat API Route] Failed to load usage records:', error);
     res.status(500).json({ error: 'Failed to load usage records.' });
   }
+});
+
+/**
+ * GET /api/chat/memories
+ * The durable facts/preferences the assistant has saved about this user.
+ * Written automatically by the memory extractor after a turn (see
+ * context/context-builder.ts -> MemoryService.rememberFromMessage); this
+ * endpoint exists so a user can see and prune them.
+ */
+router.get('/memories', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const memories = await MemoryService.listMemories(req.user!.uid);
+    res.json({ memories });
+  } catch (error) {
+    console.error('[Chat API Route] Failed to load memories:', error);
+    res.status(500).json({ error: 'Failed to load memories.' });
+  }
+});
+
+/** DELETE /api/chat/memories/:id */
+router.delete('/memories/:id', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const deleted = await MemoryService.deleteMemory(req.user!.uid, req.params.id);
+    if (!deleted) {
+      res.status(404).json({ error: 'Memory not found.' });
+      return;
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[Chat API Route] Failed to delete memory:', error);
+    res.status(500).json({ error: 'Failed to delete memory.' });
+  }
+});
+
+/**
+ * GET /api/chat/prompts
+ * The versioned prompt registry (keys + descriptions, not the raw template
+ * bodies) — lets the Diagnostics UI show which prompt versions are live.
+ */
+router.get('/prompts', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
+  res.json({ templates: listPromptTemplates() });
 });
 
 export default router;
