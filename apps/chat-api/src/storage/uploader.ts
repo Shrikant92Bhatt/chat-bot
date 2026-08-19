@@ -27,7 +27,8 @@ export class GcsUploader {
     }
   }
 
-  async uploadImage(buffer: Buffer, fileName: string, contentType = 'image/png'): Promise<string> {
+  /** Uploads any object (images, project documents, ...) and returns its public URL. */
+  async uploadFile(buffer: Buffer, fileName: string, contentType = 'application/octet-stream'): Promise<string> {
     if (!this.isConfigured || !this.storage) {
       console.warn(`[GcsUploader] GCS is not configured. Returning mock URL for ${fileName}.`);
       return `https://storage.googleapis.com/${this.bucketName}/${fileName}`;
@@ -39,8 +40,12 @@ export class GcsUploader {
       return `https://storage.googleapis.com/${this.bucketName}/${fileName}`;
     } catch (error) {
       console.error('[GcsUploader] Upload failed:', error);
-      throw new Error('Image upload failed.');
+      throw new Error('File upload failed.');
     }
+  }
+
+  async uploadImage(buffer: Buffer, fileName: string, contentType = 'image/png'): Promise<string> {
+    return this.uploadFile(buffer, fileName, contentType);
   }
 
   isReady(): boolean {
