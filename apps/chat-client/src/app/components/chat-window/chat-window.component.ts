@@ -61,7 +61,15 @@ export class ChatWindowComponent implements AfterViewChecked {
     }
   }
 
+  // scrollToBottom() setting scrollTop fires a native 'scroll' event just
+  // like a real user scroll would - without this guard, onScroll() reads
+  // "distance from bottom = 0" right after our own programmatic scroll and
+  // re-arms shouldAutoScroll, so a manual scroll-up gets undone within the
+  // same stream and the view is permanently pinned to the bottom.
+  private isProgrammaticScroll = false;
+
   onScroll(): void {
+    if (this.isProgrammaticScroll) return;
     const el = this.scrollContainer.nativeElement;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     this.shouldAutoScroll = distanceFromBottom < this.bottomThresholdPx;
@@ -69,8 +77,14 @@ export class ChatWindowComponent implements AfterViewChecked {
 
   private scrollToBottom(): void {
     try {
+      this.isProgrammaticScroll = true;
       this.scrollContainer.nativeElement.scrollTop = this.scrollContainer.nativeElement.scrollHeight;
-    } catch (err) {}
+      requestAnimationFrame(() => {
+        this.isProgrammaticScroll = false;
+      });
+    } catch (err) {
+      this.isProgrammaticScroll = false;
+    }
   }
 
   /**

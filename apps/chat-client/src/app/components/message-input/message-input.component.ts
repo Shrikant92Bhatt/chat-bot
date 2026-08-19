@@ -46,6 +46,16 @@ export class MessageInputComponent {
     this.chatService.setChatMode(mode);
   }
 
+  onFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (file) {
+      this.chatService.uploadDocument(file);
+    }
+    // Reset so selecting the same file again still fires a change event.
+    input.value = '';
+  }
+
   getModelDisplayName(): string {
     const active = this.chatService.selectedModel();
     const model = this.availableModels.find((m) => m.id === active);

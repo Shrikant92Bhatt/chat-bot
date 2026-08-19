@@ -38,10 +38,10 @@ function toBaseMessages(messages: Array<{ role: string; content: string }>): Bas
  * caller (chat.routes.ts) can fall back to the legacy AIRouterService
  * without having already sent a partial response.
  */
-export async function streamGraphResponse(request: ChatStreamRequest, res: Response): Promise<void> {
+export async function streamGraphResponse(request: ChatStreamRequest, res: Response, ownerId?: string): Promise<void> {
   const ragRetriever = new RagRetriever();
   const lastUserMessage = [...(request.messages || [])].reverse().find((m) => m.role === 'user');
-  const ragContext = lastUserMessage ? await ragRetriever.retrieveContext(lastUserMessage.content) : [];
+  const ragContext = lastUserMessage ? await ragRetriever.retrieveContext(ownerId, lastUserMessage.content) : [];
   const enrichedMessages = await ragRetriever.enrichPrompt(request.messages || [], ragContext);
 
   const model: AIModelType = request.model || 'gemini-flash-latest';

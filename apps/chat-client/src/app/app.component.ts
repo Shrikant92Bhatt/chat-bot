@@ -35,8 +35,10 @@ export class AppComponent {
   public closeSettings() {
     this.isSettingsOpen = false;
   }
-  // Matches the `md:` breakpoint the sidebar/backdrop templates key off of.
-  private static readonly MOBILE_BREAKPOINT_PX = 768;
+  // Matches the `lg:` breakpoint the sidebar/backdrop templates key off of -
+  // keeps the sidebar as a full overlay (not sharing width with the chat)
+  // on phones and most tablets, not just narrow phone widths.
+  private static readonly MOBILE_BREAKPOINT_PX = 1024;
 
   // Default closed on phone-width viewports so the sidebar doesn't cover
   // the whole chat on first load; still defaults open on desktop.

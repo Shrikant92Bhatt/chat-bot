@@ -22,6 +22,11 @@ export class ChatService {
   // Tracks unauthenticated user message limit (Max 1 message allowed without sign-in)
   public unauthUserMessageCount = signal<number>(0);
 
+  // Knowledge-base document upload state
+  public isUploadingDocument = signal<boolean>(false);
+  public uploadedDocuments = signal<string[]>([]);
+  public documentUploadError = signal<string | null>(null);
+
   public activeThread = computed(() => {
     const id = this.activeThreadId();
     return this.threads().find((t) => t.id === id) || null;
@@ -195,6 +200,49 @@ export class ChatService {
 
   public setChatMode(mode: 'chat' | 'image') {
     this.chatMode.set(mode);
+  }
+
+  /**
+   * Uploads a file into the signed-in user's RAG knowledge base - future
+   * chat turns automatically pull relevant excerpts from it as context
+   * (see backend orchestration/graph.ts -> RagRetriever.retrieveContext).
+   */
+  async uploadDocument(file: File): Promise<void> {
+    if (!this.authService.userSignal()) {
+      this.documentUploadError.set('Sign in to attach files to your knowledge base.');
+      return;
+    }
+
+    this.isUploadingDocument.set(true);
+    this.documentUploadError.set(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch(`${this.apiUrl}/documents`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${this.authService.getIdToken()}` },
+        body: formData,
+      });
+
+      if (response.status === 401) {
+        this.authService.notifySessionExpired();
+        return;
+      }
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Upload failed.');
+      }
+
+      this.uploadedDocuments.update((docs) => [...docs, data.fileName]);
+    } catch (error: any) {
+      console.error('[ChatService] Document upload failed:', error);
+      this.documentUploadError.set(error.message || 'Failed to upload document.');
+    } finally {
+      this.isUploadingDocument.set(false);
+    }
   }
 
   async generateImage(prompt: string): Promise<void> {

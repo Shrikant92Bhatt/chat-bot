@@ -9,17 +9,26 @@ export class RagRetriever {
   // requests within the same server process.
   private static store = new VectorDbAdapter();
 
-  async ingest(id: string, content: string, metadata?: Record<string, unknown>): Promise<void> {
-    await RagRetriever.store.addDocument(id, content, metadata);
+  async ingest(id: string, ownerId: string, content: string, metadata?: Record<string, unknown>): Promise<void> {
+    await RagRetriever.store.addDocument(id, ownerId, content, metadata);
   }
 
-  async retrieveContext(query: string, topK = 3): Promise<string[]> {
-    if (RagRetriever.store.size() === 0) {
+  // The hashing embedding (see vector-db.ts) captures word overlap, not real
+  // semantic similarity - two unrelated pieces of English text still share
+  // common words (the, is, what, ...) and score barely above zero. With a
+  // `> 0` threshold, a user's only uploaded document gets injected as
+  // context on every message regardless of relevance. This is a coarse
+  // fixed cutoff to filter out clearly-unrelated queries; it's not a
+  // substitute for a real embeddings model.
+  private static readonly RELEVANCE_THRESHOLD = 0.12;
+
+  async retrieveContext(ownerId: string | undefined, query: string, topK = 3): Promise<string[]> {
+    if (!ownerId || RagRetriever.store.size(ownerId) === 0) {
       return [];
     }
     const queryVector = await RagRetriever.store.embedText(query);
-    const results = await RagRetriever.store.similaritySearch(queryVector, topK);
-    return results.filter((r) => r.score > 0).map((r) => r.content);
+    const results = await RagRetriever.store.similaritySearch(ownerId, queryVector, topK);
+    return results.filter((r) => r.score > RagRetriever.RELEVANCE_THRESHOLD).map((r) => r.content);
   }
 
   async enrichPrompt(
