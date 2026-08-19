@@ -67,6 +67,12 @@ variable "client_image" {
   default     = null
 }
 
+variable "admin_image" {
+  description = "Full admin-analytics image ref (the admin console SPA, built from Dockerfile.admin)."
+  type        = string
+  default     = null
+}
+
 variable "min_instance_count" {
   type    = number
   default = 0

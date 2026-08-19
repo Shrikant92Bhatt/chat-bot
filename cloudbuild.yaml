@@ -19,9 +19,20 @@ steps:
       - 'Dockerfile.client'
       - '.'
 
+  # 3. Build Admin Analytics Console Docker Image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'asia-south1-docker.pkg.dev/$PROJECT_ID/chat-repo/admin-analytics:latest'
+      - '-f'
+      - 'Dockerfile.admin'
+      - '.'
+
 images:
   - 'asia-south1-docker.pkg.dev/$PROJECT_ID/chat-repo/chat-api:latest'
   - 'asia-south1-docker.pkg.dev/$PROJECT_ID/chat-repo/chat-client:latest'
+  - 'asia-south1-docker.pkg.dev/$PROJECT_ID/chat-repo/admin-analytics:latest'
 
 options:
   logging: CLOUD_LOGGING_ONLY

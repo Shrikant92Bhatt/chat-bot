@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Same glass vocabulary as apps/chat-client/src/styles.css, so the admin
+   console visually belongs to the same product. Kept as a copy rather than a
+   shared stylesheet: the two apps build independently and neither should be
+   able to break the other's styling. */
+@layer utilities {
+  .glass-card {
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  }
+
+  .glass-card-hover {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .glass-card-hover:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(255, 255, 255, 0.18);
+  }
+
+  .gradient-text-nexus {
+    background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 50%, #8b5cf6 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .ambient-glow-1 {
+    position: fixed;
+    width: 500px;
+    height: 500px;
+    background: radial-gradient(circle, rgba(139, 92, 246, 0.13) 0%, rgba(0, 0, 0, 0) 70%);
+    top: -180px;
+    left: -180px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .ambient-glow-2 {
+    position: fixed;
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, rgba(6, 182, 212, 0.1) 0%, rgba(0, 0, 0, 0) 70%);
+    bottom: -240px;
+    right: -240px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Tabular figures keep KPI numbers and table columns from jittering as
+     values change width - important when the dashboard auto-refreshes. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+html,
+body {
+  background-color: #0a0d14;
+}
+
+/* Custom scrollbar, matching chat-client. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Respect a reduced-motion preference everywhere (the dashboard animates
+   chart reveals and spinners). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

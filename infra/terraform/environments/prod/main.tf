@@ -30,6 +30,7 @@ locals {
   # when api_image/client_image aren't pinned explicitly.
   api_image    = coalesce(var.api_image, "${module.artifact_registry.repository_url}/chat-api:latest")
   client_image = coalesce(var.client_image, "${module.artifact_registry.repository_url}/chat-client:latest")
+  admin_image  = coalesce(var.admin_image, "${module.artifact_registry.repository_url}/admin-analytics:latest")
 }
 
 module "artifact_registry" {
@@ -98,6 +99,7 @@ module "cloud_run" {
   api_image                 = local.api_image
   api_service_account_email = module.iam.api_service_account_email
   client_image               = local.client_image
+  admin_image                = local.admin_image
 
   min_instance_count     = var.min_instance_count
   max_instance_count     = var.max_instance_count
@@ -135,6 +137,7 @@ module "monitoring" {
   cloud_run_service_names = [
     module.cloud_run.api_service_name,
     module.cloud_run.client_service_name,
+    module.cloud_run.admin_service_name,
   ]
   notification_channels = var.monitoring_notification_channels
 }
