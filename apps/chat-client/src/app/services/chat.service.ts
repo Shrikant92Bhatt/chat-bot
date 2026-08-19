@@ -384,6 +384,7 @@ export class ChatService {
           model: this.selectedModel(),
           temperature: 0.7,
           mcpEnabled: this.mcpEnabled(),
+          conversationId: currentThreadId,
         }),
         signal: this.abortController.signal,
       });
