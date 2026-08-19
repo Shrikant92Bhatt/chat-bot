@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { tool } from '@langchain/core/tools';
 import { generateImage } from '../llm/image-gen';
 import { performWebSearch } from '../llm/web-search';
+import { executeSandboxedCode } from '../tools/code-sandbox';
 
 /**
  * Evaluates a restricted arithmetic expression (digits, + - * / ( ) . and
@@ -53,19 +54,36 @@ const webSearchTool = tool(
 );
 
 const codeInterpreterTool = tool(
-  async ({ code }: { code: string }) => {
-    console.warn('[mcp/tools] code_interpreter called but no sandboxed execution environment is configured.');
-    return JSON.stringify({
-      available: false,
-      message: 'Code execution is not configured on this deployment.',
-      submittedLength: code.length,
-    });
+  async ({ code, language }: { code: string; language?: 'javascript' | 'typescript' }) => {
+    try {
+      const result = await executeSandboxedCode(code, { language: language ?? 'javascript' });
+      return JSON.stringify(result);
+    } catch (error) {
+      // executeSandboxedCode already catches its own failures and returns a
+      // structured result; this only fires on a truly unexpected error
+      // (e.g. the isolate itself couldn't be constructed).
+      console.error('[mcp/tools] code_interpreter failed unexpectedly:', error);
+      return JSON.stringify({
+        success: false,
+        stdout: '',
+        stderr: '',
+        result: null,
+        error: (error as Error).message,
+        exitReason: 'runtime_error',
+        durationMs: 0,
+      });
+    }
   },
   {
     name: 'code_interpreter',
-    description: 'Executes a code snippet in a sandboxed environment. Returns an "unavailable" result if no sandbox is configured.',
+    description:
+      'Executes a JavaScript or TypeScript snippet in an isolated, resource-limited sandbox (no filesystem or network access, memory and timeout limits enforced) and returns its console output and return value. Wrap the snippet body as if it were a function: use `return <value>;` to get a result back.',
     schema: z.object({
-      code: z.string().describe('The code to execute.'),
+      code: z.string().describe('The JavaScript or TypeScript code to execute. Use `return <value>;` to produce a result.'),
+      language: z
+        .enum(['javascript', 'typescript'])
+        .optional()
+        .describe('The language of the snippet. Defaults to "javascript".'),
     }),
   }
 );

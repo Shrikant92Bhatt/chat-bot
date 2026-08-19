@@ -41,7 +41,15 @@ chat-client -> /api/chat/stream -> LangGraph Orchestrator -> OmniRoute AI Gatewa
 
 ### `/mcp/` — Model Context Protocol
 - `adapter.ts`: `McpAdapter.getTools()` (LangChain tool objects for binding) / `executeTool()`
-- `tools.ts`: real LangChain `tool()` definitions with zod schemas — `system_calculator` does real sandboxed arithmetic, `generate_image` does a real GCS upload; `web_search` and `code_interpreter` have no backing provider configured and return an explicit `{available: false}` rather than fabricated results — wire a search API (e.g. Tavily) / sandbox runtime to make them real
+- `tools.ts`: real LangChain `tool()` definitions with zod schemas — `system_calculator` does real sandboxed arithmetic, `generate_image` does a real GCS upload, `code_interpreter` does real sandboxed JS/TS execution (see `/tools/code-sandbox.ts` below); `web_search` has no backing provider configured and returns an explicit `{available: false}` rather than fabricated results — wire a search API (e.g. Tavily) to make it real
+
+### `/tools/code-sandbox.ts` — Sandboxed Code Execution
+- `executeSandboxedCode(code, { language })`: real JS/TypeScript execution backing `code_interpreter`, using `isolated-vm` (separate V8 Isolate per run, not Node's `vm` module which shares the host heap and isn't a security boundary).
+- Isolation: memory limit via `Isolate({ memoryLimit })` (V8-enforced, verified by triggering it with a heap-growth loop); execution timeout enforced *both* by isolated-vm's own `script.run({ timeout })` *and* an independent host-side wall-clock `setTimeout` that force-disposes the isolate — testing showed isolated-vm's own timeout does not reliably bound a script whose returned promise never resolves (e.g. `await new Promise(() => {})`), so the wall-clock layer is required, not redundant. Filesystem and network access are blocked by omission (no `fs`/`require`/`fetch`/`net`/`process` is ever injected into the isolate's global scope — verified: `typeof require`, `typeof fetch`, `typeof process` are all `"undefined"` inside sandboxed code).
+- Isolation level: isolate-level (separate V8 heap), not OS-process or container-level — same OS process/container as the API server, values crossing the boundary are explicitly copied. Weaker than a separate container/VM/gVisor sandbox, stronger than `vm.Script`. Cloud Run has no Docker-in-Docker/privileged mode available to run a heavier per-execution sandbox.
+- TypeScript is transpiled via the `typescript` compiler API (`ts.transpileModule`, syntax-only strip, no type-checking) before running — `typescript` ships in the production image because `Dockerfile.api`'s builder stage runs a plain `npm ci` (installs devDependencies too) before copying `node_modules` into the runtime image.
+- `isolated-vm@7` ships prebuilt native binaries for `linux-x64-musl` (matches `node:24-alpine`, the base image in `Dockerfile.api`) and `win32-x64` (local dev), so no C++ build toolchain is required at Docker build time.
+- Python execution is NOT implemented (stretch goal, skipped — `node:24-alpine` has no `python3` runtime by default and OS-level resource limits for a subprocess couldn't be verified without changing the base image).
 
 ### Existing Services (kept as fallback)
 - `services/gemini.service.ts`: Direct Gemini SDK streaming
@@ -100,6 +108,8 @@ chat-client -> /api/chat/stream -> LangGraph Orchestrator -> OmniRoute AI Gatewa
 | OMNIROUTE_API_KEY | No | — | Local OmniRoute gateway API key |
 | GCS_BUCKET_NAME | No | nexusai-generated-images | GCS bucket for images |
 | GOOGLE_APPLICATION_CREDENTIALS | No | — | GCP service account JSON path |
+| CODE_SANDBOX_TIMEOUT_MS | No | 5000 | `code_interpreter` execution wall-clock timeout, clamped server-side to [500, 15000]ms — not client/model-overridable |
+| CODE_SANDBOX_MEMORY_MB | No | 64 | `code_interpreter` per-execution V8 isolate memory limit, clamped server-side to [8, 128]MB — not client/model-overridable |
 | APP_SESSION_SECRET | Prod | random | JWT signing secret |
 | ALLOWED_ORIGIN | No | * | CORS allowed origins |
 
@@ -115,7 +125,7 @@ chat-client -> /api/chat/stream -> LangGraph Orchestrator -> OmniRoute AI Gatewa
 | User profile identity | ✅ |
 | Chat thread history | ✅ |
 | Image generation | ✅ real, via OpenRouter `google/gemini-2.5-flash-image` + GCS (or inline data URI if GCS unconfigured) |
-| Tool/function calling (MCP) | ⚠️ real function calling; web_search/code_interpreter have no backing provider |
+| Tool/function calling (MCP) | ⚠️ real function calling; code_interpreter runs real sandboxed JS/TS (isolate-level, not OS-level isolation) via `isolated-vm`; web_search still has no backing provider |
 | RAG context injection | ⚠️ real similarity search; nothing calls ingest() yet, so context is empty |
 | Rate limiting (anon trial) | ✅ |
 | Session persistence (JWT) | ✅ |
