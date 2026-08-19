@@ -53,6 +53,14 @@
   </div>
 
   <div class="flex-1 overflow-y-auto px-2 space-y-1 border-t border-white/5 pt-2">
+    <!-- Skeleton loader: shown only while the initial saved-history fetch is
+         in flight, so a slow/retrying load reads as "loading" rather than
+         a misleading "you have no chats yet". -->
+    <div *ngIf="chatService.isLoadingThreads()" class="space-y-1.5 px-3 py-2.5" aria-hidden="true">
+      <div *ngFor="let i of [1, 2, 3, 4, 5]" class="h-4 rounded-md bg-white/5 animate-pulse" [style.width.%]="70 - i * 6"></div>
+    </div>
+
+    <ng-container *ngIf="!chatService.isLoadingThreads()">
     <div *ngFor="let thread of chatService.threads()">
       <button
         (click)="selectThread(thread.id)"
@@ -65,6 +73,7 @@
         </span>
       </button>
     </div>
+    </ng-container>
   </div>
 
   <div class="p-4 border-t border-white/5">
