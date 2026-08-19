@@ -1,4 +1,4 @@
-import { getOmniRouteBaseUrl, getOmniRouteApiKey, IMAGE_GENERATION_MODEL } from './client';
+import { getOmniRouteBaseUrl, getOmniRouteApiKey, isUsingOpenRouter, IMAGE_GENERATION_MODEL } from './client';
 import { GcsUploader } from '../storage/uploader';
 
 /**
@@ -7,8 +7,19 @@ import { GcsUploader } from '../storage/uploader';
  * `message.images[0].image_url.url` — verified against the live API, not
  * guessed). Uploads to GCS when configured; otherwise returns the data URI
  * directly so the browser can still render a real image.
+ *
+ * OpenRouter-only: IMAGE_GENERATION_MODEL is an OpenRouter slug with no
+ * equivalent on the local/self-hosted OmniRoute gateway. Without this guard,
+ * a deployment with OPENROUTER_API_KEY unset would silently fire this
+ * request at the OmniRoute gateway instead (see getActiveGateway in
+ * client.ts) and fail with a confusing raw fetch/parse error - this makes
+ * the actual cause explicit instead.
  */
 export async function generateImage(prompt: string): Promise<{ imageUrl: string }> {
+  if (!isUsingOpenRouter()) {
+    throw new Error('Image generation requires the OpenRouter gateway (OPENROUTER_API_KEY), which is not currently active.');
+  }
+
   const response = await fetch(`${getOmniRouteBaseUrl()}/chat/completions`, {
     method: 'POST',
     headers: {
