@@ -20,7 +20,7 @@ import { Component, ChangeDetectionStrategy, input, computed } from '@angular/co
  * competing cyan shapes.
  */
 @Component({
-  selector: 'app-sparkline',
+  selector: 'lib-sparkline',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `

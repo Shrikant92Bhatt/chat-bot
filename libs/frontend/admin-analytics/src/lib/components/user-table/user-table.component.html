@@ -312,7 +312,7 @@
                 <p class="text-xs text-rose-100 flex-1 leading-relaxed">{{ error }}</p>
                 <button
                   type="button"
-                  (click)="clearError(row.uid); stop($event)"
+                  (click)="clearError(row.uid)"
                   class="text-rose-300/70 hover:text-rose-100 text-xs shrink-0 leading-none"
                   aria-label="Dismiss"
                 >
@@ -327,7 +327,10 @@
         @if (expandedUid() === row.uid) {
           <tr>
             <td colspan="7" class="p-0 border-b border-white/[0.04]">
-              <div class="px-4 py-4 bg-black/25" (click)="stop($event)">
+              <!-- No click-swallowing needed here: the drill-down is a sibling
+                   <tr>, not a child of the disclosure row, so clicks inside it
+                   were never going to bubble up and collapse it. -->
+              <div class="px-4 py-4 bg-black/25">
                 <div class="flex items-baseline justify-between gap-3 mb-3">
                   <h4 class="text-[11px] font-semibold text-slate-400 uppercase tracking-[0.07em]">
                     Recent sessions · {{ displayName(row) }}

@@ -49,7 +49,7 @@ interface PlottedPoint {
  * without the Catmull-Rom/cardinal failure mode of inventing extrema.
  */
 @Component({
-  selector: 'app-usage-chart',
+  selector: 'lib-usage-chart',
   standalone: true,
   imports: [CommonModule],
   changeDetection: ChangeDetectionStrategy.OnPush,

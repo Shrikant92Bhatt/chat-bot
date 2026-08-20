@@ -156,7 +156,7 @@
   } @else {
     <main class="relative z-10 max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
       @if (activeView() === 'overview') {
-        <app-overview-view
+        <lib-overview-view
           [summary]="summary()"
           [daily]="daily()"
           [usageByModel]="usageByModel()"
@@ -171,7 +171,7 @@
           (viewUsers)="setView('users')"
         />
       } @else {
-        <app-users-view
+        <lib-users-view
           [registeredUsers]="registeredUsers()"
           [usageByUser]="usageByUser()"
           [windowDays]="windowDays()"

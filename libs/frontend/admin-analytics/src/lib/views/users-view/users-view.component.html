@@ -135,7 +135,7 @@
       }
 
       <div class="transition-opacity duration-200" [class.opacity-50]="refreshing()">
-        <app-user-table [rows]="rows()" [windowDays]="windowDays()" (roleChanged)="roleChanged.emit()" />
+        <lib-user-table [rows]="rows()" [windowDays]="windowDays()" (roleChanged)="roleChanged.emit()" />
       </div>
     }
   </section>

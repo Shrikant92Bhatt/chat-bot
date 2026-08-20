@@ -34,7 +34,7 @@
                gap in the middle of the card. -->
           <div class="mt-auto pt-6">
             <div class="h-12">
-              <app-sparkline [values]="costSeries()" [color]="SERIES" />
+              <lib-sparkline [values]="costSeries()" [color]="SERIES" />
             </div>
 
             <div class="mt-4 pt-4 border-t border-white/[0.06] flex items-center gap-3 text-[11px] text-slate-400">
@@ -58,7 +58,7 @@
           </div>
           <div class="text-[11px] text-slate-500 mt-1.5">{{ formatNumber(stats.totalRequests) }} total</div>
           <div class="mt-auto pt-4 h-9">
-            <app-sparkline [values]="requestSeries()" [color]="MUTED" />
+            <lib-sparkline [values]="requestSeries()" [color]="MUTED" />
           </div>
         </div>
 
@@ -71,7 +71,7 @@
             {{ compact(stats.totalInputTokens) }} in · {{ compact(stats.totalOutputTokens) }} out
           </div>
           <div class="mt-auto pt-4 h-9">
-            <app-sparkline [values]="tokenSeries()" [color]="MUTED" />
+            <lib-sparkline [values]="tokenSeries()" [color]="MUTED" />
           </div>
         </div>
 
@@ -181,7 +181,7 @@
     </div>
 
     <div class="p-5">
-      <app-usage-chart
+      <lib-usage-chart
         #chart
         [daily]="daily()"
         [metric]="chartMetric()"

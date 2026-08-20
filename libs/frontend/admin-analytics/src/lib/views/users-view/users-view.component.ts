@@ -24,7 +24,7 @@ type RoleFilter = 'all' | 'admin' | 'user';
  * round-trip per keystroke would be slower and worse.
  */
 @Component({
-  selector: 'app-users-view',
+  selector: 'lib-users-view',
   standalone: true,
   imports: [CommonModule, UserTableComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,

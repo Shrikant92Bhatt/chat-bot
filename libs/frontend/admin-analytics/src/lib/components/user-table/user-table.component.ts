@@ -40,7 +40,7 @@ export type UserSortKey =
  *    letting the console silently break around the operator.
  */
 @Component({
-  selector: 'app-user-table',
+  selector: 'lib-user-table',
   standalone: true,
   imports: [CommonModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -184,10 +184,6 @@ export class UserTableComponent {
 
   public errorFor(uid: string): string | null {
     return this.rowErrors()[uid] ?? null;
-  }
-
-  public stop(event: Event): void {
-    event.stopPropagation();
   }
 
   // ── Formatting ───────────────────────────────────────────────────────────

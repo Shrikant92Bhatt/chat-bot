@@ -29,7 +29,7 @@ import { SparklineComponent } from '../../components/sparkline/sparkline.compone
  * on the Users view, where it means "admin".
  */
 @Component({
-  selector: 'app-overview-view',
+  selector: 'lib-overview-view',
   standalone: true,
   imports: [CommonModule, UsageChartComponent, SparklineComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
