@@ -12,6 +12,7 @@ import {
 } from '../services/admin-api.service';
 import { OverviewViewComponent } from '../views/overview-view/overview-view.component';
 import { UsersViewComponent } from '../views/users-view/users-view.component';
+import { ModelsViewComponent } from '../views/models-view/models-view.component';
 
 /** Date-range presets. One control, above everything it scopes. */
 const WINDOW_PRESETS = [
@@ -20,7 +21,7 @@ const WINDOW_PRESETS = [
   { days: 90, label: 'Last 90 days', short: '90d' },
 ] as const;
 
-export type AdminView = 'overview' | 'users';
+export type AdminView = 'overview' | 'users' | 'models';
 
 /**
  * The admin console's shell - embedded directly into the host app's shell
@@ -31,9 +32,9 @@ export type AdminView = 'overview' | 'users';
  * AuthService.
  *
  * This component owns three things and nothing else: the data, the date-range
- * filter, and which of the two views is showing.
+ * filter, and which of the views is showing.
  *
- *  - **Views, not routes.** Switching between Overview and Users is a signal
+ *  - **Views, not routes.** Switching between Overview, Users, and Models is a signal
  *    flipping which child renders. This lib deliberately owns no Router (see
  *    architecture.md §5) - it is consumed into chat-client's build and rendered
  *    as an overlay *in place*, so a real route here would fight the host app's
@@ -41,10 +42,10 @@ export type AdminView = 'overview' | 'users';
  *  - **One filter row above everything it scopes.** The date range lives in the
  *    header, applies to both views, and refetches everything on change, so no
  *    two numbers on screen can be from different windows.
- *  - **Fetched once, shared by both views.** Switching views is instant and
+ *  - **Fetched once, shared by views.** Switching views is instant and
  *    costs no requests; only a date change or a role change refetches.
  *
- * All five admin endpoints load in parallel with Promise.allSettled, so one
+ * All admin endpoints load in parallel with Promise.allSettled, so one
  * failing panel (e.g. GCS unreachable) degrades that panel only instead of
  * blanking the console - the same fail-soft posture the backend's context
  * assembly uses. The single exception is a 403, which is not a panel failure
@@ -54,7 +55,7 @@ export type AdminView = 'overview' | 'users';
 @Component({
   selector: 'lib-admin-dashboard',
   standalone: true,
-  imports: [CommonModule, OverviewViewComponent, UsersViewComponent],
+  imports: [CommonModule, OverviewViewComponent, UsersViewComponent, ModelsViewComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './admin-dashboard.component.html',
 })

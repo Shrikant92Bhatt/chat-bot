@@ -55,7 +55,7 @@
             class="absolute bottom-full mb-1.5 right-0 w-48 bg-slate-900 border border-white/10 rounded-xl shadow-xl overflow-hidden z-50 py-1"
           >
             <button
-              *ngFor="let m of availableModels"
+              *ngFor="let m of availableModels()"
               type="button"
               (click)="selectModel(m.id)"
               class="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
