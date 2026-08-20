@@ -1,6 +1,6 @@
-<header class="h-16 px-3 sm:px-6 flex items-center justify-between z-30 bg-obsidian border-b border-white/5">
-  <!-- Left: Brand & Sidebar Toggle -->
-  <div class="flex items-center space-x-2 sm:space-x-4">
+<header class="h-16 px-3 sm:px-6 flex items-center z-30 bg-obsidian border-b border-white/5">
+  <!-- Left: Sidebar Toggle -->
+  <div class="flex items-center shrink-0">
     <button
       *ngIf="authService.userSignal()"
       (click)="toggleSidebar.emit()"
@@ -10,15 +10,22 @@
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
       </svg>
     </button>
-    <div class="flex items-center space-x-2">
-      <div class="text-lg font-semibold tracking-tight text-slate-200">
-        NexusAI
-      </div>
+  </div>
+
+  <!-- Center: Brand - fills the wide gap the hamburger/actions used to leave empty on mobile -->
+  <div class="flex-1 flex items-center justify-center sm:justify-start gap-2.5 min-w-0 px-2">
+    <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-accentCyan to-blue-600 flex items-center justify-center text-white shrink-0">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+      </svg>
+    </div>
+    <div class="text-lg font-semibold tracking-tight text-slate-200 truncate">
+      NexusAI
     </div>
   </div>
 
   <!-- Right: Settings & Profile -->
-  <div class="flex items-center space-x-2 sm:space-x-4">
+  <div class="flex items-center space-x-2 sm:space-x-4 shrink-0">
     <button
       *ngIf="authService.userSignal()?.role === 'admin'"
       (click)="openAdmin.emit()"
