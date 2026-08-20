@@ -7,6 +7,7 @@ export type ChartMetric = 'requests' | 'tokens' | 'cost';
 interface PlottedPoint {
   date: string;
   label: string;
+  longLabel: string;
   value: number;
   x: number;
   y: number;
@@ -30,18 +31,25 @@ interface PlottedPoint {
  *    colour. The mark colour (#0891b2) is a re-stepped accentCyan chosen so
  *    the palette clears the OKLCH lightness band, chroma floor, CVD
  *    separation and >=3:1 contrast against this app's glass surface
- *    (#0d1220) - validated with the dataviz palette validator, not eyeballed.
- *  - MARKS: 2px line, 8px end/active markers with a 2px surface ring, area
- *    fill at ~12% opacity, solid hairline gridlines one step off the surface
+ *    (#0d1320) - validated with the dataviz palette validator, not eyeballed.
+ *  - MARKS: 2px line, >=8px active marker with a 2px surface ring, area fill
+ *    fading to nothing, solid hairline gridlines one step off the surface
  *    (never dashed), y ticks rounded to clean numbers.
- *  - INTERACTION: a crosshair that snaps to the nearest day so the reader
- *    aims at a date rather than at a 2px line, plus keyboard arrow-key
- *    navigation exposing the same readout as hover.
+ *  - LABELS: selective, never one per point. The window's peak day is the one
+ *    directly-labelled mark; the axis and the tooltip carry everything else.
+ *  - INTERACTION: full-height hover bands (one per day, so the hit target is
+ *    the whole column rather than a 2px line) driving a crosshair that snaps
+ *    to a date, plus keyboard arrow-key navigation exposing the same readout.
  *  - The tooltip ENHANCES, it never gates: `showTable` flips to a table view
  *    carrying every value the chart plots.
+ *
+ * Curve: monotone cubic, not a raw polyline. Monotone interpolation is the one
+ * smoothing family that cannot overshoot - it will never draw a dip between two
+ * rising days or a peak that isn't in the data - so it buys the softer line
+ * without the Catmull-Rom/cardinal failure mode of inventing extrema.
  */
 @Component({
-  selector: 'app-usage-chart',
+  selector: 'lib-usage-chart',
   standalone: true,
   imports: [CommonModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -58,15 +66,18 @@ export class UsageChartComponent {
   public readonly activeIndex = signal<number | null>(null);
   public readonly showTable = signal(false);
 
+  /** The one mark colour. Everything else on this chart is a text/line token. */
+  public readonly SERIES = '#0891b2';
+
   // ── Geometry. Fixed viewBox, scaled with `width:100%; height:auto`, so the
   // container grows with its content and the x-axis band is always inside the
   // box (a fixed pixel height is what causes clipped axis labels).
-  public readonly VIEW_W = 720;
-  public readonly VIEW_H = 260;
+  public readonly VIEW_W = 960;
+  public readonly VIEW_H = 300;
   private readonly PAD_L = 56;
-  private readonly PAD_R = 14;
-  private readonly PAD_T = 14;
-  private readonly PAD_B = 30;
+  private readonly PAD_R = 18;
+  private readonly PAD_T = 24;
+  private readonly PAD_B = 32;
 
   public readonly plotLeft = this.PAD_L;
   public readonly plotRight = this.VIEW_W - this.PAD_R;
@@ -119,6 +130,7 @@ export class UsageChartComponent {
       return {
         date: point.date,
         label: this.formatDateLabel(point.date),
+        longLabel: this.formatLongDateLabel(point.date),
         value,
         x: this.plotLeft + step * i,
         y: this.plotBottom - (value / max) * height,
@@ -126,10 +138,56 @@ export class UsageChartComponent {
     });
   });
 
+  /**
+   * Monotone cubic (Fritsch-Carlson) through the plotted points. Tangents are
+   * clamped so a segment can never leave the [y(i), y(i+1)] band, which is what
+   * makes this safe for data: no invented dips, no invented peaks.
+   */
   public readonly linePath = computed(() => {
     const pts = this.points();
     if (!pts.length) return '';
-    return pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ');
+    if (pts.length === 1) return `M${pts[0].x.toFixed(2)},${pts[0].y.toFixed(2)}`;
+
+    const n = pts.length;
+    const dx: number[] = [];
+    const slope: number[] = [];
+    for (let i = 0; i < n - 1; i++) {
+      dx.push(pts[i + 1].x - pts[i].x);
+      slope.push((pts[i + 1].y - pts[i].y) / (pts[i + 1].x - pts[i].x));
+    }
+
+    const tangent: number[] = new Array(n);
+    tangent[0] = slope[0];
+    tangent[n - 1] = slope[n - 2];
+    for (let i = 1; i < n - 1; i++) {
+      // A local extremum gets a flat tangent - that's the clamp that stops the
+      // curve bulging past the data on either side of a spike.
+      tangent[i] = slope[i - 1] * slope[i] <= 0 ? 0 : (slope[i - 1] + slope[i]) / 2;
+    }
+    for (let i = 0; i < n - 1; i++) {
+      if (slope[i] === 0) {
+        tangent[i] = 0;
+        tangent[i + 1] = 0;
+        continue;
+      }
+      const a = tangent[i] / slope[i];
+      const b = tangent[i + 1] / slope[i];
+      const h = Math.hypot(a, b);
+      if (h > 3) {
+        tangent[i] = ((3 * a) / h) * slope[i];
+        tangent[i + 1] = ((3 * b) / h) * slope[i];
+      }
+    }
+
+    let d = `M${pts[0].x.toFixed(2)},${pts[0].y.toFixed(2)}`;
+    for (let i = 0; i < n - 1; i++) {
+      const c1x = pts[i].x + dx[i] / 3;
+      const c1y = pts[i].y + (tangent[i] * dx[i]) / 3;
+      const c2x = pts[i + 1].x - dx[i] / 3;
+      const c2y = pts[i + 1].y - (tangent[i + 1] * dx[i]) / 3;
+      d += ` C${c1x.toFixed(2)},${c1y.toFixed(2)} ${c2x.toFixed(2)},${c2y.toFixed(2)} ${pts[i + 1].x.toFixed(2)},${pts[i + 1].y.toFixed(2)}`;
+    }
+    return d;
   });
 
   /** The line path closed down to the baseline, for the area wash. */
@@ -182,46 +240,66 @@ export class UsageChartComponent {
     return ticks;
   });
 
+  /**
+   * Full-height hover bands, one per day. The reader aims at a column, not at a
+   * 2px line - and the band is the hit target, so it also satisfies the minimum
+   * target size that a bare mark never would.
+   */
+  public readonly hoverBands = computed(() => {
+    const pts = this.points();
+    if (pts.length === 0) return [];
+    const width = this.plotRight - this.plotLeft;
+    const band = pts.length > 1 ? width / (pts.length - 1) : width;
+
+    return pts.map((p, index) => ({
+      index,
+      date: p.date,
+      x: Math.max(this.plotLeft, p.x - band / 2),
+      width: Math.min(band, this.plotRight - Math.max(this.plotLeft, p.x - band / 2)),
+    }));
+  });
+
   public readonly activePoint = computed(() => {
     const index = this.activeIndex();
     const pts = this.points();
     return index === null || index < 0 || index >= pts.length ? null : pts[index];
   });
 
-  /** Tooltip x position as a % of container width, so it tracks the scaled SVG. */
+  /** The window's busiest day - the one point that earns a direct label. */
+  public readonly peakPoint = computed(() => {
+    const pts = this.points();
+    if (pts.length < 3) return null;
+    let peak = pts[0];
+    for (const p of pts) if (p.value > peak.value) peak = p;
+    return peak.value > 0 ? peak : null;
+  });
+
+  /** Keeps the peak label from hanging off either edge of the plot. */
+  public readonly peakLabelAnchor = computed(() => {
+    const peak = this.peakPoint();
+    if (!peak) return 'middle';
+    if (peak.x < this.plotLeft + 48) return 'start';
+    if (peak.x > this.plotRight - 48) return 'end';
+    return 'middle';
+  });
+
+  /**
+   * Tooltip x as a % of container width, clamped so a tooltip on the first or
+   * last day doesn't hang outside the card (the classic edge-overflow bug an
+   * unconditional -translate-x-1/2 produces).
+   */
   public readonly tooltipLeftPct = computed(() => {
     const point = this.activePoint();
-    return point ? (point.x / this.VIEW_W) * 100 : 0;
+    if (!point) return 0;
+    return Math.min(88, Math.max(12, (point.x / this.VIEW_W) * 100));
   });
 
   public readonly hasData = computed(() => this.points().some((p) => p.value > 0));
 
   // ── Hover / focus ────────────────────────────────────────────────────────
 
-  /**
-   * Maps a pointer position to the NEAREST day rather than requiring a hit on
-   * the 2px line - the reader aims at a date, not at a mark.
-   */
-  public onPointerMove(event: PointerEvent | MouseEvent): void {
-    const svg = this.svgRef()?.nativeElement;
-    const pts = this.points();
-    if (!svg || pts.length === 0) return;
-
-    const rect = svg.getBoundingClientRect();
-    if (rect.width === 0) return;
-
-    const viewX = ((event.clientX - rect.left) / rect.width) * this.VIEW_W;
-
-    let nearest = 0;
-    let bestDistance = Infinity;
-    for (let i = 0; i < pts.length; i++) {
-      const distance = Math.abs(pts[i].x - viewX);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        nearest = i;
-      }
-    }
-    this.activeIndex.set(nearest);
+  public setActive(index: number): void {
+    this.activeIndex.set(index);
   }
 
   public clearActive(): void {
@@ -282,5 +360,16 @@ export class UsageChartComponent {
     const [year, month, day] = isoDate.split('-').map(Number);
     const date = new Date(Date.UTC(year, month - 1, day));
     return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  }
+
+  public formatLongDateLabel(isoDate: string): string {
+    const [year, month, day] = isoDate.split('-').map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return date.toLocaleDateString(undefined, {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      timeZone: 'UTC',
+    });
   }
 }
