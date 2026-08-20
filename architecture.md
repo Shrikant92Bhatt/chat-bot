@@ -1,56 +1,65 @@
 # NexusAI Chat — Architecture
 
-This document reflects the codebase as of the `integration/parallel-agent-batch` branch: the
-pre-existing system plus five features (Terraform IaC, sandboxed code execution, RAG reranking,
-persistent rate limiting + usage tracking, and Projects/Memory/Summarization/Prompt Manager)
-implemented and merged in this session. Nodes marked **NEW** below did not exist before this batch.
-
-Everything described here was independently re-verified against the actual merged source (real
-`tsc`/`nx build` compiles, not agent self-reports) — see "Verification" at the bottom.
+A reference for how the pieces of this system fit together. For setup/deployment instructions, see
+[README.md](README.md); for the exhaustive file-by-file internal reference (module by module, every
+env var, every known gap), see [`.agents/PROJECT_CONTEXT.md`](.agents/PROJECT_CONTEXT.md) — this
+document is the narrative version of the same system.
 
 ## 1. System overview
 
 ```mermaid
 flowchart TB
-    User["Browser<br/>(Angular chat-client)"]
+    User["Browser"]
+
+    subgraph Client["chat-client (Angular, Cloud Run)"]
+        direction TB
+        ChatUI["Chat UI<br/>navbar, sidebar, chat-window"]
+        AdminLib["Admin console<br/>libs/frontend/admin-analytics<br/>consumed lib, admin-only nav icon"]
+    end
 
     subgraph API["chat-api (Express, Cloud Run)"]
         direction TB
         Auth["Auth middleware<br/>Google OAuth2 → JWT session"]
-        RateLimit["Rate limiter — NEW<br/>Firestore rateLimits/ collection<br/>anon:ip + user:uid, atomic tx"]
-        Routes["Routes<br/>/api/chat/*, /api/auth/*, /api/v1/projects/*"]
-        CtxBuilder["Context Builder — NEW<br/>Promise.allSettled, fail-soft"]
-        PromptMgr["Prompt Manager — NEW<br/>versioned templates"]
+        AdminAuth["requireAdmin<br/>fresh Firestore role read<br/>on every request"]
+        RateLimit["Rate limiter<br/>Firestore rateLimits/, atomic tx"]
+        Routes["Routes<br/>/api/chat/*, /api/auth/*,<br/>/api/v1/projects/*, /api/v1/admin/*"]
+        CtxBuilder["Context Builder<br/>Promise.allSettled, fail-soft"]
+        PromptMgr["Prompt Manager<br/>versioned templates"]
         Graph["LangGraph orchestrator<br/>agent ↔ tools loop"]
-        Usage["Usage Service — NEW<br/>Firestore usage/ collection"]
+        Usage["Usage Service<br/>Firestore usage/ collection"]
+        Analytics["Analytics Service<br/>in-process aggregation"]
     end
 
     subgraph Context["Context sources (gathered per turn)"]
-        RAG["RAG Retriever<br/>vector search + hybrid rerank — NEW"]
-        Memory["Memory Service — NEW<br/>gated extraction"]
-        Projects["Project Service — NEW<br/>instructions + files"]
-        Summary["Summarizer — NEW<br/>rolling thread summary"]
+        RAG["RAG Retriever<br/>vector search + hybrid rerank"]
+        Memory["Memory Service<br/>gated extraction"]
+        Projects["Project Service<br/>instructions + files"]
+        Summary["Summarizer<br/>rolling thread summary"]
     end
 
     subgraph Tools["MCP Tools"]
-        Calc["calculator (real)"]
-        Sandbox["code_interpreter — NEW<br/>isolated-vm V8 isolate"]
-        ImageGen["generate_image (real, GCS)"]
+        Calc["calculator"]
+        Sandbox["code_interpreter<br/>isolated-vm V8 isolate"]
+        ImageGen["generate_image (GCS)"]
         WebSearch["web_search<br/>(OpenRouter only)"]
     end
 
     Gateway["LLM Gateway<br/>OpenRouter (preferred) / local OmniRoute"]
     LLMs["Gemini / GPT / Claude / Llama<br/>(via OpenRouter) or self-hosted"]
 
-    Firestore[("Firestore<br/>users, threads, projects,<br/>memories, usage, rateLimits")]
+    Firestore[("Firestore<br/>users (+role), threads, projects,<br/>memories, usage, rateLimits")]
     GCS[("Cloud Storage<br/>uploads, generated images")]
 
-    User -->|HTTPS / SSE| Auth --> RateLimit --> Routes --> CtxBuilder
+    User -->|HTTPS / SSE| ChatUI
+    ChatUI -.admin only.-> AdminLib
+    ChatUI --> Auth --> RateLimit --> Routes --> CtxBuilder
+    AdminLib -->|Bearer token| Routes
+    Routes --> AdminAuth --> Analytics --> Firestore
     CtxBuilder --> RAG & Memory & Projects & Summary
     CtxBuilder --> PromptMgr --> Graph
     Graph <--> Tools
     Graph --> Gateway --> LLMs
-    Graph -.stream tokens.-> User
+    Graph -.stream tokens.-> ChatUI
     Graph -->|after stream ends| Usage --> Firestore
     RateLimit --> Firestore
     Memory --> Firestore
@@ -59,16 +68,16 @@ flowchart TB
     RAG -.rehydrate project files.-> Firestore
     ImageGen --> GCS
     Routes -->|/documents, /projects/:id/files| GCS
-
-    classDef new fill:#2d5a3d,stroke:#4ade80,color:#fff
-    class RateLimit,CtxBuilder,PromptMgr,Usage,RAG,Memory,Projects,Summary,Sandbox new
 ```
 
-## 2. Context assembly — the core of this session's work
+One deployable unit for the frontend, one for the backend — the admin console is a library consumed
+directly into chat-client's build (`@chat-monorepo/admin-analytics`, the same mechanism `libs/shared`
+already uses for shared types), not a third service. See §5.
 
-Four features (Projects, Memory, Summarization, Prompt Manager) were deliberately built together
-because they all modify the same step: building the system prompt for a turn. Before this batch,
-that step was a single inline RAG call; it's now a dedicated pipeline.
+## 2. Context assembly — the core of the chat pipeline
+
+Four features share one code path, deliberately, because they all modify the same step: building the
+system prompt for a turn.
 
 ```mermaid
 sequenceDiagram
@@ -108,21 +117,26 @@ sequenceDiagram
 flowchart LR
     Q["Query"] --> VS["Vector Search<br/>cosine similarity,<br/>hashing embedding<br/>(256-dim, dependency-free)"]
     VS -->|"over-fetch max(topK×4, 10)<br/>scoped by {ownerId, projectId}"| Filter["Relevance filter<br/>score > 0.12"]
-    Filter --> Fusion["Hybrid Rerank — NEW<br/>BM25 lexical score<br/>+ cosine, fused by<br/>Reciprocal Rank Fusion"]
-    Fusion -->|"opt-in only,<br/>not default path"| LLMRerank["LLM Reranker — NEW<br/>(optional, adds 500ms-2s)"]
+    Filter --> Fusion["Hybrid Rerank<br/>BM25 lexical score<br/>+ cosine, fused by<br/>Reciprocal Rank Fusion"]
+    Fusion -->|"opt-in only,<br/>not default path"| LLMRerank["LLM Reranker<br/>(optional, adds 500ms-2s)"]
     Fusion --> TopK["Top K chunks"]
     LLMRerank --> TopK
     TopK --> Prompt["injected into system prompt<br/>via Prompt Manager"]
-
-    classDef new fill:#2d5a3d,stroke:#4ade80,color:#fff
-    class Fusion,LLMRerank new
 ```
 
 **Scoping rule:** a document is visible when `ownerId` matches AND (`projectId === null` OR it
 equals the conversation's project) — project files never leak outside their project; the personal
 knowledge base is visible everywhere. Project files are additionally persisted in Firestore and
 re-hydrated into the in-process vector store on first use per server instance, so they survive a
-restart — the personal knowledge base does not.
+restart — the personal knowledge base does not (in-process only, resets on restart, not shared
+across Cloud Run instances — a managed vector DB would fix that, but isn't required for correctness).
+
+**Why lexical fusion, not a second embeddings pass:** the hashing embedding isn't a real semantic
+model, so re-embedding and comparing again would just reproduce the same cosine ranking with hash
+noise. A cheap, independent lexical signal (BM25) is where the actual correction comes from —
+verified directly: a short, genuinely on-topic chunk can be outranked by cosine alone by a longer
+chunk that happens to repeat common query words (no IDF in the hashing embedding); hybrid reranking
+correctly promotes the on-topic chunk back to #1.
 
 ## 4. Code execution sandbox
 
@@ -135,18 +149,80 @@ flowchart TB
     Race -->|either fires first| Dispose["isolate disposed"]
     Isolate -.no fs/net/process/fetch<br/>ever injected into globals.-> Blocked["require('fs') → throws<br/>fetch → undefined"]
     Dispose --> Result["stdout/stderr/result/error<br/>/exitReason/durationMs"]
-
-    classDef new fill:#2d5a3d,stroke:#4ade80,color:#fff
-    class Sandbox,Isolate,Run,Race,Dispose new
 ```
 
 Isolation is **isolate-level (separate V8 heap), not OS/container-level** — same process/container
 as the API server. Stronger than Node's `vm` module (shared heap, no real boundary), weaker than a
-dedicated container/VM/gVisor sandbox. The double-timeout exists because `isolated-vm`'s own
-timeout only bounds synchronous execution — a script `await`-ing a promise that never resolves
-was not reliably killed by it alone during testing.
+dedicated container/VM/gVisor sandbox — Cloud Run has no Docker-in-Docker/privileged mode available
+for a heavier per-execution sandbox. The double-timeout exists because `isolated-vm`'s own timeout
+only bounds synchronous execution — a script `await`-ing a promise that never resolves is not
+reliably killed by it alone.
 
-## 5. Rate limiting & usage tracking
+## 5. Frontend — apps that are deployed vs. libs that are consumed
+
+```mermaid
+flowchart LR
+    subgraph Deployed["Deployed independently"]
+        ChatClient["apps/chat-client<br/>the only frontend Cloud Run service"]
+        ChatApi["apps/chat-api"]
+    end
+    subgraph Consumed["Built INTO chat-client's bundle"]
+        Shared["libs/shared<br/>@chat-monorepo/shared<br/>types/DTOs"]
+        AdminLib["libs/frontend/admin-analytics<br/>@chat-monorepo/admin-analytics<br/>dashboard components"]
+    end
+    ChatClient --> Shared
+    ChatClient --> AdminLib
+    ChatApi --> Shared
+    AdminLib -.HTTP, Bearer token.-> ChatApi
+```
+
+The admin console was deliberately built this way rather than as its own deployable app: one build,
+one Cloud Run service, one auth session — no second login, no cross-origin CORS/OAuth-origin
+configuration to maintain, no second thing to deploy and keep in sync. The tradeoff is that the lib
+can't have its own independent release cadence, which doesn't matter at this scale.
+
+Because a lib can't depend on the app that consumes it (Nx enforces this — `libs/frontend/admin-analytics`
+cannot import from `apps/chat-client`), the lib depends on a small injection-token interface instead
+(`ADMIN_AUTH_BRIDGE` / `ADMIN_API_BASE_URL`, defined in the lib, provided by chat-client's
+`app.config.ts` using its own `AuthService`). This keeps the lib testable/buildable on its own and
+avoids a circular architectural dependency.
+
+## 6. Admin console authorization
+
+```mermaid
+flowchart TB
+    Req["Request to /api/v1/admin/*"] --> AuthMw["authenticateToken<br/>verifies the 7-day session JWT"]
+    AuthMw -->|invalid/expired| E401["401"]
+    AuthMw -->|valid| AdminMw["requireAdmin"]
+    AdminMw --> FreshRead["Fresh Firestore read:<br/>users/uid.role"]
+    FreshRead -->|not admin, or read fails| E403["403 Forbidden<br/>(fails CLOSED, not soft)"]
+    FreshRead -->|admin| Handler["Route handler"]
+
+    Handler -.PATCH role.-> LastAdminCheck{"Is target the<br/>only admin,<br/>demoting to user?"}
+    LastAdminCheck -->|yes| E400["400 LastAdmin<br/>rejected"]
+    LastAdminCheck -->|no| SetRole["Role updated"]
+```
+
+The role is deliberately **never a JWT claim** — the session token lives 7 days, so baking the role
+in would keep a demoted admin privileged for up to a week. `requireAdmin` re-reads Firestore on
+every single admin request instead, verified directly: promoting a second account flips their
+*already-issued, unchanged* token from 403 to 200 on the very next call, and demoting the original
+admin flips theirs from 200 to 403 immediately — no re-login required either way.
+
+This is also the one place in the backend that **fails closed** rather than soft — everywhere else
+(§2's context assembly) a Firestore hiccup degrades the answer and keeps going; here a Firestore
+error denies access. Getting the first admin account requires a one-time migration script (see
+[README.md § Admin Console](README.md#admin-console)); every promotion after that goes through the
+console itself, guarded so the last remaining admin can never be demoted (a live safety net — there
+is currently exactly one admin).
+
+Usage/cost aggregation (`AnalyticsService`) reads the date-filtered `usage` collection into memory —
+Firestore has no server-side GROUP BY. Capped at 20k records scanned per query, with an explicit
+`truncated: true` flag surfaced in the dashboard rather than silently showing a partial total as
+complete. Fine at current volume; a scheduled BigQuery export is the intended path at real scale
+(Firestore for app-level operational data, BigQuery for large-scale analytics).
+
+## 7. Rate limiting & usage tracking
 
 ```mermaid
 flowchart LR
@@ -160,87 +236,53 @@ flowchart LR
     Continue --> Complete["turn completes"]
     Complete --> Log["UsageService.logUsage()<br/>after res.end() — never blocks response"]
     Log --> UsageDoc[("Firestore usage/<br/>requestId, tokens, latency,<br/>estimatedCostUsd")]
-
-    classDef new fill:#2d5a3d,stroke:#4ade80,color:#fff
-    class AnonKey,UserKey,Tx,E2,Log,UsageDoc new
 ```
 
-Correctness matters more here than it sounds: the rate limiter it replaced was an in-memory `Map`,
-which was not just non-persistent but actually wrong under Cloud Run's multi-instance concurrency
-(each instance had its own counter). It also closed a real gap — previously any signed-in user had
-**no** limit at all.
+The rate limiter is Firestore-backed rather than an in-memory counter specifically because Cloud Run
+runs multiple concurrent instances — an in-memory `Map` isn't just non-persistent, it's actually
+wrong under that concurrency model (each instance would have its own counter). It also closed a real
+gap: previously any signed-in user had no rate limit at all, only anonymous trial users did.
 
-## 6. What's implemented in this session — task list
-
-| # | Task | Branch | Status |
-|---|------|--------|--------|
-| 1 | Terraform IaC scaffold (9 modules × 3 environments) | `feat/terraform-iac-scaffold` | ✅ merged, code-only, nothing provisioned |
-| 2 | Sandboxed code execution (`code_interpreter`) | `feat/code-execution-sandbox` | ✅ merged, real isolate-level sandboxing |
-| 3 | RAG hybrid reranking (BM25 + cosine via RRF) | `feat/rag-reranking` | ✅ merged |
-| 4 | Persistent rate limiting + usage/cost tracking | `feat/rate-limiting-usage-tracking` | ✅ merged |
-| 5 | Projects (CRUD + scoped RAG + UI) | `feat/projects-memory-context` | ✅ merged |
-| 6 | Long-term memory (gated extraction) | `feat/projects-memory-context` | ✅ merged |
-| 7 | Conversation summarization | `feat/projects-memory-context` | ✅ merged |
-| 8 | Prompt Manager (versioned templates) | `feat/projects-memory-context` | ✅ merged |
-
-All eight land on `integration/parallel-agent-batch`, currently a local branch (not pushed, not
-merged to `main`) — both `chat-api` and `chat-client` build clean on the merged result.
-
-### Not started (deliberately queued, needs your input before starting)
-
-- **Structured response blocks** (typed text/table/code/citation JSON instead of markdown) — touches
-  the same streaming contract this batch already changed; should sequence after this merge lands.
-- **Multi-tenancy** (`tenantId` isolation) — better done once Projects/Memory schemas are settled,
-  which they now are.
-- **Observability** (OpenTelemetry/Cloud Trace spans).
-- **Managed vector DB swap** (e.g. Vertex AI Vector Search) — needs a provider decision from you,
-  since it's a real GCP cost. See §7 — **not required** for anything in this batch to work.
-
-## 7. Configuration — what's required vs. optional
-
-Nothing new in this batch requires a paid or externally-provisioned service. Everything runs on
-Firestore (already required) plus in-process state.
+## 8. Configuration — what's required vs. optional
 
 | Key / service | Required? | Why |
 |---|---|---|
-| `GEMINI_API_KEY` | Yes (pre-existing) | Primary model + memory extraction + summarization LLM calls |
-| `GOOGLE_CLIENT_ID` | Yes (pre-existing) | OAuth login |
-| Firestore | Yes (pre-existing) | Now also backs rate limits, usage records, projects, memories, thread summaries — no new database was introduced |
-| `OPENROUTER_API_KEY` | No | Only needed for web_search and multi-provider routing; everything in this batch works on Gemini alone |
-| **Vector DB (Pinecone/Weaviate/Vertex AI Vector Search)** | **Not required** | RAG reranking and Projects both build on the existing in-process hashing-embedding store. A managed vector DB would fix "resets on restart," not correctness — it's a scaling improvement, not a dependency |
-| **Redis / Memorystore** | **Not required** | Rate limiting and usage tracking are Firestore-backed by design, specifically so no new infra dependency was needed. The Terraform `redis` module is scaffolded (disabled by default) for *future* work only — nothing today calls it |
-| **Pub/Sub** | **Not required** | Scaffolded in Terraform for future async ingestion; RAG ingestion today is synchronous and works without it |
-| `isolated-vm` (npm package) | Yes, for code execution | No external key — ships prebuilt native binaries, confirmed working on both the Alpine Docker image target and this dev machine with zero compile step |
-| `CODE_SANDBOX_TIMEOUT_MS` / `CODE_SANDBOX_MEMORY_MB` | No (has defaults) | Server-side clamps on the sandbox, not client-overridable |
-| `ANON_TRIAL_MESSAGE_LIMIT` / `AUTH_DAILY_MESSAGE_LIMIT` / `RATE_LIMIT_WINDOW_HOURS` | No (has defaults) | Rate limit tuning |
-| GCS (`GCS_BUCKET_NAME`, `GOOGLE_APPLICATION_CREDENTIALS`) | No (pre-existing, optional) | Only needed for image generation and file-attachment storage URLs; the app degrades to inline data URIs / mock URLs without it — this batch didn't change that |
-| Terraform / GCP provisioning | No | The scaffold is code only; nothing was run against real GCP infrastructure this session |
+| `GEMINI_API_KEY` | Yes | Chat responses, memory extraction, summarization |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Yes | Google Sign-In |
+| Firestore | Yes | Threads, projects, memories, rate limits, usage records, user roles — one database backs all of it |
+| `OPENROUTER_API_KEY` | No | Enables multi-provider routing, the real `web_search` tool, and image generation. Chat itself works on Gemini alone |
+| **Vector DB (Pinecone/Weaviate/Vertex AI Vector Search)** | **Not required** | RAG and Projects run on an in-process hashing-embedding store. A managed vector DB would fix "resets on restart," not correctness |
+| **Redis / Memorystore** | **Not required** | Rate limiting and usage tracking are Firestore-backed by design, specifically so no extra infra dependency was needed |
+| `isolated-vm` (npm package) | Bundled | No external key — ships prebuilt native binaries, no compile step, for both the Alpine Docker image and typical local dev machines |
+| `GCS_BUCKET_NAME` / `GOOGLE_APPLICATION_CREDENTIALS` | No | Image generation and file uploads degrade to inline data URIs / mock URLs without it, rather than failing |
+| Terraform / any IaC | No | Removed — infra is managed directly via the `gcloud` commands already in `cloudbuild.yaml`/CI, which was already the real deployment path even when a Terraform scaffold briefly existed alongside it |
 
-## 8. Known gaps (carried into `.agents/PROJECT_CONTEXT.md`)
+Full env var reference with defaults: [`.env.example`](.env.example).
+
+## 9. Known gaps
 
 - The personal RAG knowledge base is in-process only — resets on restart, not shared across Cloud
-  Run instances. Project files are the exception (rehydrated from Firestore).
-- The legacy fallback path (`AIRouterService`, used only if the LangGraph call fails before any
-  token streams) does not re-apply project instructions/memories/summary, and does not log usage.
-- Memory extraction only reads the user's messages — facts the assistant states are never stored.
+  Run instances. Project files are the exception (rehydrated from Firestore on first use).
+- The legacy fallback path (`AIRouterService`, only reached if the LangGraph gateway call fails
+  before any token streams) doesn't re-apply project instructions/memories/summary, and doesn't log
+  usage.
+- Memory extraction only reads the user's own messages — facts the assistant states are never
+  stored.
 - `GET /api/chat/usage` needs a Firestore composite index (`userId` ASC + `timestamp` DESC) not
   provisioned anywhere yet — Firestore will surface a console link to create it on first real use.
-- Token counts for usage/cost are verified against OpenRouter; unverified against the local
+  (The admin analytics API deliberately avoids this shape — timestamp-only queries, filtered further
+  in-process — specifically so it doesn't need one.)
+- Token counts for usage/cost are verified against OpenRouter; unverified against a local
   self-hosted OmniRoute gateway (falls back to explicit `null`, never fabricated, when absent).
+- Admin usage aggregation is in-process and capped (see §6) — not a design that scales past a
+  moderate request volume without a BigQuery export.
 
-## 9. Verification performed this session
+## 10. How this codebase verifies changes
 
-Every claim above was checked against the actual merged source, not agent self-reports:
-
-- All five feature branches were merged into `integration/parallel-agent-batch` by hand, resolving
-  6 real file conflicts (not auto-merged blindly — one auto-merge silently dropped a branch's
-  changes without flagging a conflict, caught by inspecting the result before trusting it).
-- `npx nx build chat-api` and `npx nx build chat-client` both run clean on the merged branch, with
-  `dist/` output confirmed to contain the new modules (`reranker.js`, `project.service.js`,
-  `memory.service.js`, `code-sandbox.js`, `usage.service.js`).
-- A separate Nx-daemon bug was found and worked around: building from a git worktree whose
-  `node_modules` is a junction to the main checkout silently compiles the main checkout's source
-  instead of the worktree's. Every worktree branch was re-verified with a direct `tsc` compile
-  (bypassing the daemon) before being trusted.
-- `isolated-vm`'s prebuilt binary presence was confirmed directly in `node_modules`, not just cited
-  from the agent's report.
+Not a formal test suite (there isn't one yet) — the working practice has been: real builds from a
+clean cache (`rm -rf dist .nx/cache`, `nx run-many -t build`) rather than trusting incremental
+build/cache state, and for anything security- or behavior-sensitive (the admin authorization
+boundary, the chat auto-scroll logic, RAG reranking quality), a live check against the running
+system — real HTTP requests with real tokens against real data, or a real browser session — rather
+than reasoning about the code in the abstract. Claims in this document and in
+`.agents/PROJECT_CONTEXT.md` reflect that: verified behavior, not just what the code appears to do.
