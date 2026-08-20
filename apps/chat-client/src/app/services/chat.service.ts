@@ -6,6 +6,9 @@ import {
   SelectableModel,
   SELECTABLE_MODELS,
   DEFAULT_MODEL_ID,
+  UIComponent,
+  OrchestratorSource,
+  OrchestratorAction,
 } from '@chat-monorepo/shared';
 import { AuthService } from './auth.service';
 import { getApiBaseUrl } from '../core/runtime-config';
@@ -535,6 +538,10 @@ export class ChatService {
               if (data.done && Array.isArray(data.suggestions) && data.suggestions.length > 0) {
                 this.setMessageSuggestions(currentThreadId, assistantMessageId, data.suggestions);
               }
+
+              if (data.done && Array.isArray(data.ui) && data.ui.length > 0) {
+                this.setMessageUi(currentThreadId, assistantMessageId, data.ui, data.sources, data.actions);
+              }
             } catch (e) {
               // Ignore partial chunk parse failures
             }
@@ -593,6 +600,30 @@ export class ChatService {
       threadsList.map((t) => {
         if (t.id === threadId) {
           const updatedMessages = t.messages.map((m) => (m.id === messageId ? { ...m, suggestions } : m));
+          return { ...t, messages: updatedMessages };
+        }
+        return t;
+      })
+    );
+  }
+
+  /**
+   * Attaches the orchestrator's structured UI payload to a message, once,
+   * on the final `done: true` SSE event - mirrors setMessageSuggestions.
+   * `data.ui`/`sources`/`actions` are already validated server-side (see
+   * apps/chat-api/src/orchestration/ui-schema.ts) so this just stores them.
+   */
+  private setMessageUi(
+    threadId: string,
+    messageId: string,
+    ui: UIComponent[],
+    sources?: OrchestratorSource[],
+    actions?: OrchestratorAction[]
+  ) {
+    this.threads.update((threadsList) =>
+      threadsList.map((t) => {
+        if (t.id === threadId) {
+          const updatedMessages = t.messages.map((m) => (m.id === messageId ? { ...m, ui, sources, actions } : m));
           return { ...t, messages: updatedMessages };
         }
         return t;

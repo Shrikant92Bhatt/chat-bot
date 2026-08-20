@@ -1,0 +1,334 @@
+<div *ngIf="components && components.length > 0" class="mt-3 flex flex-col gap-3">
+  <div *ngFor="let component of components" [ngSwitch]="component.type" class="max-w-lg">
+
+    <!-- TEXT -->
+    <div *ngSwitchCase="'TEXT'" class="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-200 whitespace-pre-wrap">
+      {{ component.data.text }}
+    </div>
+
+    <!-- MARKDOWN -->
+    <div *ngSwitchCase="'MARKDOWN'" class="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
+      <div class="markdown-body text-sm text-slate-200" [innerHTML]="renderMarkdown(component.data.text)"></div>
+    </div>
+
+    <!-- TABLE -->
+    <div *ngSwitchCase="'TABLE'" class="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm text-left">
+          <thead>
+            <tr class="border-b border-white/10">
+              <th *ngFor="let col of component.data.columns" class="px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-slate-400">
+                {{ col }}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let row of component.data.rows" class="border-b border-white/5 last:border-0">
+              <td *ngFor="let cell of row" class="px-3 py-2 text-slate-200">{{ cell ?? '—' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- CHART -->
+    <div *ngSwitchCase="'CHART'" class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+      <div *ngIf="component.data.title" class="text-[11px] font-medium text-slate-400 mb-2">{{ component.data.title }}</div>
+
+      <svg *ngIf="component.data.chartType === 'line'" viewBox="0 0 300 120" class="w-full h-32">
+        <polyline
+          *ngFor="let series of component.data.series; let i = index"
+          [attr.points]="linePoints(component.data, i)"
+          fill="none"
+          [attr.stroke]="seriesColor(i)"
+          stroke-width="2"
+        />
+      </svg>
+
+      <svg *ngIf="component.data.chartType === 'area'" viewBox="0 0 300 120" class="w-full h-32">
+        <polygon
+          *ngFor="let series of component.data.series; let i = index"
+          [attr.points]="areaPoints(component.data, i)"
+          [attr.fill]="seriesColor(i)"
+          fill-opacity="0.18"
+          [attr.stroke]="seriesColor(i)"
+          stroke-width="2"
+        />
+      </svg>
+
+      <svg *ngIf="component.data.chartType === 'bar'" viewBox="0 0 300 120" class="w-full h-32">
+        <rect
+          *ngFor="let bar of barRects(component.data)"
+          [attr.x]="bar.x"
+          [attr.y]="bar.y"
+          [attr.width]="bar.width"
+          [attr.height]="bar.height"
+          [attr.fill]="bar.color"
+          rx="1"
+        >
+          <title>{{ bar.label }}: {{ bar.value }}</title>
+        </rect>
+      </svg>
+
+      <svg *ngIf="component.data.chartType === 'scatter'" viewBox="0 0 300 120" class="w-full h-32">
+        <circle
+          *ngFor="let point of scatterPoints(component.data)"
+          [attr.cx]="point.cx"
+          [attr.cy]="point.cy"
+          r="3"
+          [attr.fill]="point.color"
+        >
+          <title>{{ point.label }}: {{ point.value }}</title>
+        </circle>
+      </svg>
+
+      <div *ngIf="component.data.chartType === 'pie'" class="flex items-center gap-4">
+        <svg viewBox="0 0 100 100" class="w-28 h-28 shrink-0 -rotate-90">
+          <circle
+            *ngFor="let slice of pieSlices(component.data)"
+            cx="50"
+            cy="50"
+            r="40"
+            fill="none"
+            [attr.stroke]="slice.color"
+            stroke-width="20"
+            [attr.stroke-dasharray]="slice.dasharray"
+            [attr.stroke-dashoffset]="slice.dashoffset"
+          >
+            <title>{{ slice.label }}: {{ slice.percent }}%</title>
+          </circle>
+        </svg>
+        <ul class="text-xs text-slate-300 space-y-1">
+          <li *ngFor="let slice of pieSlices(component.data)" class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full shrink-0" [style.background]="slice.color"></span>
+            <span>{{ slice.label }} — {{ slice.percent }}%</span>
+          </li>
+        </ul>
+      </div>
+
+      <div class="flex flex-wrap gap-3 mt-3">
+        <div *ngFor="let series of component.data.series; let i = index" class="flex items-center gap-1.5 text-[11px] text-slate-400">
+          <span class="w-2 h-2 rounded-full shrink-0" [style.background]="seriesColor(i)"></span>
+          {{ series.name }}
+        </div>
+      </div>
+    </div>
+
+    <!-- WEATHER_CARD -->
+    <div *ngSwitchCase="'WEATHER_CARD'" class="rounded-2xl border border-white/10 bg-gradient-to-br from-accentCyan/10 to-white/[0.03] p-4">
+      <div class="text-[11px] font-medium text-slate-400">{{ component.data.location }}</div>
+      <div class="flex items-baseline gap-2 mt-1">
+        <span class="text-3xl font-semibold text-white">{{ component.data.current.temperature }}°</span>
+        <span class="text-sm text-slate-300">{{ component.data.current.condition }}</span>
+      </div>
+      <div class="flex gap-4 mt-2 text-xs text-slate-400">
+        <span>Humidity {{ component.data.current.humidity }}%</span>
+        <span>Wind {{ component.data.current.windSpeed }} km/h</span>
+      </div>
+      <div *ngIf="component.data.forecast && component.data.forecast.length > 0" class="flex gap-3 mt-3 overflow-x-auto pb-1">
+        <div *ngFor="let day of component.data.forecast" class="flex flex-col items-center shrink-0 text-xs text-slate-300 bg-white/[0.03] rounded-xl px-2.5 py-2 min-w-[64px]">
+          <span class="text-[10px] text-slate-400">{{ day.date }}</span>
+          <span class="mt-1">{{ day.condition }}</span>
+          <span class="mt-1"><span class="text-slate-100">{{ day.temperatureHigh }}°</span> / {{ day.temperatureLow }}°</span>
+          <span class="text-[10px] text-accentCyan mt-1">{{ day.precipitationProbability }}%</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- STOCK_CARD -->
+    <div *ngSwitchCase="'STOCK_CARD'" class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-sm font-semibold text-white">{{ component.data.symbol }}</div>
+          <div class="text-[11px] text-slate-400">{{ component.data.name }}</div>
+        </div>
+        <div class="text-right">
+          <div class="text-lg font-semibold text-white">{{ component.data.price | number: '1.2-2' }} {{ component.data.currency }}</div>
+          <div class="text-xs" [ngClass]="changeColorClass(component.data.change)">
+            {{ component.data.change >= 0 ? '+' : '' }}{{ component.data.change | number: '1.2-2' }}
+            ({{ component.data.changePercent >= 0 ? '+' : '' }}{{ component.data.changePercent | number: '1.2-2' }}%)
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STOCK_CHART -->
+    <div *ngSwitchCase="'STOCK_CHART'" class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+      <div class="flex items-center justify-between mb-2">
+        <div class="text-sm font-semibold text-white">{{ component.data.symbol }}<span *ngIf="component.data.name" class="text-slate-400 font-normal"> · {{ component.data.name }}</span></div>
+        <div *ngIf="component.data.interval" class="text-[11px] text-slate-400">{{ component.data.interval }}</div>
+      </div>
+      <svg viewBox="0 0 300 120" class="w-full h-24">
+        <polyline [attr.points]="stockSparklinePoints(component.data)" fill="none" stroke="#06b6d4" stroke-width="2" />
+      </svg>
+    </div>
+
+    <!-- NEWS_CARD -->
+    <div *ngSwitchCase="'NEWS_CARD'" class="rounded-2xl border border-white/10 bg-white/[0.03] p-2 flex flex-col gap-2">
+      <a
+        *ngFor="let article of component.data.articles"
+        [href]="article.url || null"
+        target="_blank"
+        rel="noopener"
+        class="flex gap-3 rounded-xl p-2 hover:bg-white/[0.04] transition-colors"
+        [class.cursor-default]="!article.url"
+      >
+        <img *ngIf="article.imageUrl" [src]="article.imageUrl" alt="" class="w-14 h-14 rounded-lg object-cover shrink-0" />
+        <div class="min-w-0">
+          <div class="text-sm text-slate-100 font-medium line-clamp-2">{{ article.title }}</div>
+          <div *ngIf="article.summary" class="text-xs text-slate-400 line-clamp-2 mt-0.5">{{ article.summary }}</div>
+          <div class="text-[10px] text-slate-500 mt-1">
+            <span *ngIf="article.source">{{ article.source }}</span>
+            <span *ngIf="article.source && article.publishedAt"> · </span>
+            <span *ngIf="article.publishedAt">{{ article.publishedAt }}</span>
+          </div>
+        </div>
+      </a>
+    </div>
+
+    <!-- MAP -->
+    <div *ngSwitchCase="'MAP'" class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+      <div class="text-xs text-slate-400">Location</div>
+      <div class="text-sm text-slate-100 mt-0.5">{{ component.data.center.lat | number: '1.4-4' }}, {{ component.data.center.lng | number: '1.4-4' }}</div>
+      <div *ngIf="component.data.markers && component.data.markers.length > 0" class="flex flex-wrap gap-1.5 mt-2">
+        <span *ngFor="let marker of component.data.markers" class="text-[11px] px-2 py-1 rounded-full bg-white/[0.06] text-slate-300">
+          {{ marker.label || (marker.lat | number: '1.2-2') + ', ' + (marker.lng | number: '1.2-2') }}
+        </span>
+      </div>
+      <a
+        [href]="osmLink(component.data.center.lat, component.data.center.lng, component.data.zoom || 12)"
+        target="_blank"
+        rel="noopener"
+        class="inline-block text-[11px] text-accentCyan hover:underline mt-3"
+      >
+        Open map ↗
+      </a>
+    </div>
+
+    <!-- PRODUCT_CARD -->
+    <div *ngSwitchCase="'PRODUCT_CARD'" class="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden max-w-xs">
+      <img *ngIf="component.data.imageUrl" [src]="component.data.imageUrl" alt="" class="w-full h-32 object-cover" />
+      <div class="p-3">
+        <div class="text-sm text-slate-100 font-medium line-clamp-2">{{ component.data.name }}</div>
+        <div *ngIf="component.data.description" class="text-xs text-slate-400 line-clamp-2 mt-1">{{ component.data.description }}</div>
+        <div class="flex items-center justify-between mt-2">
+          <span *ngIf="component.data.price != null" class="text-sm font-semibold text-white">{{ component.data.price | number: '1.2-2' }} {{ component.data.currency }}</span>
+          <span *ngIf="component.data.rating != null" class="text-xs text-accentAmber">★ {{ component.data.rating }}</span>
+        </div>
+        <a *ngIf="component.data.url" [href]="component.data.url" target="_blank" rel="noopener" class="inline-block text-[11px] text-accentCyan hover:underline mt-2">
+          View product ↗
+        </a>
+      </div>
+    </div>
+
+    <!-- PRODUCT_CAROUSEL -->
+    <div *ngSwitchCase="'PRODUCT_CAROUSEL'" class="flex gap-3 overflow-x-auto pb-1">
+      <div *ngFor="let product of component.data.products" class="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden shrink-0 w-40">
+        <img *ngIf="product.imageUrl" [src]="product.imageUrl" alt="" class="w-full h-24 object-cover" />
+        <div class="p-2.5">
+          <div class="text-xs text-slate-100 font-medium line-clamp-2">{{ product.name }}</div>
+          <div class="flex items-center justify-between mt-1.5">
+            <span *ngIf="product.price != null" class="text-xs font-semibold text-white">{{ product.price | number: '1.0-2' }} {{ product.currency }}</span>
+            <span *ngIf="product.rating != null" class="text-[10px] text-accentAmber">★ {{ product.rating }}</span>
+          </div>
+          <a *ngIf="product.url" [href]="product.url" target="_blank" rel="noopener" class="inline-block text-[10px] text-accentCyan hover:underline mt-1.5">
+            View ↗
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- FILE_CARD -->
+    <a
+      *ngSwitchCase="'FILE_CARD'"
+      [href]="component.data.url || null"
+      target="_blank"
+      rel="noopener"
+      class="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3 hover:bg-white/[0.05] transition-colors max-w-sm"
+    >
+      <div class="w-9 h-9 rounded-lg bg-accentCyan/15 flex items-center justify-center text-accentCyan text-xs font-semibold shrink-0">
+        {{ (component.data.fileType || component.data.fileName.split('.').pop() || 'FILE').slice(0, 4).toUpperCase() }}
+      </div>
+      <div class="min-w-0">
+        <div class="text-sm text-slate-100 truncate">{{ component.data.fileName }}</div>
+        <div class="text-[11px] text-slate-400">{{ formatBytes(component.data.sizeBytes) }}</div>
+      </div>
+    </a>
+
+    <!-- DOCUMENT_PREVIEW -->
+    <div *ngSwitchCase="'DOCUMENT_PREVIEW'" class="rounded-2xl border border-white/10 bg-white/[0.03] p-4 max-w-md">
+      <div class="flex items-center justify-between">
+        <div class="text-sm text-slate-100 font-medium truncate">{{ component.data.fileName }}</div>
+        <span *ngIf="component.data.pageCount" class="text-[11px] text-slate-400 shrink-0 ml-2">{{ component.data.pageCount }} pages</span>
+      </div>
+      <div *ngIf="component.data.excerpt" class="text-xs text-slate-400 mt-2 line-clamp-4 whitespace-pre-wrap">{{ component.data.excerpt }}</div>
+      <a *ngIf="component.data.url" [href]="component.data.url" target="_blank" rel="noopener" class="inline-block text-[11px] text-accentCyan hover:underline mt-2">
+        Open document ↗
+      </a>
+    </div>
+
+    <!-- CODE_BLOCK -->
+    <div *ngSwitchCase="'CODE_BLOCK'" class="rounded-2xl border border-white/10 bg-black/40 overflow-hidden">
+      <div class="flex items-center justify-between px-3 py-1.5 border-b border-white/10">
+        <span class="text-[11px] text-slate-400">{{ component.data.fileName || component.data.language }}</span>
+        <span class="text-[10px] text-slate-500">{{ component.data.language }}</span>
+      </div>
+      <pre class="p-3 text-xs text-slate-200 overflow-x-auto"><code>{{ component.data.code }}</code></pre>
+    </div>
+
+    <!-- ERROR_CARD -->
+    <div *ngSwitchCase="'ERROR_CARD'" class="rounded-2xl border border-accentRose/30 bg-accentRose/[0.08] p-4">
+      <div class="flex items-center gap-2 text-accentRose text-sm font-medium">
+        <span>⚠️</span>
+        <span>{{ component.data.title }}</span>
+      </div>
+      <div class="text-xs text-rose-200/80 mt-1.5">{{ component.data.message }}</div>
+      <div *ngIf="component.data.toolName" class="text-[10px] text-rose-300/60 mt-1">Tool: {{ component.data.toolName }}</div>
+    </div>
+
+    <!-- CONFIRMATION_CARD -->
+    <div *ngSwitchCase="'CONFIRMATION_CARD'" class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+      <div class="text-sm text-slate-100 font-medium">{{ component.data.title }}</div>
+      <div *ngIf="component.data.description" class="text-xs text-slate-400 mt-1">{{ component.data.description }}</div>
+      <div class="flex gap-2 mt-3">
+        <button
+          (click)="actionSelected.emit({ id: (component.data.actionId || component.id) + ':confirm', label: component.data.confirmLabel || 'Confirm' })"
+          class="px-3 py-1.5 rounded-full text-xs font-medium bg-accentCyan/20 text-accentCyan hover:bg-accentCyan/30 transition-colors"
+        >
+          {{ component.data.confirmLabel || 'Confirm' }}
+        </button>
+        <button
+          (click)="actionSelected.emit({ id: (component.data.actionId || component.id) + ':cancel', label: component.data.cancelLabel || 'Cancel' })"
+          class="px-3 py-1.5 rounded-full text-xs font-medium bg-white/5 text-slate-300 hover:bg-white/10 transition-colors"
+        >
+          {{ component.data.cancelLabel || 'Cancel' }}
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Sources -->
+  <div *ngIf="sources && sources.length > 0" class="flex flex-wrap gap-2">
+    <a
+      *ngFor="let source of sources"
+      [href]="source.url || null"
+      target="_blank"
+      rel="noopener"
+      class="text-[11px] px-2.5 py-1 rounded-full bg-white/5 text-slate-400 hover:text-slate-200 hover:bg-white/10 transition-colors"
+    >
+      {{ source.title || source.url }}
+    </a>
+  </div>
+
+  <!-- Standalone actions (not tied to a CONFIRMATION_CARD) -->
+  <div *ngIf="actions && actions.length > 0" class="flex flex-wrap gap-2">
+    <button
+      *ngFor="let action of actions"
+      (click)="actionSelected.emit(action)"
+      class="px-3 py-1.5 rounded-full text-xs font-medium bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition-colors"
+    >
+      {{ action.label }}
+    </button>
+  </div>
+</div>

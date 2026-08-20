@@ -121,6 +121,14 @@
                     </a>
                   </div>
                 </div>
+                <!-- Structured UI components (weather/stock cards, tables, charts, ...) -->
+                <app-ui-block
+                  *ngIf="msg.ui && msg.ui.length > 0"
+                  [components]="msg.ui"
+                  [sources]="msg.sources || []"
+                  [actions]="msg.actions || []"
+                  (actionSelected)="chatService.sendMessage($event.label)"
+                ></app-ui-block>
               </div>
 
               <!-- Copy action -->

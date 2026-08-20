@@ -62,14 +62,14 @@ export const EMPTY_CONTEXT: AssembledContext = {};
  * Block order is deliberate — most durable/authoritative first, most
  * volatile last, so later blocks read as "for this turn" rather than as
  * standing instructions:
- *   system identity -> tool policy -> project instructions -> memories ->
- *   RAG excerpts -> conversation summary.
+ *   system identity -> UI response contract -> tool policy -> project
+ *   instructions -> memories -> RAG excerpts -> conversation summary.
  *
  * Returns null when there is nothing at all to say (never happens today,
  * since system:v1 is unconditional, but keeps callers honest).
  */
 export function buildSystemPrompt(context: AssembledContext, options: { mcpEnabled?: boolean } = {}): string | null {
-  const blocks: string[] = [renderPrompt('system:v1')];
+  const blocks: string[] = [renderPrompt('system:v1'), renderPrompt('ui_orchestrator:v1')];
 
   if (options.mcpEnabled) {
     blocks.push(renderPrompt('tool_selection:v1'));
