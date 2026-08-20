@@ -1,3 +1,5 @@
+import { UIComponent, OrchestratorSource, OrchestratorAction } from './orchestrator.interface';
+
 export type AIModelType = string;
 
 export interface SelectableModel {
@@ -69,6 +71,18 @@ export interface ChatMessage {
   /** Suggested follow-up questions, attached to the final assistant message of a turn. */
   suggestions?: string[];
   imageUrl?: string;
+  /**
+   * Approved interactive UI components the orchestrator attached to this
+   * reply (weather/stock cards, tables, charts, ...). Parsed and validated
+   * server-side — see apps/chat-api/src/orchestration/ui-schema.ts. Empty
+   * or absent for the overwhelming majority of replies, which are plain
+   * text/Markdown.
+   */
+  ui?: UIComponent[];
+  /** Sources cited for this reply's `ui` payload, if any. */
+  sources?: OrchestratorSource[];
+  /** Suggested follow-up actions tied to this reply's `ui` payload, if any. */
+  actions?: OrchestratorAction[];
 }
 
 export interface ChatThread {
@@ -194,6 +208,12 @@ export interface AIProviderResponse {
   };
   /** Set when a generate_image tool call produced an image this turn. */
   imageUrl?: string;
+  /** Approved UI components attached to this reply, sent once on the final (done: true) event. */
+  ui?: UIComponent[];
+  /** Sources for the `ui` payload, sent once on the final (done: true) event. */
+  sources?: OrchestratorSource[];
+  /** Suggested follow-up actions for the `ui` payload, sent once on the final (done: true) event. */
+  actions?: OrchestratorAction[];
 }
 
 export interface StorageMetricsResponse {

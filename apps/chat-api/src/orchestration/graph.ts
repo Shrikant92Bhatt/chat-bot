@@ -8,6 +8,8 @@ import { agentNode, toolsNode, shouldContinue } from './nodes';
 import { buildContext, recordTurnMemories } from '../context/context-builder';
 import { generateFollowUpSuggestions } from '../services/suggestions.service';
 import { UsageService } from '../services/usage.service';
+import { UiBlockStreamFilter } from './ui-stream-filter';
+import { extractOrchestratorUiBlock } from './ui-schema';
 
 const workflow = new StateGraph(AgentStateAnnotation)
   .addNode('agent', agentNode)
@@ -30,9 +32,12 @@ function toBaseMessages(messages: Array<{ role: string; content: string }>): Bas
  * Runs the LangGraph orchestration workflow and streams the model's tokens
  * back to the client over SSE as they arrive.
  *
- * Wire format matches the legacy Gemini/OpenAI services exactly
- * ({chunk, done, model, suggestions?, imageUrl?}) so chat.service.ts's SSE
- * parser (which only understands that shape) renders either path identically.
+ * Wire format matches the legacy Gemini/OpenAI services
+ * ({chunk, done, model, suggestions?, imageUrl?}) plus this path's own
+ * optional {ui?, sources?, actions?} on the final `done: true` event - see
+ * ui-schema.ts/ui-stream-filter.ts - so chat.service.ts's SSE parser renders
+ * either path's plain text identically and additively picks up the
+ * structured extras when present.
  *
  * Writes nothing to `res` until the first real output chunk is available;
  * if the workflow fails before that point, the error is rethrown so the
@@ -70,7 +75,13 @@ export async function streamGraphResponse(request: ChatStreamRequest, res: Respo
 
   let wroteAnyOutput = false;
   let generatedImageUrl: string | null = null;
-  let fullText = '';
+  // The model may append a trailing ```ui fenced block (see
+  // ui_orchestrator:v1) with structured UI data. uiFilter withholds that
+  // block from the live token stream so its raw JSON never flashes on
+  // screen; visibleText accumulates only what actually gets shown to the
+  // user, which is also what follow-up suggestions are generated from.
+  const uiFilter = new UiBlockStreamFilter();
+  let visibleText = '';
 
   // Summed across every model invocation in this turn (the agent<->tools
   // loop can call the model more than once) - `usage_metadata` on the
@@ -89,9 +100,12 @@ export async function streamGraphResponse(request: ChatStreamRequest, res: Respo
       if (event.event === 'on_chat_model_stream') {
         const content = event.data?.chunk?.content;
         if (typeof content === 'string' && content.length > 0) {
-          wroteAnyOutput = true;
-          fullText += content;
-          res.write(`data: ${JSON.stringify({ chunk: content, done: false, model })}\n\n`);
+          const visible = uiFilter.push(content);
+          if (visible.length > 0) {
+            wroteAnyOutput = true;
+            visibleText += visible;
+            res.write(`data: ${JSON.stringify({ chunk: visible, done: false, model })}\n\n`);
+          }
         }
       } else if (event.event === 'on_chat_model_end') {
         const usage = event.data?.output?.usage_metadata;
@@ -121,12 +135,31 @@ export async function streamGraphResponse(request: ChatStreamRequest, res: Respo
     return;
   }
 
+  // Flush whatever the fence filter was still holding back (either trailing
+  // text that turned out not to be a ```ui fence, or - if a fence was
+  // opened - nothing, since that's the captured block below instead).
+  const { trailingVisible, rawUiBlock } = uiFilter.finish();
+  if (trailingVisible.length > 0) {
+    wroteAnyOutput = true;
+    visibleText += trailingVisible;
+    res.write(`data: ${JSON.stringify({ chunk: trailingVisible, done: false, model })}\n\n`);
+  }
+  const uiPayload = rawUiBlock ? extractOrchestratorUiBlock(rawUiBlock) : null;
+
   // Long-term memory write-back: deliberately AFTER the stream, and not
   // awaited, so the extraction gate/LLM call never adds latency to a turn.
   recordTurnMemories({ uid: ownerId, threadId: request.threadId, messages: request.messages || [] });
 
-  const suggestions = await generateFollowUpSuggestions(request.messages || [], fullText);
-  res.write(`data: ${JSON.stringify({ chunk: '', done: true, model, suggestions })}\n\n`);
+  const suggestions = await generateFollowUpSuggestions(request.messages || [], visibleText);
+  res.write(
+    `data: ${JSON.stringify({
+      chunk: '',
+      done: true,
+      model,
+      suggestions,
+      ...(uiPayload ? { ui: uiPayload.ui, sources: uiPayload.sources, actions: uiPayload.actions } : {}),
+    })}\n\n`
+  );
   res.end();
 
   // Logged after res.end() so a Firestore hiccup never delays or breaks the
