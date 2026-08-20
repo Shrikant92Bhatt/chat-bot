@@ -14,6 +14,15 @@ marked.setOptions({ gfm: true, breaks: true });
   imports: [CommonModule],
   changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './chat-window.component.html',
+  // The host element sits inside a flex-col (<main>) alongside
+  // <app-message-input>. Angular components default to display:inline, which
+  // doesn't participate in flex sizing — the chat area overflows behind the
+  // input bar on mobile because flex can't constrain an inline child's height.
+  // min-height:0 lets it shrink below its content size so overflow-y-auto on
+  // the inner scroll container actually kicks in.
+  host: {
+    style: 'display:flex; flex-direction:column; min-height:0; overflow:hidden; flex:1 1 0%',
+  },
 })
 export class ChatWindowComponent implements AfterViewChecked {
   @ViewChild('scrollContainer') private scrollContainer!: ElementRef<HTMLElement>;

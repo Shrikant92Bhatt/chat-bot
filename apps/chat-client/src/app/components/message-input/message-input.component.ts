@@ -11,6 +11,9 @@ import { ProjectService } from '../../services/project.service';
   imports: [CommonModule, FormsModule],
   changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './message-input.component.html',
+  // Must be display:block (not the default inline) so it sizes correctly as a
+  // flex-col child in <main> and doesn't overlap the chat-window on mobile.
+  host: { style: 'display:block; flex-shrink:0' },
 })
 export class MessageInputComponent {
   public messageText = '';
