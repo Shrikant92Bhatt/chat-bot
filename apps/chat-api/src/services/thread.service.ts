@@ -6,9 +6,22 @@ export class ThreadService {
     return firestore.collection('users').doc(uid).collection('threads');
   }
 
+  /**
+   * Blank threads (no user message yet - just a fresh "New Chat" the user
+   * never typed into) used to get persisted as a side effect of the client
+   * saving its whole in-memory thread list on every send, compounding on
+   * every reload. Filtered out here too, not just client-side, so a future
+   * client bug (or a different client) can't reintroduce visible clutter -
+   * the docs themselves are left alone (no delete-thread feature exists),
+   * this just stops surfacing ones that predate the client-side fix.
+   */
+  private static hasUserMessage(thread: ChatThread): boolean {
+    return (thread.messages || []).some((m) => m.role === 'user');
+  }
+
   public static async getThreadsForUser(uid: string): Promise<ChatThread[]> {
     const snapshot = await this.threadsCollection(uid).orderBy('updatedAt', 'desc').get();
-    return snapshot.docs.map((doc) => doc.data() as ChatThread);
+    return snapshot.docs.map((doc) => doc.data() as ChatThread).filter((t) => this.hasUserMessage(t));
   }
 
   /**
@@ -21,6 +34,7 @@ export class ThreadService {
   public static async saveThreadsForUser(uid: string, threads: ChatThread[]): Promise<void> {
     const collection = this.threadsCollection(uid);
     const batch = firestore.batch();
+    threads = threads.filter((t) => this.hasUserMessage(t));
     // merge:true so the server-written summarization fields (summary,
     // summarizedThroughIndex) survive a client save — the client round-trips
     // them, but an older client that doesn't know about them must not wipe them.

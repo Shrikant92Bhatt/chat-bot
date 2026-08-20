@@ -129,10 +129,23 @@ export class ChatService {
 
   /**
    * Saves thread history for authenticated users ONLY.
+   *
+   * Only saves threads the user has actually sent something in. Without
+   * this filter, every blank "New Chat" sitting in memory at save time
+   * (one gets created on every reload, plus one per "New Chat" click) gets
+   * persisted alongside whichever thread actually triggered the save -
+   * this WAS the bug behind "multiple blank threads pile up on reload":
+   * each reload's fresh blank thread would get saved the next time the
+   * user sent any message anywhere, then the NEXT reload would fetch that
+   * saved blank back AND add yet another fresh one on top, compounding
+   * forever. A thread earns persistence the moment it has a real message,
+   * not just by existing in memory.
    */
   private async persistUserThreadHistory(): Promise<void> {
     const user = this.authService.userSignal();
     if (!user || !user.uid) return;
+
+    const threadsWorthSaving = this.threads().filter((t) => t.messages.some((m) => m.role === 'user'));
 
     try {
       const response = await fetch(`${this.apiUrl}/threads`, {
@@ -141,7 +154,7 @@ export class ChatService {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${this.authService.getIdToken()}`,
         },
-        body: JSON.stringify({ threads: this.threads() }),
+        body: JSON.stringify({ threads: threadsWorthSaving }),
       });
 
       if (response.status === 401) {
@@ -184,6 +197,19 @@ export class ChatService {
    * into every turn's context server-side.
    */
   public createNewThread(projectId: string | null = null) {
+    // Reuse the current thread if it's already blank (no user message sent
+    // yet) rather than stacking another empty "New Chat" on top of it -
+    // clicking "New Chat" repeatedly, or switching a still-empty thread
+    // into a project, shouldn't multiply blank entries in the sidebar.
+    const current = this.activeThread();
+    if (current && !current.messages.some((m) => m.role === 'user') && current.projectId === projectId) {
+      return;
+    }
+    if (current && !current.messages.some((m) => m.role === 'user')) {
+      this.threads.update((curr) => curr.map((t) => (t.id === current.id ? { ...t, projectId } : t)));
+      return;
+    }
+
     const newThread: ChatThread = {
       id: 'thread-' + Date.now(),
       title: 'New Chat Thread',
