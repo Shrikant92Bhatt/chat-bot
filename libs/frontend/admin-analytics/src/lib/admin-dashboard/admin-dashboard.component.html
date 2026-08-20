@@ -1,44 +1,140 @@
-<div class="relative min-h-screen">
+<div class="relative min-h-screen bg-obsidian">
   <div class="ambient-glow-1" aria-hidden="true"></div>
   <div class="ambient-glow-2" aria-hidden="true"></div>
 
-  <!-- ── Top bar ─────────────────────────────────────────────────────────── -->
-  <header class="relative z-20 border-b border-white/5 bg-obsidian/80 backdrop-blur-glass sticky top-0">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
-      <div
-        class="w-8 h-8 rounded-lg bg-gradient-to-br from-accentCyan to-accentViolet flex items-center justify-center shrink-0"
-        aria-hidden="true"
-      >
-        <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-        </svg>
-      </div>
-      <div class="min-w-0 flex-1">
-        <h1 class="text-sm font-semibold text-slate-100 leading-tight">NexusAI Admin</h1>
-        <p class="text-[11px] text-slate-500 leading-tight">Usage &amp; cost analytics</p>
+  <!-- ── Console chrome ───────────────────────────────────────────────────
+       Two rows: identity + the one filter that scopes the whole console on
+       top, the view switcher on the rule below it. Keeping the switcher on
+       the header's bottom edge is what makes the tabs read as "which page of
+       this console", rather than as another control inside the page. -->
+  <header class="sticky top-0 z-30 border-b border-white/[0.07] bg-obsidian/85 backdrop-blur-glass">
+    <div class="max-w-[1400px] mx-auto px-4 sm:px-6">
+      <div class="flex items-center gap-3 py-3">
+        <div
+          class="w-8 h-8 rounded-[10px] bg-gradient-to-br from-accentCyan to-accentViolet flex items-center justify-center shrink-0 shadow-cyanGlow"
+          aria-hidden="true"
+        >
+          <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+        </div>
+
+        <div class="min-w-0 mr-auto">
+          <h1 class="text-[13px] font-semibold text-slate-100 leading-tight tracking-tight">NexusAI Admin</h1>
+          <p class="text-[11px] text-slate-500 leading-tight">Usage, cost &amp; access</p>
+        </div>
+
+        @if (!accessDenied()) {
+          <!-- One date-range control, above everything it scopes. Both views
+               read the same window, so no two figures on screen can come
+               from different slices. -->
+          <div class="flex items-center gap-2">
+            @if (isRefreshing()) {
+              <span
+                class="w-3.5 h-3.5 rounded-full border-2 border-slate-700 border-t-accentCyan animate-spin"
+                role="status"
+                aria-label="Refreshing"
+              ></span>
+            }
+            <div
+              class="flex rounded-lg bg-black/30 border border-white/[0.08] p-0.5"
+              role="group"
+              aria-label="Date range"
+            >
+              @for (preset of windowPresets; track preset.days) {
+                <button
+                  type="button"
+                  (click)="setWindow(preset.days)"
+                  [ngClass]="
+                    windowDays() === preset.days
+                      ? 'bg-white/[0.10] text-white'
+                      : 'text-slate-400 hover:text-slate-200'
+                  "
+                  [attr.aria-pressed]="windowDays() === preset.days"
+                  [attr.aria-label]="preset.label"
+                  class="px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors tnum"
+                >
+                  {{ preset.short }}
+                </button>
+              }
+            </div>
+          </div>
+        }
+
+        <button
+          type="button"
+          (click)="close.emit()"
+          class="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-slate-400 bg-white/[0.03] border border-white/[0.08] hover:bg-white/[0.08] hover:text-slate-100 hover:border-white/20 transition-colors"
+        >
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+          </svg>
+          Back to chat
+        </button>
       </div>
 
-      <button
-        type="button"
-        (click)="close.emit()"
-        class="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-colors"
-      >
-        ← Back to chat
-      </button>
+      @if (!accessDenied() && !isInitialLoading()) {
+        <div class="flex items-center gap-1">
+          <nav class="flex items-center gap-1 -mb-px" aria-label="Admin console views">
+            <button
+              type="button"
+              (click)="setView('overview')"
+              [attr.aria-current]="activeView() === 'overview' ? 'page' : null"
+              class="relative px-3 py-2.5 text-[13px] font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accentCyan/50 rounded-t-md"
+              [ngClass]="activeView() === 'overview' ? 'text-white' : 'text-slate-500 hover:text-slate-300'"
+            >
+              Overview
+              @if (activeView() === 'overview') {
+                <span class="absolute inset-x-2 bottom-0 h-[2px] rounded-full bg-accentCyan" aria-hidden="true"></span>
+              }
+            </button>
+            <button
+              type="button"
+              (click)="setView('users')"
+              [attr.aria-current]="activeView() === 'users' ? 'page' : null"
+              class="relative px-3 py-2.5 text-[13px] font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accentCyan/50 rounded-t-md"
+              [ngClass]="activeView() === 'users' ? 'text-white' : 'text-slate-500 hover:text-slate-300'"
+            >
+              Users
+              <span class="ml-1.5 text-[11px] tnum" [ngClass]="activeView() === 'users' ? 'text-slate-400' : 'text-slate-600'">
+                {{ totalUsers() }}
+              </span>
+              @if (activeView() === 'users') {
+                <span class="absolute inset-x-2 bottom-0 h-[2px] rounded-full bg-accentCyan" aria-hidden="true"></span>
+              }
+            </button>
+          </nav>
+
+          <span class="flex-1"></span>
+
+          <!-- Never let a capped total pass as a complete one. -->
+          @if (summary()?.truncated) {
+            <span
+              class="mb-1.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] text-amber-200 bg-amber-500/[0.10] border border-amber-400/25"
+              role="status"
+            >
+              <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3.75m0 3.75h.008M10.34 3.94L1.9 18a2 2 0 001.72 3h16.76a2 2 0 001.72-3L13.66 3.94a2 2 0 00-3.32 0z" />
+              </svg>
+              Record cap reached — totals are a lower bound
+            </span>
+          }
+        </div>
+      }
     </div>
   </header>
 
   @if (accessDenied()) {
     <div class="relative z-10 flex flex-col items-center justify-center gap-3 py-32 text-center px-6">
-      <div class="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center">
-        <svg class="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div class="w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center">
+        <svg class="w-6 h-6 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
         </svg>
       </div>
       <h2 class="text-sm font-semibold text-slate-100">Admin access required</h2>
-      <p class="text-xs text-slate-500 max-w-xs">
-        Your account doesn't have admin access. If this changed recently (e.g. you were just promoted or demoted),
-        try going back and reopening this panel.
+      <p class="text-xs text-slate-500 max-w-xs leading-relaxed">
+        Your account doesn't have admin access. If this changed recently (e.g. you were just promoted or
+        demoted), try going back and reopening this panel.
       </p>
       <button
         type="button"
@@ -48,289 +144,51 @@
         ← Back to chat
       </button>
     </div>
-  } @else {
-
-  @if (isInitialLoading()) {
+  } @else if (isInitialLoading()) {
     <div class="relative z-10 flex flex-col items-center justify-center gap-3 py-32">
       <span
-        class="w-8 h-8 rounded-full border-2 border-slate-700 border-t-accentCyan animate-spin"
+        class="w-8 h-8 rounded-full border-2 border-slate-800 border-t-accentCyan animate-spin"
         role="status"
         aria-label="Loading analytics"
       ></span>
       <p class="text-xs text-slate-500">Loading analytics…</p>
     </div>
   } @else {
-    <main class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-      <!-- ── Filter row: one row, above everything it scopes ──────────────── -->
-      <div class="flex flex-wrap items-center gap-2">
-        <span class="text-xs text-slate-500 mr-1">Date range</span>
-        <div class="flex rounded-xl bg-white/5 border border-white/10 p-0.5" role="group" aria-label="Date range">
-          @for (preset of windowPresets; track preset.days) {
-            <button
-              type="button"
-              (click)="setWindow(preset.days)"
-              [ngClass]="
-                windowDays() === preset.days
-                  ? 'bg-white/10 text-white'
-                  : 'text-slate-400 hover:text-slate-200'
-              "
-              [attr.aria-pressed]="windowDays() === preset.days"
-              class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-            >
-              {{ preset.label }}
-            </button>
-          }
-        </div>
-
-        @if (isRefreshing()) {
-          <span
-            class="w-3.5 h-3.5 rounded-full border-2 border-slate-700 border-t-accentCyan animate-spin ml-1"
-            role="status"
-            aria-label="Refreshing"
-          ></span>
-        }
-
-        <span class="flex-1"></span>
-
-        @if (summary()?.truncated) {
-          <span
-            class="px-2.5 py-1 rounded-lg text-[11px] text-amber-200 bg-amber-500/10 border border-amber-400/30"
-            role="status"
-          >
-            ⚠ Record cap reached — totals are a lower bound
-          </span>
-        }
-      </div>
-
-      <!-- ── KPI row ─────────────────────────────────────────────────────── -->
-      @if (panelError('summary'); as error) {
-        <div class="glass-card rounded-2xl p-4 text-sm text-rose-200" role="alert">{{ error }}</div>
-      } @else if (summary(); as stats) {
-        <section aria-label="Headline metrics" [class.opacity-60]="isRefreshing()" class="transition-opacity">
-          <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <!-- Hero figure: exactly one per view. Cost is what an operator
-                 opens this console to see. Proportional figures, same sans. -->
-            <div class="glass-card rounded-2xl p-5 lg:col-span-1">
-              <div class="text-xs text-slate-400">Estimated cost</div>
-              <div class="text-5xl font-semibold text-white mt-1 leading-none">
-                {{ formatCost(stats.totalEstimatedCostUsd) }}
-              </div>
-              <div class="text-[11px] text-slate-500 mt-2">
-                {{ windowLabel() }} · list-price estimate, not billing-accurate
-              </div>
-            </div>
-
-            <div class="lg:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div class="glass-card rounded-2xl p-4">
-                <div class="text-xs text-slate-400">Requests</div>
-                <div class="text-2xl font-semibold text-white mt-1">{{ compact(stats.totalRequests) }}</div>
-                <div class="text-[11px] text-slate-500 mt-1">{{ formatNumber(stats.totalRequests) }} total</div>
-              </div>
-
-              <div class="glass-card rounded-2xl p-4">
-                <div class="text-xs text-slate-400">Tokens</div>
-                <div class="text-2xl font-semibold text-white mt-1">{{ compact(stats.totalTokens) }}</div>
-                <div class="text-[11px] text-slate-500 mt-1">
-                  {{ compact(stats.totalInputTokens) }} in · {{ compact(stats.totalOutputTokens) }} out
-                </div>
-              </div>
-
-              <div class="glass-card rounded-2xl p-4">
-                <div class="text-xs text-slate-400">Active users</div>
-                <div class="text-2xl font-semibold text-white mt-1">{{ stats.activeUsers }}</div>
-                <div class="text-[11px] text-slate-500 mt-1">sent a request in window</div>
-              </div>
-
-              <div class="glass-card rounded-2xl p-4">
-                <div class="text-xs text-slate-400">Registered users</div>
-                <div class="text-2xl font-semibold text-white mt-1">{{ totalUsers() }}</div>
-                <div class="text-[11px] text-slate-500 mt-1">
-                  {{ adminCount() }} admin{{ adminCount() === 1 ? '' : 's' }}
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
+    <main class="relative z-10 max-w-[1400px] mx-auto px-4 sm:px-6 py-6">
+      @if (activeView() === 'overview') {
+        <app-overview-view
+          [summary]="summary()"
+          [daily]="daily()"
+          [usageByModel]="usageByModel()"
+          [storage]="storage()"
+          [totalUsers]="totalUsers()"
+          [adminCount]="adminCount()"
+          [windowLabel]="windowLabel()"
+          [refreshing]="isRefreshing()"
+          [summaryError]="panelError('summary')"
+          [modelError]="panelError('byModel')"
+          [storageError]="panelError('storage')"
+          (viewUsers)="setView('users')"
+        />
+      } @else {
+        <app-users-view
+          [registeredUsers]="registeredUsers()"
+          [usageByUser]="usageByUser()"
+          [windowDays]="windowDays()"
+          [windowLabel]="windowLabel()"
+          [refreshing]="isRefreshing()"
+          [usersError]="panelError('users')"
+          [usageError]="panelError('byUser')"
+          (roleChanged)="loadAll()"
+        />
       }
 
-      <!-- ── Time series ─────────────────────────────────────────────────── -->
-      <section class="glass-card rounded-2xl p-5" aria-label="Usage over time">
-        <div class="flex justify-end mb-3">
-          <div class="flex rounded-lg bg-white/5 border border-white/10 p-0.5" role="group" aria-label="Chart metric">
-            <button
-              type="button"
-              (click)="setMetric('requests')"
-              [ngClass]="chartMetric() === 'requests' ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-slate-200'"
-              [attr.aria-pressed]="chartMetric() === 'requests'"
-              class="px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors"
-            >
-              Requests
-            </button>
-            <button
-              type="button"
-              (click)="setMetric('tokens')"
-              [ngClass]="chartMetric() === 'tokens' ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-slate-200'"
-              [attr.aria-pressed]="chartMetric() === 'tokens'"
-              class="px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors"
-            >
-              Tokens
-            </button>
-            <button
-              type="button"
-              (click)="setMetric('cost')"
-              [ngClass]="chartMetric() === 'cost' ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-slate-200'"
-              [attr.aria-pressed]="chartMetric() === 'cost'"
-              class="px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors"
-            >
-              Cost
-            </button>
-          </div>
-        </div>
-
-        <app-usage-chart [daily]="daily()" [metric]="chartMetric()" [refreshing]="isRefreshing()" />
-      </section>
-
-      <!-- ── Per-user usage ──────────────────────────────────────────────── -->
-      <section class="glass-card rounded-2xl p-5" aria-label="Usage by user">
-        <div class="mb-4">
-          <h2 class="text-sm font-semibold text-slate-100">Usage by user</h2>
-          <p class="text-xs text-slate-400 mt-0.5">
-            Sort any column; select a row to drill into that user's individual requests.
-          </p>
-        </div>
-
-        @if (panelError('byUser'); as error) {
-          <p class="text-sm text-rose-200 py-4" role="alert">{{ error }}</p>
-        } @else {
-          <div [class.opacity-60]="isRefreshing()" class="transition-opacity">
-            <app-user-usage-table [users]="usageByUser()" [windowDays]="windowDays()" />
-          </div>
-        }
-      </section>
-
-      <!-- ── Model breakdown + storage ───────────────────────────────────── -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <section class="glass-card rounded-2xl p-5" aria-label="Usage by model">
-          <div class="mb-4">
-            <h2 class="text-sm font-semibold text-slate-100">Usage by model</h2>
-            <p class="text-xs text-slate-400 mt-0.5">Requests, tokens and estimated cost per model.</p>
-          </div>
-
-          @if (panelError('byModel'); as error) {
-            <p class="text-sm text-rose-200 py-4" role="alert">{{ error }}</p>
-          } @else if (usageByModel().length === 0) {
-            <p class="text-sm text-slate-500 py-6 text-center">No model activity in this window.</p>
-          } @else {
-            <ul class="space-y-4" [class.opacity-60]="isRefreshing()">
-              @for (model of usageByModel(); track model.model) {
-                <li>
-                  <div class="flex items-baseline justify-between gap-3 mb-1.5">
-                    <span class="text-xs text-slate-200 truncate">{{ model.model }}</span>
-                    <!-- Value at the tip, outside the bar: it always fits, and
-                         never gets clipped by a short bar. -->
-                    <span class="text-xs text-slate-100 tnum shrink-0"
-                      >{{ formatNumber(model.totalRequests) }} req</span
-                    >
-                  </div>
-                  <!-- Nominal categories: every bar takes the same slot-1 hue.
-                       Colouring them by value would re-encode bar length. -->
-                  <div class="h-2 rounded-full overflow-hidden" style="background: rgba(8,145,178,0.16)" aria-hidden="true">
-                    <div
-                      class="h-full rounded-r-[4px]"
-                      style="background:#0891b2"
-                      [style.width.%]="modelBarWidth(model)"
-                    ></div>
-                  </div>
-                  <div class="flex items-center gap-3 mt-1.5 text-[11px] text-slate-500 tnum">
-                    <span>{{ formatNumber(model.totalTokens) }} tokens</span>
-                    <span aria-hidden="true">·</span>
-                    <span>{{ formatCost(model.totalEstimatedCostUsd) }}</span>
-                  </div>
-                </li>
-              }
-            </ul>
-          }
-        </section>
-
-        <section class="glass-card rounded-2xl p-5" aria-label="Cloud storage">
-          <div class="mb-4">
-            <h2 class="text-sm font-semibold text-slate-100">Cloud storage</h2>
-            <p class="text-xs text-slate-400 mt-0.5">
-              GCS bucket size and cost. Moved here from the chat client's settings modal.
-            </p>
-          </div>
-
-          @if (panelError('storage'); as error) {
-            <p class="text-sm text-rose-200 py-4" role="alert">{{ error }}</p>
-          } @else if (storage(); as metrics) {
-            <div [class.opacity-60]="isRefreshing()" class="space-y-3">
-              @if (!metrics.configured) {
-                <div
-                  class="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-400/30"
-                  role="status"
-                >
-                  <svg class="w-4 h-4 text-amber-300 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <p class="text-[11px] text-amber-100">
-                    GCS is not configured on this API instance (<code class="font-mono">GCS_BUCKET_NAME</code> is
-                    unset), so the figures below are zeroed rather than estimated.
-                  </p>
-                </div>
-              }
-
-              <div class="p-3 rounded-xl bg-white/5 border border-white/5">
-                <div class="text-[11px] text-slate-400 mb-0.5">Bucket</div>
-                <div class="text-sm text-slate-100 font-mono truncate">{{ metrics.bucketName }}</div>
-              </div>
-
-              <div class="grid grid-cols-3 gap-3">
-                <div class="p-3 rounded-xl bg-white/5 border border-white/5">
-                  <div class="text-[11px] text-slate-400 mb-0.5">Size</div>
-                  <div class="text-lg font-semibold text-slate-100">{{ metrics.totalSizeMB }}<span class="text-xs text-slate-500 ml-1">MB</span></div>
-                </div>
-                <div class="p-3 rounded-xl bg-white/5 border border-white/5">
-                  <div class="text-[11px] text-slate-400 mb-0.5">Objects</div>
-                  <div class="text-lg font-semibold text-slate-100">{{ metrics.objectCount }}</div>
-                </div>
-                <div class="p-3 rounded-xl bg-white/5 border border-white/5">
-                  <div class="text-[11px] text-slate-400 mb-0.5">Monthly</div>
-                  <div class="text-lg font-semibold text-slate-100">${{ metrics.estimatedMonthlyCostUSD }}</div>
-                </div>
-              </div>
-
-              <p class="text-[10px] text-slate-600 text-right">
-                Last updated {{ metrics.lastUpdated }}
-              </p>
-            </div>
-          }
-        </section>
-      </div>
-
-      <!-- ── User management ─────────────────────────────────────────────── -->
-      <section class="glass-card rounded-2xl p-5" aria-label="User management">
-        <div class="mb-2">
-          <h2 class="text-sm font-semibold text-slate-100">User management</h2>
-          <p class="text-xs text-slate-400 mt-0.5">
-            Roles are re-read from the database on every admin request, so a change takes effect
-            immediately — no need to wait for a session to expire.
-          </p>
-        </div>
-
-        @if (panelError('users'); as error) {
-          <p class="text-sm text-rose-200 py-4" role="alert">{{ error }}</p>
-        } @else {
-          <app-user-management [users]="registeredUsers()" (roleChanged)="loadAll()" />
-        }
-      </section>
-
-      <footer class="pt-2 pb-6 text-[11px] text-slate-600 leading-relaxed">
+      <footer class="pt-6 pb-8 text-[11px] text-slate-600 leading-relaxed max-w-3xl">
         Aggregates are computed in the API by reading the date-filtered
-        <code class="font-mono">usage</code> collection — Firestore has no server-side GROUP BY. This is
-        one document read per logged chat request, which is fine at the current scale; a scheduled
-        BigQuery export is the intended path for large-scale analytics.
+        <code class="font-mono">usage</code> collection — Firestore has no server-side GROUP BY. That's one
+        document read per logged chat request, which is fine at the current scale; a scheduled BigQuery
+        export is the intended path for large-scale analytics.
       </footer>
     </main>
-  }
   }
 </div>

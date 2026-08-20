@@ -1,0 +1,291 @@
+<div class="space-y-5">
+  @if (summaryError(); as error) {
+    <div class="panel rounded-2xl p-5 text-sm text-rose-200" role="alert">{{ error }}</div>
+  } @else if (summary(); as stats) {
+    <!-- ── Hero band ──────────────────────────────────────────────────────
+         One hero figure for the whole view (cost), with the supporting tiles
+         beside it at a clearly lower rank. -->
+    <section
+      class="grid grid-cols-1 lg:grid-cols-12 gap-4 transition-opacity duration-200"
+      [class.opacity-50]="refreshing()"
+      aria-label="Headline metrics"
+    >
+      <!-- Hero -->
+      <div class="lg:col-span-5 panel rounded-2xl p-6 relative overflow-hidden">
+        <!-- A single soft accent wash, bottom-right, so the hero card reads as
+             the primary surface without a border or a glow ring shouting it. -->
+        <div
+          class="absolute -bottom-24 -right-16 w-72 h-72 rounded-full pointer-events-none"
+          style="background: radial-gradient(circle, rgba(8, 145, 178, 0.16) 0%, rgba(8, 145, 178, 0) 70%)"
+          aria-hidden="true"
+        ></div>
+
+        <div class="relative h-full flex flex-col">
+          <div class="text-[11px] uppercase tracking-[0.08em] text-slate-400">Estimated cost</div>
+          <!-- Proportional figures, same sans as everything else. -->
+          <div class="text-[56px] leading-[1.05] font-semibold text-white mt-2 tracking-tight">
+            {{ formatCost(stats.totalEstimatedCostUsd) }}
+          </div>
+
+          <!-- Sparkline and meta ride the bottom of the card together, so the
+               hero card's baseline lines up with the tile grid beside it
+               however tall that grid gets, with the empty space landing under
+               the figure where it reads as breathing room rather than as a
+               gap in the middle of the card. -->
+          <div class="mt-auto pt-6">
+            <div class="h-12">
+              <app-sparkline [values]="costSeries()" [color]="SERIES" />
+            </div>
+
+            <div class="mt-4 pt-4 border-t border-white/[0.06] flex items-center gap-3 text-[11px] text-slate-400">
+              <span>{{ windowLabel() }}</span>
+              <span aria-hidden="true">·</span>
+              <span>{{ activeDays() }} of {{ daily().length }} days active</span>
+            </div>
+            <p class="text-[11px] text-slate-600 mt-2 leading-relaxed">
+              List-price estimate from a per-model rate table — directionally useful, not billing-accurate.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Supporting tiles -->
+      <div class="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="panel panel-hover rounded-2xl p-5 flex flex-col">
+          <div class="text-[11px] uppercase tracking-[0.08em] text-slate-500">Requests</div>
+          <div class="text-[28px] leading-none font-semibold text-white mt-2">
+            {{ compact(stats.totalRequests) }}
+          </div>
+          <div class="text-[11px] text-slate-500 mt-1.5">{{ formatNumber(stats.totalRequests) }} total</div>
+          <div class="mt-auto pt-4 h-9">
+            <app-sparkline [values]="requestSeries()" [color]="MUTED" />
+          </div>
+        </div>
+
+        <div class="panel panel-hover rounded-2xl p-5 flex flex-col">
+          <div class="text-[11px] uppercase tracking-[0.08em] text-slate-500">Tokens</div>
+          <div class="text-[28px] leading-none font-semibold text-white mt-2">
+            {{ compact(stats.totalTokens) }}
+          </div>
+          <div class="text-[11px] text-slate-500 mt-1.5 tnum">
+            {{ compact(stats.totalInputTokens) }} in · {{ compact(stats.totalOutputTokens) }} out
+          </div>
+          <div class="mt-auto pt-4 h-9">
+            <app-sparkline [values]="tokenSeries()" [color]="MUTED" />
+          </div>
+        </div>
+
+        <div class="panel panel-hover rounded-2xl p-5 flex flex-col">
+          <div class="text-[11px] uppercase tracking-[0.08em] text-slate-500">Active users</div>
+          <div class="text-[28px] leading-none font-semibold text-white mt-2">{{ stats.activeUsers }}</div>
+          <div class="text-[11px] text-slate-500 mt-1.5">sent a request in this window</div>
+          <div class="mt-auto pt-4">
+            <!-- No daily series exists for distinct users (the API aggregates
+                 it over the whole window), so this tile gets a proportion bar
+                 against the registry instead of a sparkline it can't honestly
+                 draw - and only when that proportion is meaningful. -->
+            @if (activeExceedsRegistry()) {
+              <p class="text-[10.5px] text-amber-300/80 leading-relaxed">
+                More active uids than registered accounts — some usage is from accounts that have since
+                been removed. See the Users view.
+              </p>
+            } @else {
+              <div class="h-1 rounded-full overflow-hidden" style="background: rgba(255, 255, 255, 0.06)" aria-hidden="true">
+                <div class="h-full rounded-full" style="background: #0891b2" [style.width.%]="activeShare()"></div>
+              </div>
+              <div class="text-[10.5px] text-slate-600 mt-1.5">of {{ totalUsers() }} registered</div>
+            }
+          </div>
+        </div>
+
+        <button
+          type="button"
+          (click)="viewUsers.emit()"
+          class="panel panel-hover rounded-2xl p-5 flex flex-col text-left group focus:outline-none focus-visible:ring-2 focus-visible:ring-accentCyan/50"
+        >
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-[11px] uppercase tracking-[0.08em] text-slate-500">Registered users</span>
+            <svg
+              class="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-300 group-hover:translate-x-0.5 transition-all"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
+          <div class="text-[28px] leading-none font-semibold text-white mt-2">{{ totalUsers() }}</div>
+          <div class="text-[11px] text-slate-500 mt-1.5">
+            {{ adminCount() }} admin{{ adminCount() === 1 ? '' : 's' }}
+          </div>
+          <div class="mt-auto pt-4 text-[11px] text-slate-500 group-hover:text-slate-300 transition-colors">
+            Open the Users view →
+          </div>
+        </button>
+      </div>
+    </section>
+  }
+
+  <!-- ── Time series ────────────────────────────────────────────────────── -->
+  <section class="panel rounded-2xl overflow-hidden" aria-label="Usage over time">
+    <div class="px-5 py-4 border-b border-white/[0.06] flex flex-wrap items-center gap-3">
+      <div class="mr-auto min-w-0">
+        <h2 class="text-[13px] font-semibold text-slate-100 tracking-tight">{{ chartMetricLabel() }}</h2>
+        <p class="text-[11.5px] text-slate-500 mt-0.5">
+          Daily totals across {{ windowLabel().toLowerCase() }}. Hover a column, or focus the chart and use
+          the arrow keys.
+        </p>
+      </div>
+
+      <div class="flex rounded-lg bg-black/30 border border-white/[0.08] p-0.5" role="group" aria-label="Chart metric">
+        <button
+          type="button"
+          (click)="setMetric('requests')"
+          [ngClass]="chartMetric() === 'requests' ? 'bg-white/[0.10] text-white' : 'text-slate-400 hover:text-slate-200'"
+          [attr.aria-pressed]="chartMetric() === 'requests'"
+          class="px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors"
+        >
+          Requests
+        </button>
+        <button
+          type="button"
+          (click)="setMetric('tokens')"
+          [ngClass]="chartMetric() === 'tokens' ? 'bg-white/[0.10] text-white' : 'text-slate-400 hover:text-slate-200'"
+          [attr.aria-pressed]="chartMetric() === 'tokens'"
+          class="px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors"
+        >
+          Tokens
+        </button>
+        <button
+          type="button"
+          (click)="setMetric('cost')"
+          [ngClass]="chartMetric() === 'cost' ? 'bg-white/[0.10] text-white' : 'text-slate-400 hover:text-slate-200'"
+          [attr.aria-pressed]="chartMetric() === 'cost'"
+          class="px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors"
+        >
+          Cost
+        </button>
+      </div>
+
+      <!-- The chart's WCAG-clean twin, toggled from the card header so the
+           plot itself stays free of chrome. -->
+      <button
+        type="button"
+        (click)="chart.toggleTable()"
+        [attr.aria-pressed]="chart.showTable()"
+        class="px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-slate-400 border border-white/[0.08] bg-black/30 hover:bg-white/[0.06] hover:text-slate-100 transition-colors"
+      >
+        {{ chart.showTable() ? 'Chart' : 'Table' }}
+      </button>
+    </div>
+
+    <div class="p-5">
+      <app-usage-chart
+        #chart
+        [daily]="daily()"
+        [metric]="chartMetric()"
+        [refreshing]="refreshing()"
+      />
+    </div>
+  </section>
+
+  <!-- ── Model breakdown + storage ──────────────────────────────────────── -->
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+    <section class="lg:col-span-7 panel rounded-2xl overflow-hidden" aria-label="Usage by model">
+      <div class="px-5 py-4 border-b border-white/[0.06]">
+        <h2 class="text-[13px] font-semibold text-slate-100 tracking-tight">Usage by model</h2>
+        <p class="text-[11.5px] text-slate-500 mt-0.5">Share of requests, with tokens and cost per model.</p>
+      </div>
+
+      <div class="p-5">
+        @if (modelError(); as error) {
+          <p class="text-sm text-rose-200 py-2" role="alert">{{ error }}</p>
+        } @else if (usageByModel().length === 0) {
+          <p class="text-sm text-slate-500 py-10 text-center">No model activity in this window.</p>
+        } @else {
+          <ul class="space-y-4 transition-opacity duration-200" [class.opacity-50]="refreshing()">
+            @for (model of usageByModel(); track model.model) {
+              <li>
+                <div class="flex items-baseline justify-between gap-3 mb-2">
+                  <span class="text-[12.5px] text-slate-200 truncate">{{ model.model }}</span>
+                  <!-- Value at the tip, outside the bar: it always fits and can
+                       never be clipped by a short bar. -->
+                  <span class="text-[12.5px] text-slate-100 tnum shrink-0">
+                    {{ formatNumber(model.totalRequests) }}
+                    <span class="text-slate-500 ml-1">req</span>
+                  </span>
+                </div>
+                <!-- Nominal categories: every bar takes the same slot-1 hue.
+                     Colouring them by value would re-encode bar length. -->
+                <div class="h-1.5 rounded-full overflow-hidden" style="background: rgba(255, 255, 255, 0.05)" aria-hidden="true">
+                  <div class="h-full rounded-full" style="background: #0891b2" [style.width.%]="modelBarWidth(model)"></div>
+                </div>
+                <div class="flex items-center gap-2.5 mt-2 text-[11px] text-slate-500 tnum">
+                  <span>{{ modelShare(model) }} of requests</span>
+                  <span aria-hidden="true">·</span>
+                  <span>{{ formatNumber(model.totalTokens) }} tokens</span>
+                  <span aria-hidden="true">·</span>
+                  <span>{{ formatCost(model.totalEstimatedCostUsd) }}</span>
+                </div>
+              </li>
+            }
+          </ul>
+        }
+      </div>
+    </section>
+
+    <section class="lg:col-span-5 panel rounded-2xl overflow-hidden" aria-label="Cloud storage">
+      <div class="px-5 py-4 border-b border-white/[0.06]">
+        <h2 class="text-[13px] font-semibold text-slate-100 tracking-tight">Cloud storage</h2>
+        <p class="text-[11.5px] text-slate-500 mt-0.5">GCS bucket size and monthly cost.</p>
+      </div>
+
+      <div class="p-5">
+        @if (storageError(); as error) {
+          <p class="text-sm text-rose-200 py-2" role="alert">{{ error }}</p>
+        } @else if (storage(); as metrics) {
+          <div class="space-y-4 transition-opacity duration-200" [class.opacity-50]="refreshing()">
+            @if (!metrics.configured) {
+              <div class="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/[0.10] border border-amber-400/25" role="status">
+                <svg class="w-4 h-4 text-amber-300 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p class="text-[11px] text-amber-100 leading-relaxed">
+                  GCS isn't configured on this API instance (<code class="font-mono">GCS_BUCKET_NAME</code> is
+                  unset), so the figures below are zeroed rather than estimated.
+                </p>
+              </div>
+            }
+
+            <div class="well rounded-xl px-4 py-3">
+              <div class="text-[10.5px] uppercase tracking-[0.08em] text-slate-500">Bucket</div>
+              <div class="text-[12.5px] text-slate-200 font-mono truncate mt-1">{{ metrics.bucketName }}</div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-3">
+              <div class="well rounded-xl px-3 py-3">
+                <div class="text-[10.5px] uppercase tracking-[0.08em] text-slate-500">Size</div>
+                <div class="text-lg font-semibold text-slate-100 mt-1.5 leading-none">
+                  {{ metrics.totalSizeMB }}<span class="text-[11px] text-slate-500 ml-1 font-normal">MB</span>
+                </div>
+              </div>
+              <div class="well rounded-xl px-3 py-3">
+                <div class="text-[10.5px] uppercase tracking-[0.08em] text-slate-500">Objects</div>
+                <div class="text-lg font-semibold text-slate-100 mt-1.5 leading-none">{{ metrics.objectCount }}</div>
+              </div>
+              <div class="well rounded-xl px-3 py-3">
+                <div class="text-[10.5px] uppercase tracking-[0.08em] text-slate-500">Monthly</div>
+                <div class="text-lg font-semibold text-slate-100 mt-1.5 leading-none">
+                  ${{ metrics.estimatedMonthlyCostUSD }}
+                </div>
+              </div>
+            </div>
+
+            <p class="text-[10.5px] text-slate-600">Measured {{ formatMeasuredAt(metrics.lastUpdated) }}</p>
+          </div>
+        }
+      </div>
+    </section>
+  </div>
+</div>

@@ -1,0 +1,142 @@
+<div class="space-y-5">
+  <!-- ── Summary strip ────────────────────────────────────────────────────
+       Four supporting figures, no hero: the Overview view owns the one hero
+       number for the console, and a second one here would compete with it. -->
+  <section
+    class="grid grid-cols-2 lg:grid-cols-4 gap-px rounded-2xl overflow-hidden panel"
+    aria-label="User totals"
+    [class.opacity-50]="refreshing()"
+  >
+    <div class="px-5 py-4">
+      <div class="text-[11px] uppercase tracking-[0.08em] text-slate-500">Accounts</div>
+      <div class="text-2xl font-semibold text-white mt-1.5 leading-none">{{ registeredCount() }}</div>
+      <div class="text-[11px] text-slate-500 mt-2">
+        {{ adminCount() }} admin{{ adminCount() === 1 ? '' : 's' }} · {{ memberCount() }} member{{
+          memberCount() === 1 ? '' : 's'
+        }}
+      </div>
+    </div>
+
+    <div class="px-5 py-4 border-l border-white/[0.05]">
+      <div class="text-[11px] uppercase tracking-[0.08em] text-slate-500">Active</div>
+      <div class="text-2xl font-semibold text-white mt-1.5 leading-none">{{ activeCount() }}</div>
+      <div class="text-[11px] text-slate-500 mt-2">sent a request · {{ windowLabel().toLowerCase() }}</div>
+    </div>
+
+    <div class="px-5 py-4 border-l border-white/[0.05]">
+      <div class="text-[11px] uppercase tracking-[0.08em] text-slate-500">Spend</div>
+      <div class="text-2xl font-semibold text-white mt-1.5 leading-none">{{ formatCost(totalCost()) }}</div>
+      <div class="text-[11px] text-slate-500 mt-2">across all users in window</div>
+    </div>
+
+    <div class="px-5 py-4 border-l border-white/[0.05] min-w-0">
+      <div class="text-[11px] uppercase tracking-[0.08em] text-slate-500">Heaviest consumer</div>
+      <div class="text-[15px] font-semibold text-white mt-2 leading-tight truncate" [title]="topConsumerName()">
+        {{ topConsumerName() }}
+      </div>
+      <div class="text-[11px] text-slate-500 mt-1.5">{{ topConsumerShare() || 'no usage in window' }}</div>
+    </div>
+  </section>
+
+  <!-- ── Directory ────────────────────────────────────────────────────────-->
+  <section class="panel rounded-2xl overflow-hidden" aria-label="User directory">
+    <div class="px-5 py-4 border-b border-white/[0.06]">
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="min-w-0 mr-auto">
+          <h2 class="text-[13px] font-semibold text-slate-100 tracking-tight">User directory</h2>
+          <p class="text-[11.5px] text-slate-500 mt-0.5">
+            Consumption over {{ windowLabel().toLowerCase() }}. Select a row for that user's individual
+            requests; roles apply on the next admin request, no re-login needed.
+          </p>
+        </div>
+
+        <!-- Search -->
+        <div class="relative">
+          <svg
+            class="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
+          </svg>
+          <input
+            type="search"
+            [value]="search()"
+            (input)="onSearch($event)"
+            placeholder="Search name, email or uid"
+            aria-label="Search users"
+            class="w-56 pl-8 pr-3 py-1.5 rounded-lg text-xs text-slate-100 placeholder:text-slate-600 bg-black/30 border border-white/[0.08] focus:outline-none focus:border-accentCyan/50 focus:ring-1 focus:ring-accentCyan/25 transition-colors"
+          />
+        </div>
+
+        <!-- Role filter -->
+        <div class="flex rounded-lg bg-black/30 border border-white/[0.08] p-0.5" role="group" aria-label="Filter by role">
+          <button
+            type="button"
+            (click)="setRoleFilter('all')"
+            [attr.aria-pressed]="roleFilter() === 'all'"
+            [ngClass]="roleFilter() === 'all' ? 'bg-white/[0.10] text-white' : 'text-slate-400 hover:text-slate-200'"
+            class="px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors"
+          >
+            All
+          </button>
+          <button
+            type="button"
+            (click)="setRoleFilter('admin')"
+            [attr.aria-pressed]="roleFilter() === 'admin'"
+            [ngClass]="roleFilter() === 'admin' ? 'bg-white/[0.10] text-white' : 'text-slate-400 hover:text-slate-200'"
+            class="px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors"
+          >
+            Admins
+          </button>
+          <button
+            type="button"
+            (click)="setRoleFilter('user')"
+            [attr.aria-pressed]="roleFilter() === 'user'"
+            [ngClass]="roleFilter() === 'user' ? 'bg-white/[0.10] text-white' : 'text-slate-400 hover:text-slate-200'"
+            class="px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors"
+          >
+            Members
+          </button>
+        </div>
+      </div>
+
+      @if (search()) {
+        <div class="mt-3 flex items-center gap-2">
+          <span class="text-[11px] text-slate-500">
+            {{ rows().length }} of {{ allRows().length }} matching “{{ search() }}”
+          </span>
+          <button
+            type="button"
+            (click)="clearSearch()"
+            class="text-[11px] text-slate-400 hover:text-slate-100 underline underline-offset-2 transition-colors"
+          >
+            Clear
+          </button>
+        </div>
+      }
+    </div>
+
+    @if (usersError(); as error) {
+      <p class="px-5 py-6 text-sm text-rose-200" role="alert">{{ error }}</p>
+    } @else {
+      @if (usageError(); as error) {
+        <div class="mx-5 mt-4 flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/[0.10] border border-amber-400/25" role="status">
+          <svg class="w-4 h-4 text-amber-300 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p class="text-[11px] text-amber-100 leading-relaxed">
+            Consumption figures couldn't be loaded ({{ error }}), so every row reads zero. Roles below are
+            still accurate and still manageable.
+          </p>
+        </div>
+      }
+
+      <div class="transition-opacity duration-200" [class.opacity-50]="refreshing()">
+        <app-user-table [rows]="rows()" [windowDays]="windowDays()" (roleChanged)="roleChanged.emit()" />
+      </div>
+    }
+  </section>
+</div>
