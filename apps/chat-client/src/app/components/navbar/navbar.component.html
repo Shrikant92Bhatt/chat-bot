@@ -37,8 +37,33 @@
     </button>
 
     <ng-container *ngIf="authService.userSignal() as user; else loginBtn">
-      <div class="flex items-center space-x-3 pl-2 border-l border-white/5">
-        <img [src]="user.photoURL" [alt]="user.displayName" class="w-7 h-7 rounded-full" />
+      <div class="relative pl-2 border-l border-white/5">
+        <button
+          (click)="toggleProfileMenu()"
+          class="flex items-center"
+          [attr.aria-expanded]="isProfileMenuOpen"
+          title="Account"
+        >
+          <img [src]="user.photoURL" [alt]="user.displayName" class="w-7 h-7 rounded-full" />
+        </button>
+
+        <div *ngIf="isProfileMenuOpen" (click)="isProfileMenuOpen = false" class="fixed inset-0 z-40"></div>
+
+        <div
+          *ngIf="isProfileMenuOpen"
+          class="absolute right-0 mt-2 w-56 rounded-xl bg-slate-900 border border-white/10 shadow-xl z-50 py-1"
+        >
+          <div class="px-3 py-2 border-b border-white/5">
+            <p class="text-sm text-slate-200 truncate">{{ user.displayName }}</p>
+            <p class="text-xs text-slate-500 truncate">{{ user.email }}</p>
+          </div>
+          <button
+            (click)="signOut()"
+            class="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-white/5 hover:text-white transition-colors"
+          >
+            Sign out
+          </button>
+        </div>
       </div>
     </ng-container>
 

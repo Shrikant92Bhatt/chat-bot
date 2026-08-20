@@ -14,5 +14,18 @@ export class NavbarComponent {
   @Output() openSettings = new EventEmitter<void>();
   @Output() openAdmin = new EventEmitter<void>();
 
+  // AuthService.logout() has existed all along but was never wired to any
+  // UI control - there was genuinely no way to sign out of this app.
+  public isProfileMenuOpen = false;
+
   constructor(public authService: AuthService) {}
+
+  public toggleProfileMenu(): void {
+    this.isProfileMenuOpen = !this.isProfileMenuOpen;
+  }
+
+  public signOut(): void {
+    this.isProfileMenuOpen = false;
+    this.authService.logout();
+  }
 }
