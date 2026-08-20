@@ -37,6 +37,18 @@ COPY --from=builder /app/dist/apps/chat-api ./dist/apps/chat-api
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 
+# apps/chat-api imports @chat-monorepo/shared (libs/shared) as a bare
+# specifier - tsc leaves that require() as-is at compile time (it doesn't
+# bundle), so it only resolves at runtime if something real sits at
+# node_modules/@chat-monorepo/shared. Nx already builds libs/shared as part
+# of `nx build chat-api` (targetDefaults.build.dependsOn: ["^build"] in
+# nx.json), producing dist/libs/shared with its own package.json - it just
+# was never copied into the runtime image, which crashed the container on
+# boot the moment any file imported a real value (not just a type) from
+# that package (see services/model-config.service.ts's SELECTABLE_MODELS
+# import - type-only imports get elided by tsc so they never surfaced this).
+COPY --from=builder /app/dist/libs/shared ./node_modules/@chat-monorepo/shared
+
 USER expressjs
 
 EXPOSE 8080
