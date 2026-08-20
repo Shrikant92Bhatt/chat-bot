@@ -1,5 +1,6 @@
 import * as dotenv from 'dotenv';
 import { ChatOpenAI } from '@langchain/openai';
+import { ModelConfigService } from '../services/model-config.service';
 
 dotenv.config();
 
@@ -67,7 +68,7 @@ function getActiveGateway(): GatewayConfig {
 
 export function resolveOmniRouteModel(model: string): string {
   const gateway = getActiveGateway();
-  return gateway.isOpenRouter ? OPENROUTER_MODEL_SLUG_MAP[model] || model : model;
+  return gateway.isOpenRouter ? ModelConfigService.resolveModelSlug(model) : model;
 }
 
 export function isOmniRouteConfigured(): boolean {

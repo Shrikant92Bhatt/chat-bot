@@ -1,5 +1,12 @@
 import { Injectable, signal, computed, effect } from '@angular/core';
-import { AIModelType, ChatMessage, ChatThread } from '@chat-monorepo/shared';
+import {
+  AIModelType,
+  ChatMessage,
+  ChatThread,
+  SelectableModel,
+  SELECTABLE_MODELS,
+  DEFAULT_MODEL_ID,
+} from '@chat-monorepo/shared';
 import { AuthService } from './auth.service';
 import { getApiBaseUrl } from '../core/runtime-config';
 
@@ -11,7 +18,8 @@ export class ChatService {
     return `${getApiBaseUrl()}/api/chat`;
   }
 
-  public selectedModel = signal<AIModelType>('gemini-flash-latest');
+  public availableModels = signal<SelectableModel[]>([...SELECTABLE_MODELS]);
+  public selectedModel = signal<AIModelType>(DEFAULT_MODEL_ID);
   public threads = signal<ChatThread[]>([]);
   public activeThreadId = signal<string | null>(null);
   // True only while the initial fetch of saved thread history is in flight
@@ -44,12 +52,15 @@ export class ChatService {
 
   constructor(private authService: AuthService) {
     this.createInitialThread();
+    void this.loadAvailableModels();
 
     // Effect: Reacts to User Login/Logout state changes
     effect(
       () => {
         const user = this.authService.userSignal();
         if (user && user.uid) {
+          // Re-fetch models when user logs in so authenticated permissions / custom configs are fresh
+          void this.loadAvailableModels();
           // loadUserThreadHistory() returns a promise that only settles once
           // its full retry chain finishes (each retry `return`s the next
           // call, so the chain of promises resolves together) - .finally()
@@ -65,6 +76,34 @@ export class ChatService {
       // disallows from inside an effect by default (NG0600) unless opted in.
       { allowSignalWrites: true }
     );
+  }
+
+  /**
+   * Fetches dynamic model configuration from backend.
+   */
+  public async loadAvailableModels(): Promise<void> {
+    try {
+      const token = this.authService.getIdToken();
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`${this.apiUrl}/models`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.models) && data.models.length > 0) {
+          this.availableModels.set(data.models);
+          if (data.defaultModel) {
+            const current = this.selectedModel();
+            const isCurrentAvailable = data.models.some((m: SelectableModel) => m.id === current);
+            if (!isCurrentAvailable || current === DEFAULT_MODEL_ID) {
+              this.selectedModel.set(data.defaultModel);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[ChatService] Could not fetch dynamic models list, using defaults:', e);
+    }
   }
 
   private clearUnauthenticatedHistory() {

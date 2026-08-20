@@ -1,5 +1,6 @@
 import * as crypto from 'crypto';
 import { firestore } from '../db/firestore';
+import { ModelConfigService } from './model-config.service';
 
 /**
  * Per-request token/cost logging, one record per completed chat request.
@@ -55,7 +56,7 @@ const DEFAULT_COST_PER_1K = { input: 0.001, output: 0.003 };
 
 export function estimateCostUsd(model: string, inputTokens: number | null, outputTokens: number | null): number | null {
   if (inputTokens == null || outputTokens == null) return null;
-  const rate = MODEL_COST_PER_1K[model] || DEFAULT_COST_PER_1K;
+  const rate = ModelConfigService.getCostRate(model);
   const cost = (inputTokens / 1000) * rate.input + (outputTokens / 1000) * rate.output;
   return Math.round(cost * 1e8) / 1e8; // keep sub-cent precision, avoid float noise
 }
