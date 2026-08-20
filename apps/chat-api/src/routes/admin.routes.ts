@@ -4,6 +4,7 @@ import { requireAdmin } from '../middleware/admin.middleware';
 import { UserRegistryService, UserRole } from '../services/user-registry.service';
 import { AnalyticsService, parseWindowDays } from '../services/analytics.service';
 import { StorageMetricsService } from '../storage/metrics';
+import { ModelConfigService } from '../services/model-config.service';
 
 /**
  * Admin-only API, mounted at /api/v1/admin (see main.ts). Backs the separate
@@ -222,6 +223,55 @@ router.get('/storage', async (req: AuthenticatedRequest, res: Response) => {
   } catch (error) {
     console.error('[Admin Route] Storage metrics error:', error);
     res.status(500).json({ error: 'Failed to fetch storage metrics.' });
+  }
+});
+
+/**
+ * GET /api/v1/admin/models/catalog
+ * Fetches the live OpenRouter model catalog (with token pricing, context length, modalities).
+ */
+router.get('/models/catalog', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const forceRefresh = req.query.refresh === 'true';
+    const models = await ModelConfigService.fetchOpenRouterCatalog(forceRefresh);
+    res.json({ models, count: models.length });
+  } catch (error) {
+    console.error('[Admin Route] Failed to fetch model catalog:', error);
+    res.status(500).json({ error: 'Failed to fetch model catalog.' });
+  }
+});
+
+/**
+ * GET /api/v1/admin/models/config
+ * Reads the active dynamic model configuration from Firestore.
+ */
+router.get('/models/config', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const config = await ModelConfigService.getModelConfig();
+    res.json(config);
+  } catch (error) {
+    console.error('[Admin Route] Failed to read model config:', error);
+    res.status(500).json({ error: 'Failed to read model configuration.' });
+  }
+});
+
+/**
+ * PUT /api/v1/admin/models/config
+ * Updates the active model configuration (enabled models, default model) in Firestore.
+ */
+router.put('/models/config', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { defaultModel, models } = req.body || {};
+    if (!Array.isArray(models)) {
+      res.status(400).json({ error: 'Invalid payload: "models" array is required.' });
+      return;
+    }
+
+    const savedConfig = await ModelConfigService.saveModelConfig({ defaultModel, models });
+    res.json({ success: true, config: savedConfig });
+  } catch (error) {
+    console.error('[Admin Route] Failed to save model config:', error);
+    res.status(500).json({ error: 'Failed to save model configuration.' });
   }
 });
 

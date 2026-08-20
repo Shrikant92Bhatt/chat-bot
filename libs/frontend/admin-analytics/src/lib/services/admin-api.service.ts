@@ -1,5 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { ADMIN_API_BASE_URL, ADMIN_AUTH_BRIDGE } from '../auth-bridge.token';
+import { ModelConfigDto, OpenRouterModelCatalogItem, SelectableModel } from '@chat-monorepo/shared';
 
 // ── Response shapes, mirroring apps/chat-api/src/routes/admin.routes.ts ──
 // Not imported from libs/shared on purpose: these are admin-console-only
@@ -184,5 +185,21 @@ export class AdminApiService {
 
   public getStorageMetrics(): Promise<StorageMetrics> {
     return this.request('/storage');
+  }
+
+  public getModelCatalog(forceRefresh = false): Promise<{ models: OpenRouterModelCatalogItem[]; count: number }> {
+    const params = forceRefresh ? '?refresh=true' : '';
+    return this.request(`/models/catalog${params}`);
+  }
+
+  public getModelConfig(): Promise<ModelConfigDto> {
+    return this.request('/models/config');
+  }
+
+  public saveModelConfig(config: ModelConfigDto): Promise<{ success: boolean; config: ModelConfigDto }> {
+    return this.request('/models/config', {
+      method: 'PUT',
+      body: JSON.stringify(config),
+    });
   }
 }

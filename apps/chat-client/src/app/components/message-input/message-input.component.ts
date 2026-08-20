@@ -1,7 +1,7 @@
 import { Component, HostListener, ChangeDetectionStrategy, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { AIModelType, SELECTABLE_MODELS } from '@chat-monorepo/shared';
+import { AIModelType } from '@chat-monorepo/shared';
 import { ChatService } from '../../services/chat.service';
 import { ProjectService } from '../../services/project.service';
 
@@ -19,7 +19,7 @@ export class MessageInputComponent {
   public messageText = '';
   public isModelDropdownOpen = false;
 
-  public availableModels = SELECTABLE_MODELS;
+  public availableModels = computed(() => this.chatService.availableModels());
 
   /** Name of the project this conversation is scoped to, or null. */
   public activeProjectName = computed(() =>
@@ -67,8 +67,8 @@ export class MessageInputComponent {
 
   getModelDisplayName(): string {
     const active = this.chatService.selectedModel();
-    const model = this.availableModels.find((m) => m.id === active);
-    return model ? model.name : 'Gemini Flash';
+    const model = this.availableModels().find((m) => m.id === active);
+    return model ? model.name : (active || 'Gemini Flash');
   }
 
   selectModel(id: string): void {

@@ -1,23 +1,61 @@
-export type AIModelType =
-  | 'gemini-pro-latest'
-  | 'gemini-flash-latest'
-  | 'gpt-4o'
-  | 'gpt-4o-mini'
-  | 'claude-sonnet'
-  | 'llama-4-maverick'
-  | 'grok'
-  | 'omniroute-default';
+export type AIModelType = string;
 
-/** Single source of truth for the model picker UI - avoids the id/label pairs drifting out of sync between components. */
-export const SELECTABLE_MODELS: ReadonlyArray<{ id: AIModelType; name: string }> = [
-  { id: 'gemini-flash-latest', name: 'Gemini Flash' },
-  { id: 'gemini-pro-latest', name: 'Gemini Pro' },
-  { id: 'gpt-4o', name: 'GPT-4o' },
-  { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
-  { id: 'claude-sonnet', name: 'Claude Sonnet 5' },
-  { id: 'llama-4-maverick', name: 'Llama 4 Maverick' },
-  { id: 'grok', name: 'Grok 4.6' },
+export interface SelectableModel {
+  id: string;
+  name: string;
+  provider?: string;
+  description?: string;
+  contextLength?: number;
+  pricing?: {
+    prompt: number; // USD per 1,000 tokens
+    completion: number; // USD per 1,000 tokens
+  };
+  enabled?: boolean;
+}
+
+export interface ModelConfigDto {
+  defaultModel: string;
+  models: SelectableModel[];
+  updatedAt?: number;
+}
+
+export interface OpenRouterModelCatalogItem {
+  id: string;
+  name: string;
+  description?: string;
+  context_length?: number;
+  architecture?: {
+    modality?: string;
+    input_modalities?: string[];
+    output_modalities?: string[];
+    tokenizer?: string;
+    instruct_type?: string | null;
+  };
+  pricing?: {
+    prompt?: string;
+    completion?: string;
+    image?: string;
+    request?: string;
+  };
+  top_provider?: {
+    context_length?: number;
+    max_completion_tokens?: number;
+    is_moderated?: boolean;
+  };
+}
+
+/** Fallback list for the model picker UI when dynamic database config is not yet loaded. */
+export const SELECTABLE_MODELS: ReadonlyArray<SelectableModel> = [
+  { id: 'gemini-flash-latest', name: 'Gemini Flash', provider: 'Google', description: 'Fast, lightweight & responsive', enabled: true },
+  { id: 'gemini-pro-latest', name: 'Gemini Pro', provider: 'Google', description: 'Advanced reasoning & large context', enabled: true },
+  { id: 'gpt-4o', name: 'GPT-4o', provider: 'OpenAI', description: 'Flagship multimodal model', enabled: true },
+  { id: 'gpt-4o-mini', name: 'GPT-4o Mini', provider: 'OpenAI', description: 'Affordable, fast intelligent model', enabled: true },
+  { id: 'claude-sonnet', name: 'Claude Sonnet 5', provider: 'Anthropic', description: 'Balanced reasoning & speed', enabled: true },
+  { id: 'llama-4-maverick', name: 'Llama 4 Maverick', provider: 'Meta', description: 'Open-weight, large context', enabled: true },
+  { id: 'grok', name: 'Grok 4.6', provider: 'xAI', description: 'Real-time, unfiltered reasoning', enabled: true },
 ];
+
+export const DEFAULT_MODEL_ID = 'gemini-flash-latest';
 
 export type MessageRole = 'user' | 'assistant' | 'system';
 
