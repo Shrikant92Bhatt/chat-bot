@@ -10,33 +10,43 @@ import {
   UsageSummary,
   UserUsageAggregate,
 } from '../services/admin-api.service';
-import { UsageChartComponent, ChartMetric } from '../components/usage-chart/usage-chart.component';
-import { UserUsageTableComponent } from '../components/user-usage-table/user-usage-table.component';
-import { UserManagementComponent } from '../components/user-management/user-management.component';
+import { OverviewViewComponent } from '../views/overview-view/overview-view.component';
+import { UsersViewComponent } from '../views/users-view/users-view.component';
 
 /** Date-range presets. One control, above everything it scopes. */
 const WINDOW_PRESETS = [
-  { days: 7, label: 'Last 7 days' },
-  { days: 30, label: 'Last 30 days' },
-  { days: 90, label: 'Last 90 days' },
+  { days: 7, label: 'Last 7 days', short: '7d' },
+  { days: 30, label: 'Last 30 days', short: '30d' },
+  { days: 90, label: 'Last 90 days', short: '90d' },
 ] as const;
 
+export type AdminView = 'overview' | 'users';
+
 /**
- * The admin console's single view - embedded directly into the host app's
- * shell (chat-client) rather than owning its own route/page, since this
- * lib doesn't know or care what the host app's navigation looks like. The
- * host app decides how/when to show it and provides ADMIN_AUTH_BRIDGE +
- * ADMIN_API_BASE_URL (see auth-bridge.token.ts) so this stays independent
- * of chat-client's concrete AuthService.
+ * The admin console's shell - embedded directly into the host app's shell
+ * (chat-client) rather than owning its own route/page, since this lib doesn't
+ * know or care what the host app's navigation looks like. The host app decides
+ * how/when to show it and provides ADMIN_AUTH_BRIDGE + ADMIN_API_BASE_URL (see
+ * auth-bridge.token.ts) so this stays independent of chat-client's concrete
+ * AuthService.
  *
- * Layout follows the dataviz composition rules: ONE filter row at the top
- * scoping everything below it, then the KPI row (one hero figure, the rest as
- * stat tiles), then the time-series, then the per-user and per-model
- * breakdowns, then storage and user management.
+ * This component owns three things and nothing else: the data, the date-range
+ * filter, and which of the two views is showing.
  *
- * All five admin endpoints are fetched in parallel with Promise.allSettled, so
- * one failing panel (e.g. GCS unreachable) degrades that panel only instead of
- * blanking the dashboard - the same fail-soft posture the backend's context
+ *  - **Views, not routes.** Switching between Overview and Users is a signal
+ *    flipping which child renders. This lib deliberately owns no Router (see
+ *    architecture.md §5) - it is consumed into chat-client's build and rendered
+ *    as an overlay *in place*, so a real route here would fight the host app's
+ *    navigation and put admin state in the URL of a chat page.
+ *  - **One filter row above everything it scopes.** The date range lives in the
+ *    header, applies to both views, and refetches everything on change, so no
+ *    two numbers on screen can be from different windows.
+ *  - **Fetched once, shared by both views.** Switching views is instant and
+ *    costs no requests; only a date change or a role change refetches.
+ *
+ * All five admin endpoints load in parallel with Promise.allSettled, so one
+ * failing panel (e.g. GCS unreachable) degrades that panel only instead of
+ * blanking the console - the same fail-soft posture the backend's context
  * assembly uses. The single exception is a 403, which is not a panel failure
  * but an authorization outcome: AdminApiService.accessDenied flips and the
  * template swaps to an inline "not authorized" state.
@@ -44,7 +54,7 @@ const WINDOW_PRESETS = [
 @Component({
   selector: 'lib-admin-dashboard',
   standalone: true,
-  imports: [CommonModule, UsageChartComponent, UserUsageTableComponent, UserManagementComponent],
+  imports: [CommonModule, OverviewViewComponent, UsersViewComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './admin-dashboard.component.html',
 })
@@ -58,7 +68,7 @@ export class AdminDashboardComponent implements OnInit {
 
   public readonly windowPresets = WINDOW_PRESETS;
   public readonly windowDays = signal<number>(30);
-  public readonly chartMetric = signal<ChartMetric>('requests');
+  public readonly activeView = signal<AdminView>('overview');
 
   /** First load - shows the full-page loader. */
   public readonly isInitialLoading = signal(true);
@@ -80,11 +90,6 @@ export class AdminDashboardComponent implements OnInit {
     () => WINDOW_PRESETS.find((p) => p.days === this.windowDays())?.label ?? `Last ${this.windowDays()} days`
   );
 
-  /** Largest per-model request count, for the model bars' scale. */
-  public readonly peakModelRequests = computed(() =>
-    Math.max(1, ...this.usageByModel().map((m) => m.totalRequests))
-  );
-
   public readonly adminCount = computed(
     () => this.registeredUsers().filter((user) => user.role === 'admin').length
   );
@@ -93,21 +98,19 @@ export class AdminDashboardComponent implements OnInit {
     void this.loadAll();
   }
 
+  public setView(view: AdminView): void {
+    this.activeView.set(view);
+  }
+
   public async setWindow(days: number): Promise<void> {
     if (days === this.windowDays()) return;
     this.windowDays.set(days);
     await this.loadAll();
   }
 
-  public setMetric(metric: ChartMetric): void {
-    this.chartMetric.set(metric);
-  }
-
   /** Re-fetch everything the filter row scopes, so the numbers always agree. */
   public async loadAll(): Promise<void> {
-    if (this.isInitialLoading()) {
-      // keep the full-page loader
-    } else {
+    if (!this.isInitialLoading()) {
       this.isRefreshing.set(true);
     }
     this.panelErrors.set({});
@@ -171,28 +174,5 @@ export class AdminDashboardComponent implements OnInit {
 
   public panelError(panel: string): string | null {
     return this.panelErrors()[panel] ?? null;
-  }
-
-  public modelBarWidth(model: ModelUsageAggregate): number {
-    return Math.max(2, (model.totalRequests / this.peakModelRequests()) * 100);
-  }
-
-  // ── Formatting helpers ───────────────────────────────────────────────────
-
-  /** Compact figures for stat tiles: 1,284 / 12.9K / 4.2M. */
-  public compact(value: number): string {
-    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-    if (value >= 10_000) return `${(value / 1_000).toFixed(1)}K`;
-    return value.toLocaleString();
-  }
-
-  public formatCost(value: number | null | undefined): string {
-    if (value === null || value === undefined) return '—';
-    if (value === 0) return '$0.00';
-    return value < 0.01 ? `$${value.toFixed(5)}` : `$${value.toFixed(2)}`;
-  }
-
-  public formatNumber(value: number): string {
-    return value.toLocaleString();
   }
 }

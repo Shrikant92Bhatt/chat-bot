@@ -1,11 +1,35 @@
+const path = require('path');
+
+/**
+ * Content globs are ABSOLUTE, derived from this file's own location.
+ *
+ * They used to be relative (`./apps/chat-client/src/**` plus
+ * `../../libs/frontend/admin-analytics/src/**`), which quietly resolved
+ * against the *process* CWD - the Nx workspace root - not against this file.
+ * So the first glob happened to work and the second one pointed two levels
+ * ABOVE the workspace root at a directory that doesn't exist: the
+ * admin-analytics lib was never scanned, and the only Tailwind classes it ever
+ * got were the ones chat-client's own source happened to use too. Everything
+ * else - `grid-cols-12`, `col-span-*`, `ambient-glow-1`, every arbitrary value
+ * - was silently dropped from the bundle, which is most of why the admin
+ * console looked unstyled. Absolute paths can't drift with the CWD, and they
+ * keep working from a git worktree.
+ *
+ * Forward slashes on purpose: fast-glob (Tailwind's matcher) treats a
+ * backslash as an escape character, so a Windows `path.join` result would not
+ * match anything.
+ */
+const glob = (...segments) => path.join(...segments).replace(/\\/g, '/');
+const workspaceRoot = path.join(__dirname, '..', '..');
+
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   content: [
-    './apps/chat-client/src/**/*.{html,ts}',
+    glob(__dirname, 'src/**/*.{html,ts}'),
     // admin-analytics lib is consumed directly into this app's bundle (see
     // .agents/PROJECT_CONTEXT.md) - its classes need scanning here too,
     // since Tailwind only generates CSS for classes it can see at build time.
-    '../../libs/frontend/admin-analytics/src/**/*.{html,ts}',
+    glob(workspaceRoot, 'libs/frontend/admin-analytics/src/**/*.{html,ts}'),
   ],
   theme: {
     extend: {
