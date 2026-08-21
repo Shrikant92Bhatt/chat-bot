@@ -13,6 +13,7 @@ import {
 import { OverviewViewComponent } from '../views/overview-view/overview-view.component';
 import { UsersViewComponent } from '../views/users-view/users-view.component';
 import { ModelsViewComponent } from '../views/models-view/models-view.component';
+import { LimitsViewComponent } from '../views/limits-view/limits-view.component';
 
 /** Date-range presets. One control, above everything it scopes. */
 const WINDOW_PRESETS = [
@@ -21,7 +22,7 @@ const WINDOW_PRESETS = [
   { days: 90, label: 'Last 90 days', short: '90d' },
 ] as const;
 
-export type AdminView = 'overview' | 'users' | 'models';
+export type AdminView = 'overview' | 'users' | 'models' | 'limits';
 
 /**
  * The admin console's shell - embedded directly into the host app's shell
@@ -55,7 +56,7 @@ export type AdminView = 'overview' | 'users' | 'models';
 @Component({
   selector: 'lib-admin-dashboard',
   standalone: true,
-  imports: [CommonModule, OverviewViewComponent, UsersViewComponent, ModelsViewComponent],
+  imports: [CommonModule, OverviewViewComponent, UsersViewComponent, ModelsViewComponent, LimitsViewComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './admin-dashboard.component.html',
 })
@@ -70,6 +71,9 @@ export class AdminDashboardComponent implements OnInit {
   public readonly windowPresets = WINDOW_PRESETS;
   public readonly windowDays = signal<number>(30);
   public readonly activeView = signal<AdminView>('overview');
+  // 'limits' loads its own data independently of everything else this shell
+  // owns (see LimitsViewComponent.ngOnInit) - it doesn't scope to the
+  // header's date-range filter and isn't part of loadAll()'s Promise.allSettled.
 
   /** First load - shows the full-page loader. */
   public readonly isInitialLoading = signal(true);

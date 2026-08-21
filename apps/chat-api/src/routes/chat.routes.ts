@@ -17,20 +17,27 @@ import { UsageService } from '../services/usage.service';
 import { MemoryService } from '../memory/memory.service';
 import { listPromptTemplates } from '../prompt/prompt-manager';
 import { ModelConfigService } from '../services/model-config.service';
+import { SystemLimitsService } from '../services/system-limits.service';
 
 const router = Router();
 const aiRouterService = new AIRouterService();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB
 
 /**
- * Photo/video attachments (see POST /attachments below) - a separate, more
- * permissive pipeline from the knowledge-base `upload` above: these are
- * chat-message attachments (images go to the model as vision input; videos
- * are stored and shown, never "read"), not RAG-ingested documents, so a
- * different size ceiling and mimetype allowlist apply.
+ * multer's `limits` are fixed at instantiation and can't be changed at
+ * request time, so these are absolute safety ceilings only - generous
+ * enough to never bind in practice, since SystemLimitsService.getLimits()
+ * (admin-editable, see services/system-limits.service.ts) is what's actually
+ * enforced in each handler below, request by request. This is what makes
+ * the document-upload and attachment size/count caps admin-tunable without
+ * a redeploy: the admin-configured value is always <= these ceilings
+ * (SystemLimitsService clamps to them), so it's the one that actually bites.
  */
-const MAX_ATTACHMENTS_PER_MESSAGE = 4;
-const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024; // 25MB
+const HARD_MAX_DOCUMENT_BYTES = 50 * 1024 * 1024;
+const HARD_MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
+const HARD_MAX_ATTACHMENTS_PER_MESSAGE = 10;
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: HARD_MAX_DOCUMENT_BYTES } });
+
 const ATTACHMENT_MIME_KIND: Record<string, AttachmentKind> = {
   'image/jpeg': 'image',
   'image/png': 'image',
@@ -44,7 +51,7 @@ const ATTACHMENT_MIME_KIND: Record<string, AttachmentKind> = {
 };
 const mediaUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_ATTACHMENT_BYTES, files: MAX_ATTACHMENTS_PER_MESSAGE },
+  limits: { fileSize: HARD_MAX_ATTACHMENT_BYTES, files: HARD_MAX_ATTACHMENTS_PER_MESSAGE },
 });
 
 /**
@@ -52,21 +59,23 @@ const mediaUpload = multer({
  * the route handler runs, so a plain try/catch around the handler body never
  * sees them - they'd otherwise fall through to Express's default handler as
  * an unhelpful 500. This translates them into the same friendly 400 JSON
- * shape every other validation failure in this file uses.
+ * shape every other validation failure in this file uses. Hitting this ceiling
+ * at all means a request blew well past the admin-configured limit (which is
+ * checked separately, inside the handler, against the current live value).
  */
 function handleMediaUpload(req: Request, res: Response, next: NextFunction): void {
-  mediaUpload.array('files', MAX_ATTACHMENTS_PER_MESSAGE)(req, res, (error: unknown) => {
+  mediaUpload.array('files', HARD_MAX_ATTACHMENTS_PER_MESSAGE)(req, res, (error: unknown) => {
     if (!error) {
       next();
       return;
     }
     const code = (error as { code?: string }).code;
     if (code === 'LIMIT_FILE_SIZE') {
-      res.status(400).json({ error: `Each attachment must be ${MAX_ATTACHMENT_BYTES / (1024 * 1024)}MB or smaller.` });
+      res.status(400).json({ error: `Each attachment must be ${HARD_MAX_ATTACHMENT_BYTES / (1024 * 1024)}MB or smaller.` });
       return;
     }
     if (code === 'LIMIT_FILE_COUNT' || code === 'LIMIT_UNEXPECTED_FILE') {
-      res.status(400).json({ error: `You can attach up to ${MAX_ATTACHMENTS_PER_MESSAGE} files at once.` });
+      res.status(400).json({ error: `You can attach up to ${HARD_MAX_ATTACHMENTS_PER_MESSAGE} files at once.` });
       return;
     }
     console.error('[Chat API Route] Attachment upload middleware error:', error);
@@ -83,12 +92,20 @@ function sanitizeFileName(name: string): string {
 
 /**
  * GET /api/chat/config
- * Public endpoint returning public Client ID configuration from backend .env
+ * Public endpoint returning public Client ID configuration from backend .env,
+ * plus the currently effective (admin-editable, see system-limits.service.ts)
+ * upload limits - the frontend uses these for its own client-side
+ * pre-validation instead of hardcoding a second copy that could drift from
+ * whatever an admin has actually configured server-side.
  */
-router.get('/config', (req, res) => {
+router.get('/config', async (req, res) => {
+  const limits = await SystemLimitsService.getLimits();
   res.json({
     googleClientId: process.env.GOOGLE_CLIENT_ID || '',
     openAiConfigured: isOpenAiConfigured(),
+    documentUploadMaxBytes: limits.documentUploadMaxBytes,
+    attachmentMaxBytes: limits.attachmentMaxBytes,
+    attachmentMaxCount: limits.attachmentMaxCount,
   });
 });
 
@@ -252,6 +269,14 @@ router.post('/documents', authenticateToken, upload.single('file'), async (req: 
       return;
     }
 
+    const limits = await SystemLimitsService.getLimits();
+    if (file.size > limits.documentUploadMaxBytes) {
+      res.status(400).json({
+        error: `File is too large - documents must be ${Math.round(limits.documentUploadMaxBytes / (1024 * 1024))}MB or smaller.`,
+      });
+      return;
+    }
+
     const text = await extractDocumentText(file.buffer, file.originalname, file.mimetype);
 
     const ragRetriever = new RagRetriever();
@@ -283,6 +308,12 @@ router.post('/attachments', authenticateToken, handleMediaUpload, async (req: Au
       return;
     }
 
+    const limits = await SystemLimitsService.getLimits();
+    if (files.length > limits.attachmentMaxCount) {
+      res.status(400).json({ error: `You can attach up to ${limits.attachmentMaxCount} files at once.` });
+      return;
+    }
+
     const uploader = new GcsUploader();
     const attachments: ChatAttachment[] = [];
 
@@ -291,6 +322,12 @@ router.post('/attachments', authenticateToken, handleMediaUpload, async (req: Au
       if (!kind) {
         res.status(400).json({
           error: `Unsupported file type "${file.mimetype}". Supported: photos (jpg, png, webp, gif, heic) and video (mp4, mov, webm).`,
+        });
+        return;
+      }
+      if (file.size > limits.attachmentMaxBytes) {
+        res.status(400).json({
+          error: `"${file.originalname}" is too large - attachments must be ${Math.round(limits.attachmentMaxBytes / (1024 * 1024))}MB or smaller.`,
         });
         return;
       }

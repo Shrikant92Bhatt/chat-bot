@@ -51,8 +51,12 @@ export class ChatService {
   public isUploadingAttachments = signal<boolean>(false);
   public attachmentUploadError = signal<string | null>(null);
 
-  private readonly MAX_ATTACHMENTS = 4;
-  private readonly MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+  // Defaults mirror the backend's out-of-the-box values (see
+  // system-limits.service.ts DEFAULT_LIMITS) - loadEffectiveLimits() below
+  // overwrites these with whatever an admin has actually configured, so
+  // client-side pre-validation never drifts from what the server enforces.
+  public maxAttachments = signal<number>(4);
+  public maxAttachmentBytes = signal<number>(25 * 1024 * 1024);
   private readonly ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'];
   private readonly ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
 
@@ -70,6 +74,7 @@ export class ChatService {
   constructor(private authService: AuthService) {
     this.createInitialThread();
     void this.loadAvailableModels();
+    void this.loadEffectiveLimits();
 
     // Effect: Reacts to User Login/Logout state changes
     effect(
@@ -120,6 +125,28 @@ export class ChatService {
       }
     } catch (e) {
       console.warn('[ChatService] Could not fetch dynamic models list, using defaults:', e);
+    }
+  }
+
+  /**
+   * Fetches the currently effective (admin-editable, see
+   * apps/chat-api/src/services/system-limits.service.ts) attachment limits
+   * from the public /config endpoint, so client-side pre-validation in
+   * attachMedia() below always matches what the server will actually
+   * enforce instead of hardcoding a second, driftable copy. Silently keeps
+   * the built-in defaults on failure - this is a UX nicety (a tighter
+   * client-side error message before an upload even starts), not the real
+   * enforcement boundary, which stays server-side regardless.
+   */
+  private async loadEffectiveLimits(): Promise<void> {
+    try {
+      const res = await fetch(`${this.apiUrl}/config`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (typeof data.attachmentMaxCount === 'number') this.maxAttachments.set(data.attachmentMaxCount);
+      if (typeof data.attachmentMaxBytes === 'number') this.maxAttachmentBytes.set(data.attachmentMaxBytes);
+    } catch (e) {
+      console.warn('[ChatService] Could not fetch effective upload limits, using defaults:', e);
     }
   }
 
@@ -346,10 +373,11 @@ export class ChatService {
   }
 
   /**
-   * Uploads up to MAX_ATTACHMENTS photos/videos and stages them for the next
-   * sendMessage() call (composer chips, cleared once sent - see sendMessage
-   * below). Images are later sent to the model as vision input; videos are
-   * stored and shown in the chat only (see graph.ts toMessageContent()).
+   * Uploads up to maxAttachments() photos/videos and stages them for the
+   * next sendMessage() call (composer chips, cleared once sent - see
+   * sendMessage below). Images are later sent to the model as vision input;
+   * videos are stored and shown in the chat only (see graph.ts
+   * toMessageContent()).
    */
   async attachMedia(files: File[]): Promise<void> {
     if (!this.authService.userSignal()) {
@@ -358,17 +386,19 @@ export class ChatService {
     }
     if (files.length === 0) return;
 
-    const room = this.MAX_ATTACHMENTS - this.stagedAttachments().length;
+    const limit = this.maxAttachments();
+    const room = limit - this.stagedAttachments().length;
     if (room <= 0) {
-      this.attachmentUploadError.set(`You can attach up to ${this.MAX_ATTACHMENTS} files per message.`);
+      this.attachmentUploadError.set(`You can attach up to ${limit} files per message.`);
       return;
     }
 
     const toUpload = files.slice(0, room);
     this.attachmentUploadError.set(
-      files.length > toUpload.length ? `Only attaching the first ${toUpload.length} — max ${this.MAX_ATTACHMENTS} files per message.` : null
+      files.length > toUpload.length ? `Only attaching the first ${toUpload.length} — max ${limit} files per message.` : null
     );
 
+    const maxBytes = this.maxAttachmentBytes();
     for (const file of toUpload) {
       const isImage = this.ALLOWED_IMAGE_TYPES.includes(file.type);
       const isVideo = this.ALLOWED_VIDEO_TYPES.includes(file.type);
@@ -378,8 +408,8 @@ export class ChatService {
         );
         return;
       }
-      if (file.size > this.MAX_ATTACHMENT_BYTES) {
-        this.attachmentUploadError.set(`"${file.name}" is too large — attachments must be ${this.MAX_ATTACHMENT_BYTES / (1024 * 1024)}MB or smaller.`);
+      if (file.size > maxBytes) {
+        this.attachmentUploadError.set(`"${file.name}" is too large — attachments must be ${Math.round(maxBytes / (1024 * 1024))}MB or smaller.`);
         return;
       }
     }

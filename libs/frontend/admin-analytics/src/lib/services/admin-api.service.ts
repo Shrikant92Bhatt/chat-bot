@@ -1,6 +1,12 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { ADMIN_API_BASE_URL, ADMIN_AUTH_BRIDGE } from '../auth-bridge.token';
-import { ModelConfigDto, OpenRouterModelCatalogItem, SelectableModel } from '@chat-monorepo/shared';
+import {
+  ModelConfigDto,
+  OpenRouterModelCatalogItem,
+  RateLimitUsageEntry,
+  SelectableModel,
+  SystemLimitsDto,
+} from '@chat-monorepo/shared';
 
 // ── Response shapes, mirroring apps/chat-api/src/routes/admin.routes.ts ──
 // Not imported from libs/shared on purpose: these are admin-console-only
@@ -201,5 +207,20 @@ export class AdminApiService {
       method: 'PUT',
       body: JSON.stringify(config),
     });
+  }
+
+  public getLimits(): Promise<SystemLimitsDto> {
+    return this.request('/limits');
+  }
+
+  public saveLimits(limits: Partial<SystemLimitsDto>): Promise<{ success: boolean; limits: SystemLimitsDto }> {
+    return this.request('/limits', {
+      method: 'PUT',
+      body: JSON.stringify(limits),
+    });
+  }
+
+  public getLimitsUsage(): Promise<{ entries: RateLimitUsageEntry[]; count: number }> {
+    return this.request('/limits/usage');
   }
 }
