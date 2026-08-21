@@ -71,17 +71,21 @@
         </div>
 
         <!-- Assistant Message -->
-        <div *ngIf="msg.role === 'assistant'" class="flex justify-start py-2 group hover:bg-white/[0.02] transition-colors rounded-2xl -mx-4 px-4">
-          <div class="flex items-start gap-3 w-full">
-            <!-- NexusAI icon -->
-            <div class="w-7 h-7 rounded-full bg-gradient-to-tr from-accentCyan to-blue-600 flex items-center justify-center text-white shrink-0 mt-1">
+        <div *ngIf="msg.role === 'assistant'" class="flex flex-col py-2 group hover:bg-white/[0.02] transition-colors rounded-2xl -mx-4 px-4">
+          <!-- Header: icon + name sit on their own row so the reply body below
+               isn't permanently indented by an avatar column - the response
+               gets the full container width instead of losing ~40px/line to
+               a left gutter that only ever holds one small icon. -->
+          <div class="flex items-center gap-2 mb-1.5">
+            <div class="w-7 h-7 rounded-full bg-gradient-to-tr from-accentCyan to-blue-600 flex items-center justify-center text-white shrink-0">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
             </div>
-            <div class="flex flex-col gap-1 flex-1 min-w-0">
-              <div class="text-[11px] text-slate-400 font-medium">NexusAI</div>
-              <div class="text-slate-200 text-sm leading-relaxed">
+            <div class="text-[11px] text-slate-400 font-medium">NexusAI</div>
+          </div>
+          <div class="flex flex-col gap-1 w-full min-w-0">
+            <div class="text-slate-200 text-sm leading-relaxed">
                 <!-- Markdown HTML Output -->
                 <div class="markdown-body" [innerHTML]="renderMarkdown(msg.content)"></div>
 
@@ -205,4 +209,3 @@
       </div>
     </div>
   </div>
-</div>

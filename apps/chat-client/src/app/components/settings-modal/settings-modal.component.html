@@ -21,7 +21,15 @@
         >
           General
         </button>
-        <button 
+        <button
+          *ngIf="authService.userSignal()"
+          (click)="setTab('personalize')"
+          [ngClass]="activeTab() === 'personalize' ? 'bg-white/10 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-slate-300'"
+          class="px-4 py-2 rounded-lg text-sm font-medium text-left transition-colors whitespace-nowrap"
+        >
+          Personalize
+        </button>
+        <button
           (click)="setTab('diagnostics')"
           [ngClass]="activeTab() === 'diagnostics' ? 'bg-white/10 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-slate-300'"
           class="px-4 py-2 rounded-lg text-sm font-medium text-left transition-colors whitespace-nowrap"
@@ -60,6 +68,37 @@
                   class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform"
                 ></span>
               </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Personalize Tab -->
+        <div *ngIf="activeTab() === 'personalize'" class="space-y-4">
+          <div>
+            <label for="aboutMeInput" class="block text-sm font-semibold text-slate-200 mb-1">About you</label>
+            <p class="text-xs text-slate-500 mb-3">
+              Shared with the assistant on every conversation - use it for things worth knowing every time (your role, tech stack, tone preference).
+            </p>
+            <textarea
+              id="aboutMeInput"
+              [(ngModel)]="aboutMeDraft"
+              rows="8"
+              maxlength="2000"
+              placeholder="e.g. I'm a backend engineer working mostly in TypeScript. Keep answers concise and skip the pleasantries."
+              class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-slate-100 placeholder-slate-500 resize-y focus:outline-none focus:border-slate-500/50"
+            ></textarea>
+            <div class="flex items-center justify-between mt-2">
+              <span class="text-[11px] text-slate-500">{{ aboutMeDraft.length }}/2000</span>
+              <div class="flex items-center gap-3">
+                <span *ngIf="profileSaved()" class="text-xs text-emerald-400">Saved</span>
+                <button
+                  (click)="saveProfile()"
+                  [disabled]="chatService.isSavingProfile()"
+                  class="px-4 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 disabled:opacity-50 text-white text-sm font-medium transition-all"
+                >
+                  {{ chatService.isSavingProfile() ? 'Saving...' : 'Save' }}
+                </button>
+              </div>
             </div>
           </div>
         </div>

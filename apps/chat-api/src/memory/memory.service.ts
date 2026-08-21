@@ -154,6 +154,60 @@ export class MemoryService {
     }
   }
 
+  /**
+   * The explicit, user-authored "About you" profile (ChatGPT calls this
+   * Custom Instructions) - distinct from the auto-extracted memories above:
+   * one fixed doc per user rather than a growing list, and it is never
+   * written by `rememberFromMessage`, only by the user themselves via the
+   * Settings screen. Stored as an ordinary `identity`-kind MemoryEntry with
+   * a deterministic id so it's already included unconditionally by
+   * `getRelevantMemories`'s "standing" memories path and shows up in
+   * `listMemories` like any other entry - no separate storage or retrieval
+   * path to keep in sync.
+   */
+  private static profileId(userId: string): string {
+    return `profile-${userId}`;
+  }
+
+  static async getProfile(userId: string): Promise<string> {
+    if (!userId) return '';
+    try {
+      const doc = await this.collection().doc(this.profileId(userId)).get();
+      if (!doc.exists) return '';
+      return (doc.data() as MemoryEntry).content || '';
+    } catch (error) {
+      console.error('[MemoryService] Failed to load profile:', error);
+      return '';
+    }
+  }
+
+  static async setProfile(userId: string, aboutMe: string): Promise<void> {
+    if (!userId) return;
+    const content = (aboutMe || '').trim().slice(0, 2000);
+    const id = this.profileId(userId);
+    const now = Date.now();
+
+    try {
+      if (!content) {
+        await this.collection().doc(id).delete();
+        return;
+      }
+      const entry: MemoryEntry = {
+        id,
+        userId,
+        content,
+        kind: 'identity',
+        createdAt: now,
+        updatedAt: now,
+        sourceThreadId: null,
+      };
+      await this.collection().doc(id).set(entry, { merge: true });
+    } catch (error) {
+      console.error('[MemoryService] Failed to save profile:', error);
+      throw error;
+    }
+  }
+
   static async deleteMemory(userId: string, memoryId: string): Promise<boolean> {
     try {
       const docRef = this.collection().doc(memoryId);
