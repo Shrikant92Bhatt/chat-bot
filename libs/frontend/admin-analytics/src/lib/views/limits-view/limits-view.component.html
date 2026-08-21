@@ -16,7 +16,9 @@
         <h2 class="text-sm font-semibold text-slate-100">Operational limits</h2>
         <p class="text-xs text-slate-500 mt-0.5 max-w-xl">
           Rate limits and upload caps, editable without a redeploy. Changes take effect for new requests within
-          about a minute (server-side cache).
+          about a minute (server-side cache). Per-model daily caps for signed-in users live on the
+          <span class="text-slate-400">Models</span> tab instead - hitting one never blocks a reply, it falls
+          back to a cheaper model.
         </p>
       </div>
       <button
@@ -58,21 +60,6 @@
             class="w-full px-3 py-2 rounded-lg bg-black/30 border border-white/10 text-sm text-slate-100 focus:outline-none focus:border-accentCyan/50"
           />
           <p class="text-[11px] text-slate-500 mt-1">Free messages per IP before sign-in is required.</p>
-        </div>
-
-        <div>
-          <label class="block text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">
-            Signed-in daily messages
-          </label>
-          <input
-            type="number"
-            min="1"
-            max="5000"
-            [ngModel]="f.authDailyMessageLimit"
-            (ngModelChange)="updateField('authDailyMessageLimit', $event)"
-            class="w-full px-3 py-2 rounded-lg bg-black/30 border border-white/10 text-sm text-slate-100 focus:outline-none focus:border-accentCyan/50"
-          />
-          <p class="text-[11px] text-slate-500 mt-1">Messages per signed-in user per window before a 429.</p>
         </div>
 
         <div>

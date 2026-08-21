@@ -18,6 +18,7 @@ import { MemoryService } from '../memory/memory.service';
 import { listPromptTemplates } from '../prompt/prompt-manager';
 import { ModelConfigService } from '../services/model-config.service';
 import { SystemLimitsService } from '../services/system-limits.service';
+import { AnonUsageService } from '../services/anon-usage.service';
 
 const router = Router();
 const aiRouterService = new AIRouterService();
@@ -161,10 +162,32 @@ router.get('/models', authenticateOrAllowTrial, async (req: AuthenticatedRequest
   try {
     const config = await ModelConfigService.getModelConfig();
     const enabledModels = config.models.filter((m) => m.enabled !== false);
-    res.json({
-      defaultModel: config.defaultModel,
-      models: enabledModels.length > 0 ? enabledModels : config.models,
-    });
+    // ModelConfigService caches and reuses these exact model objects across
+    // requests/users - copy before attaching per-user `usage` below so one
+    // user's standing can never leak onto another's response via the shared
+    // cache instance.
+    const models = (enabledModels.length > 0 ? enabledModels : config.models).map((m) => ({ ...m }));
+
+    // Only a signed-in caller has a stable per-user key to check usage
+    // against - anonymous requests get the models list with no usage
+    // enrichment (uncapped either way, since only auth.middleware.ts's
+    // trial-message gate applies to them).
+    const uid = req.user?.uid;
+    if (uid) {
+      const cappedModels = models.filter((m) => m.dailyLimitPerUser);
+      if (cappedModels.length > 0) {
+        const limits = await SystemLimitsService.getLimits();
+        const windowMs = limits.rateLimitWindowHours * 60 * 60 * 1000;
+        await Promise.all(
+          cappedModels.map(async (m) => {
+            const { count, resetAt } = await AnonUsageService.peek(AnonUsageService.modelUsageKey(uid, m.id), windowMs);
+            m.usage = { disabled: count >= (m.dailyLimitPerUser as number), resetAt };
+          })
+        );
+      }
+    }
+
+    res.json({ defaultModel: config.defaultModel, models });
   } catch (error) {
     console.error('[Chat API Route] Failed to load model config:', error);
     res.status(500).json({ error: 'Failed to load models.' });

@@ -13,6 +13,20 @@ export interface SelectableModel {
     completion: number; // USD per 1,000 tokens
   };
   enabled?: boolean;
+  /** Admin-set daily-per-user cap for this model (see
+   *  apps/chat-api/src/orchestration/graph.ts) - undefined/null means
+   *  unlimited. Costly models default to a cap; cheap ones don't. Hitting
+   *  it never blocks a request outright: the turn falls back to a cheaper
+   *  model instead (see AIProviderResponse.modelSwitch below). */
+  dailyLimitPerUser?: number | null;
+  /** Populated only on GET /api/chat/models for an AUTHENTICATED caller -
+   *  this model's current standing against dailyLimitPerUser for THAT
+   *  user, so the picker can grey it out before they even try it. Absent
+   *  for unlimited models and for unauthenticated requests. */
+  usage?: {
+    disabled: boolean;
+    resetAt: number;
+  };
 }
 
 export interface ModelConfigDto {
@@ -236,6 +250,18 @@ export interface AIProviderResponse {
   sources?: OrchestratorSource[];
   /** Suggested follow-up actions for the `ui` payload, sent once on the final (done: true) event. */
   actions?: OrchestratorAction[];
+  /**
+   * Set once, on the final (done: true) event, when the requested model had
+   * hit its daily-per-user cap and this turn was transparently served by a
+   * cheaper model instead (see orchestration/graph.ts) - never a hard
+   * error. `model` above already reflects the model actually used; this is
+   * just the "why" for the UI to explain instead of a bare error.
+   */
+  modelSwitch?: {
+    fromModel: AIModelType;
+    toModel: AIModelType;
+    resetAt: number;
+  };
 }
 
 export interface StorageMetricsResponse {

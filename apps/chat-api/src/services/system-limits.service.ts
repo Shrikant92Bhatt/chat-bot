@@ -15,7 +15,6 @@ import { SystemLimitsDto } from '@chat-monorepo/shared';
 
 const DEFAULT_LIMITS: SystemLimitsDto = {
   anonTrialMessageLimit: Number(process.env.ANON_TRIAL_MESSAGE_LIMIT) || 1,
-  authDailyMessageLimit: Number(process.env.AUTH_DAILY_MESSAGE_LIMIT) || 20,
   rateLimitWindowHours: Number(process.env.RATE_LIMIT_WINDOW_HOURS) || 24,
   documentUploadMaxBytes: 10 * 1024 * 1024, // 10MB
   attachmentMaxBytes: 25 * 1024 * 1024, // 25MB
@@ -27,7 +26,6 @@ const DEFAULT_LIMITS: SystemLimitsDto = {
  *  upload" resource-exhaustion footgun. */
 const BOUNDS: Record<keyof Omit<SystemLimitsDto, 'updatedAt'>, { min: number; max: number }> = {
   anonTrialMessageLimit: { min: 0, max: 100 },
-  authDailyMessageLimit: { min: 1, max: 5000 },
   rateLimitWindowHours: { min: 1, max: 24 * 30 },
   documentUploadMaxBytes: { min: 1024 * 1024, max: 50 * 1024 * 1024 },
   attachmentMaxBytes: { min: 1024 * 1024, max: 50 * 1024 * 1024 },
@@ -78,7 +76,6 @@ export class SystemLimitsService {
 
     const merged: SystemLimitsDto = {
       anonTrialMessageLimit: clamp(partial.anonTrialMessageLimit, existing.anonTrialMessageLimit, BOUNDS.anonTrialMessageLimit),
-      authDailyMessageLimit: clamp(partial.authDailyMessageLimit, existing.authDailyMessageLimit, BOUNDS.authDailyMessageLimit),
       rateLimitWindowHours: clamp(partial.rateLimitWindowHours, existing.rateLimitWindowHours, BOUNDS.rateLimitWindowHours),
       documentUploadMaxBytes: clamp(partial.documentUploadMaxBytes, existing.documentUploadMaxBytes, BOUNDS.documentUploadMaxBytes),
       attachmentMaxBytes: clamp(partial.attachmentMaxBytes, existing.attachmentMaxBytes, BOUNDS.attachmentMaxBytes),
