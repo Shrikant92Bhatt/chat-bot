@@ -1,17 +1,18 @@
-import { Router, Response } from 'express';
+import { Router, Response, Request, NextFunction } from 'express';
 import multer from 'multer';
 import { authenticateToken, authenticateOrAllowTrial, AuthenticatedRequest } from '../middleware/auth.middleware';
 import { AIRouterService } from '../services/ai-router.service';
 import { UserRegistryService } from '../services/user-registry.service';
 import { ThreadService } from '../services/thread.service';
 import { isOpenAiConfigured } from '../services/openai.service';
-import { ChatStreamRequest, ChatThread } from '@chat-monorepo/shared';
+import { AttachmentKind, ChatAttachment, ChatStreamRequest, ChatThread } from '@chat-monorepo/shared';
 import { streamGraphResponse } from '../orchestration/graph';
 import { StorageMetricsService } from '../storage/metrics';
 import { generateImage } from '../llm/image-gen';
 import { isOmniRouteConfigured } from '../llm/client';
 import { extractDocumentText } from '../rag/document-extractor';
 import { RagRetriever } from '../rag/retriever';
+import { GcsUploader } from '../storage/uploader';
 import { UsageService } from '../services/usage.service';
 import { MemoryService } from '../memory/memory.service';
 import { listPromptTemplates } from '../prompt/prompt-manager';
@@ -20,6 +21,65 @@ import { ModelConfigService } from '../services/model-config.service';
 const router = Router();
 const aiRouterService = new AIRouterService();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB
+
+/**
+ * Photo/video attachments (see POST /attachments below) - a separate, more
+ * permissive pipeline from the knowledge-base `upload` above: these are
+ * chat-message attachments (images go to the model as vision input; videos
+ * are stored and shown, never "read"), not RAG-ingested documents, so a
+ * different size ceiling and mimetype allowlist apply.
+ */
+const MAX_ATTACHMENTS_PER_MESSAGE = 4;
+const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024; // 25MB
+const ATTACHMENT_MIME_KIND: Record<string, AttachmentKind> = {
+  'image/jpeg': 'image',
+  'image/png': 'image',
+  'image/webp': 'image',
+  'image/gif': 'image',
+  'image/heic': 'image',
+  'image/heif': 'image',
+  'video/mp4': 'video',
+  'video/quicktime': 'video',
+  'video/webm': 'video',
+};
+const mediaUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_ATTACHMENT_BYTES, files: MAX_ATTACHMENTS_PER_MESSAGE },
+});
+
+/**
+ * multer's own limit errors (file too large, too many files) throw BEFORE
+ * the route handler runs, so a plain try/catch around the handler body never
+ * sees them - they'd otherwise fall through to Express's default handler as
+ * an unhelpful 500. This translates them into the same friendly 400 JSON
+ * shape every other validation failure in this file uses.
+ */
+function handleMediaUpload(req: Request, res: Response, next: NextFunction): void {
+  mediaUpload.array('files', MAX_ATTACHMENTS_PER_MESSAGE)(req, res, (error: unknown) => {
+    if (!error) {
+      next();
+      return;
+    }
+    const code = (error as { code?: string }).code;
+    if (code === 'LIMIT_FILE_SIZE') {
+      res.status(400).json({ error: `Each attachment must be ${MAX_ATTACHMENT_BYTES / (1024 * 1024)}MB or smaller.` });
+      return;
+    }
+    if (code === 'LIMIT_FILE_COUNT' || code === 'LIMIT_UNEXPECTED_FILE') {
+      res.status(400).json({ error: `You can attach up to ${MAX_ATTACHMENTS_PER_MESSAGE} files at once.` });
+      return;
+    }
+    console.error('[Chat API Route] Attachment upload middleware error:', error);
+    res.status(400).json({ error: 'Failed to process the uploaded file(s).' });
+  });
+}
+
+/** Strips path separators and anything but a conservative safe set before a
+ *  user-supplied filename becomes part of a GCS object path. */
+function sanitizeFileName(name: string): string {
+  const base = name.split(/[\\/]/).pop() || 'file';
+  return base.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-120);
+}
 
 /**
  * GET /api/chat/config
@@ -202,6 +262,56 @@ router.post('/documents', authenticateToken, upload.single('file'), async (req: 
   } catch (error) {
     console.error('[Chat API Route] Document upload error:', error);
     res.status(400).json({ error: (error as Error).message || 'Failed to process document.' });
+  }
+});
+
+/**
+ * POST /api/chat/attachments
+ * Uploads up to 4 photos/videos (25MB each) to attach to the NEXT chat
+ * message, distinct from /documents above: these ride along with a single
+ * turn rather than joining the RAG knowledge base. Returns each as an
+ * already-hosted ChatAttachment; the client stages them and sends the
+ * resulting URLs (not file bytes) with the next /stream request. Images are
+ * later handed to the model as vision input (see orchestration/graph.ts
+ * toMessageContent()); videos are stored and shown in the chat only.
+ */
+router.post('/attachments', authenticateToken, handleMediaUpload, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const files = (req.files as Express.Multer.File[] | undefined) || [];
+    if (files.length === 0) {
+      res.status(400).json({ error: 'No files were uploaded (expected multipart field "files").' });
+      return;
+    }
+
+    const uploader = new GcsUploader();
+    const attachments: ChatAttachment[] = [];
+
+    for (const file of files) {
+      const kind = ATTACHMENT_MIME_KIND[file.mimetype];
+      if (!kind) {
+        res.status(400).json({
+          error: `Unsupported file type "${file.mimetype}". Supported: photos (jpg, png, webp, gif, heic) and video (mp4, mov, webm).`,
+        });
+        return;
+      }
+
+      const objectName = `attachments/${req.user!.uid}/${Date.now()}-${attachments.length}-${sanitizeFileName(file.originalname)}`;
+      const url = await uploader.uploadFile(file.buffer, objectName, file.mimetype);
+
+      attachments.push({
+        id: `att-${Date.now()}-${attachments.length}`,
+        kind,
+        url,
+        contentType: file.mimetype,
+        fileName: file.originalname,
+        sizeBytes: file.size,
+      });
+    }
+
+    res.json({ attachments });
+  } catch (error) {
+    console.error('[Chat API Route] Attachment upload error:', error);
+    res.status(400).json({ error: (error as Error).message || 'Failed to upload attachment(s).' });
   }
 });
 
