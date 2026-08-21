@@ -48,10 +48,11 @@
     } @else if (form(); as f) {
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
         <div>
-          <label class="block text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">
+          <label for="anonTrialMessageLimit" class="block text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">
             Anonymous trial messages
           </label>
           <input
+            id="anonTrialMessageLimit"
             type="number"
             min="0"
             max="100"
@@ -63,10 +64,11 @@
         </div>
 
         <div>
-          <label class="block text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">
+          <label for="rateLimitWindowHours" class="block text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">
             Rate-limit window (hours)
           </label>
           <input
+            id="rateLimitWindowHours"
             type="number"
             min="1"
             max="720"
@@ -78,10 +80,11 @@
         </div>
 
         <div>
-          <label class="block text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">
+          <label for="documentUploadMaxMb" class="block text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">
             Document upload size (MB)
           </label>
           <input
+            id="documentUploadMaxMb"
             type="number"
             min="1"
             max="50"
@@ -93,10 +96,11 @@
         </div>
 
         <div>
-          <label class="block text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">
+          <label for="attachmentMaxMb" class="block text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">
             Attachment size (MB)
           </label>
           <input
+            id="attachmentMaxMb"
             type="number"
             min="1"
             max="50"
@@ -108,10 +112,11 @@
         </div>
 
         <div>
-          <label class="block text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">
+          <label for="attachmentMaxCount" class="block text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">
             Attachments per message
           </label>
           <input
+            id="attachmentMaxCount"
             type="number"
             min="1"
             max="10"
