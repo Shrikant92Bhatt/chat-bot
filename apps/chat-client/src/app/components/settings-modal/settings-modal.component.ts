@@ -1,5 +1,6 @@
 import { Component, EventEmitter, Output, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { ChatService } from '../../services/chat.service';
 import { AuthService } from '../../services/auth.service';
 
@@ -16,21 +17,43 @@ import { AuthService } from '../../services/auth.service';
 @Component({
   selector: 'app-settings-modal',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule],
   changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './settings-modal.component.html',
 })
 export class SettingsModalComponent {
   @Output() closeModal = new EventEmitter<void>();
 
-  public activeTab = signal<'general' | 'diagnostics'>('general');
+  public activeTab = signal<'general' | 'personalize' | 'diagnostics'>('general');
+
+  // Draft text for the "About you" textarea ([(ngModel)] needs a plain
+  // property, not a signal) - kept separate from chatService.aboutMe (the
+  // last-saved value) so navigating away without saving doesn't silently
+  // persist an in-progress edit.
+  public aboutMeDraft = '';
+  public profileSaved = signal<boolean>(false);
+  private savedResetTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     public chatService: ChatService,
     public authService: AuthService
-  ) {}
+  ) {
+    this.aboutMeDraft = this.chatService.aboutMe();
+  }
 
-  setTab(tab: 'general' | 'diagnostics') {
+  setTab(tab: 'general' | 'personalize' | 'diagnostics') {
     this.activeTab.set(tab);
+    if (tab === 'personalize') {
+      this.aboutMeDraft = this.chatService.aboutMe();
+    }
+  }
+
+  public async saveProfile(): Promise<void> {
+    const ok = await this.chatService.saveProfile(this.aboutMeDraft);
+    if (!ok) return;
+
+    if (this.savedResetTimeout) clearTimeout(this.savedResetTimeout);
+    this.profileSaved.set(true);
+    this.savedResetTimeout = setTimeout(() => this.profileSaved.set(false), 2000);
   }
 }

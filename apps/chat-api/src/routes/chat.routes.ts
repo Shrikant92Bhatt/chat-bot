@@ -427,6 +427,34 @@ router.delete('/memories/:id', authenticateToken, async (req: AuthenticatedReque
 });
 
 /**
+ * GET/PUT /api/chat/profile
+ * The explicit "About you" text the user writes themselves (ChatGPT's
+ * Custom Instructions) - distinct from the auto-extracted /memories list
+ * above. Always injected into the system prompt; the user is the only
+ * writer.
+ */
+router.get('/profile', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const aboutMe = await MemoryService.getProfile(req.user!.uid);
+    res.json({ aboutMe });
+  } catch (error) {
+    console.error('[Chat API Route] Failed to load profile:', error);
+    res.status(500).json({ error: 'Failed to load profile.' });
+  }
+});
+
+router.put('/profile', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const aboutMe = typeof req.body?.aboutMe === 'string' ? req.body.aboutMe : '';
+    await MemoryService.setProfile(req.user!.uid, aboutMe);
+    res.json({ success: true, aboutMe: aboutMe.trim().slice(0, 2000) });
+  } catch (error) {
+    console.error('[Chat API Route] Failed to save profile:', error);
+    res.status(500).json({ error: 'Failed to save profile.' });
+  }
+});
+
+/**
  * GET /api/chat/prompts
  * The versioned prompt registry (keys + descriptions, not the raw template
  * bodies) — lets the Diagnostics UI show which prompt versions are live.

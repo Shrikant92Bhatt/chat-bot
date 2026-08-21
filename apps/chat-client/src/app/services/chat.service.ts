@@ -51,6 +51,12 @@ export class ChatService {
   public isUploadingAttachments = signal<boolean>(false);
   public attachmentUploadError = signal<string | null>(null);
 
+  // The user's explicit "About you" text (Settings > Personalize), always
+  // injected into the system prompt server-side - see MemoryService.
+  // getProfile/setProfile. Distinct from the auto-extracted /memories list.
+  public aboutMe = signal<string>('');
+  public isSavingProfile = signal<boolean>(false);
+
   // Defaults mirror the backend's out-of-the-box values (see
   // system-limits.service.ts DEFAULT_LIMITS) - loadEffectiveLimits() below
   // overwrites these with whatever an admin has actually configured, so
@@ -83,6 +89,7 @@ export class ChatService {
         if (user && user.uid) {
           // Re-fetch models when user logs in so authenticated permissions / custom configs are fresh
           void this.loadAvailableModels();
+          void this.loadProfile();
           // loadUserThreadHistory() returns a promise that only settles once
           // its full retry chain finishes (each retry `return`s the next
           // call, so the chain of promises resolves together) - .finally()
@@ -128,6 +135,45 @@ export class ChatService {
     }
   }
 
+  /** Loads the signed-in user's "About you" text into the aboutMe signal. */
+  public async loadProfile(): Promise<void> {
+    const token = this.authService.getIdToken();
+    if (!token) return;
+    try {
+      const res = await fetch(`${this.apiUrl}/profile`, { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) {
+        const data = await res.json();
+        this.aboutMe.set(data?.aboutMe || '');
+      }
+    } catch (e) {
+      console.warn('[ChatService] Could not fetch profile:', e);
+    }
+  }
+
+  /** Persists the "About you" text and injects it into future chat turns. */
+  public async saveProfile(aboutMe: string): Promise<boolean> {
+    const token = this.authService.getIdToken();
+    if (!token) return false;
+
+    this.isSavingProfile.set(true);
+    try {
+      const res = await fetch(`${this.apiUrl}/profile`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ aboutMe }),
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      this.aboutMe.set(data?.aboutMe ?? aboutMe.trim());
+      return true;
+    } catch (e) {
+      console.warn('[ChatService] Could not save profile:', e);
+      return false;
+    } finally {
+      this.isSavingProfile.set(false);
+    }
+  }
+
   /**
    * Fetches the currently effective (admin-editable, see
    * apps/chat-api/src/services/system-limits.service.ts) attachment limits
@@ -153,6 +199,7 @@ export class ChatService {
   private clearUnauthenticatedHistory() {
     this.unauthUserMessageCount.set(0);
     this.createInitialThread();
+    this.aboutMe.set('');
   }
 
   /**
