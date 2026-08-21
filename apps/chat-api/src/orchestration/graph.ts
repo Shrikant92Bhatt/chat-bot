@@ -2,12 +2,17 @@ import { Response } from 'express';
 import { StateGraph, START, END } from '@langchain/langgraph';
 import { AIMessage, BaseMessage, HumanMessage, SystemMessage } from '@langchain/core/messages';
 // @ts-ignore: Assume type exists in shared workspace
-import { ChatStreamRequest, AIModelType } from '@chat-monorepo/shared';
+import { ChatAttachment, ChatStreamRequest, AIModelType } from '@chat-monorepo/shared';
 import { AgentState, AgentStateAnnotation } from './state';
 import { agentNode, toolsNode, shouldContinue } from './nodes';
 import { buildContext, recordTurnMemories } from '../context/context-builder';
 import { generateFollowUpSuggestions } from '../services/suggestions.service';
 import { UsageService } from '../services/usage.service';
+import { UiBlockStreamFilter } from './ui-stream-filter';
+import { extractOrchestratorUiBlock } from './ui-schema';
+import { ModelConfigService } from '../services/model-config.service';
+import { SystemLimitsService } from '../services/system-limits.service';
+import { AnonUsageService } from '../services/anon-usage.service';
 
 const workflow = new StateGraph(AgentStateAnnotation)
   .addNode('agent', agentNode)
@@ -18,21 +23,91 @@ const workflow = new StateGraph(AgentStateAnnotation)
 
 const compiledGraph = workflow.compile();
 
-function toBaseMessages(messages: Array<{ role: string; content: string }>): BaseMessage[] {
+/**
+ * Builds a HumanMessage's content, adding one OpenAI-style `image_url` part
+ * per image attachment so vision-capable models (Gemini/GPT-4o, both served
+ * through this app's OpenAI-compatible gateway - see llm/client.ts) can
+ * actually see the photo, not just its filename. Video attachments are
+ * intentionally left out here: no model behind this gateway can watch a
+ * video, so they're stored/shown in the UI only (see chat.routes.ts
+ * POST /attachments) and never sent as model input.
+ */
+type TextContentBlock = { type: 'text'; text: string };
+type ImageContentBlock = { type: 'image'; url: string; mimeType?: string };
+
+function toMessageContent(text: string, attachments?: ChatAttachment[]): string | Array<TextContentBlock | ImageContentBlock> {
+  const images = (attachments || []).filter((a) => a.kind === 'image');
+  if (images.length === 0) return text;
+
+  const parts: Array<TextContentBlock | ImageContentBlock> = [];
+  if (text) parts.push({ type: 'text', text });
+  for (const image of images) {
+    parts.push({ type: 'image', url: image.url, mimeType: image.contentType });
+  }
+  return parts;
+}
+
+function toBaseMessages(
+  messages: Array<{ role: string; content: string; attachments?: ChatAttachment[] }>
+): BaseMessage[] {
   return messages.map((m) => {
     if (m.role === 'assistant') return new AIMessage(m.content);
     if (m.role === 'system') return new SystemMessage(m.content);
-    return new HumanMessage(m.content);
+    return new HumanMessage({ content: toMessageContent(m.content, m.attachments) });
   });
+}
+
+/**
+ * Cost control for signed-in users is per-MODEL (SelectableModel.
+ * dailyLimitPerUser, admin-editable in the Models console) rather than a
+ * flat per-user total - most models have no cap at all, and hitting one
+ * that does never blocks the turn: this picks a cheaper model to actually
+ * serve the reply with instead. Returns null (proceed with the requested
+ * model, nothing to report) when the model is uncapped, the user hasn't
+ * hit it, or there's no signed-in user to track (anonymous requests are
+ * already far more tightly limited by the trial gate in auth.middleware.ts).
+ */
+async function checkModelQuota(
+  requestedModel: AIModelType,
+  ownerId: string | undefined
+): Promise<{ modelToUse: AIModelType; switchNotice: { fromModel: AIModelType; toModel: AIModelType; resetAt: number } | null }> {
+  if (!ownerId) return { modelToUse: requestedModel, switchNotice: null };
+
+  const config = await ModelConfigService.getModelConfig();
+  const requested = config.models.find((m) => m.id === requestedModel);
+  const cap = requested?.dailyLimitPerUser;
+  if (!cap || cap <= 0) return { modelToUse: requestedModel, switchNotice: null };
+
+  const limits = await SystemLimitsService.getLimits();
+  const windowMs = limits.rateLimitWindowHours * 60 * 60 * 1000;
+  const result = await AnonUsageService.checkAndConsume(AnonUsageService.modelUsageKey(ownerId, requestedModel), cap, windowMs);
+  if (result.allowed) return { modelToUse: requestedModel, switchNotice: null };
+
+  // Prefer the configured default model as the fallback (it's the app's
+  // own pick for "the model that just works"); if that's somehow the same
+  // model that's over its cap, fall back to the first uncapped enabled
+  // model, and failing that, the hardcoded floor default.
+  const fallback =
+    (config.defaultModel !== requestedModel ? config.defaultModel : undefined) ||
+    config.models.find((m) => m.id !== requestedModel && m.enabled !== false && !m.dailyLimitPerUser)?.id ||
+    'gemini-flash-latest';
+
+  return {
+    modelToUse: fallback,
+    switchNotice: { fromModel: requestedModel, toModel: fallback, resetAt: result.resetAt },
+  };
 }
 
 /**
  * Runs the LangGraph orchestration workflow and streams the model's tokens
  * back to the client over SSE as they arrive.
  *
- * Wire format matches the legacy Gemini/OpenAI services exactly
- * ({chunk, done, model, suggestions?, imageUrl?}) so chat.service.ts's SSE
- * parser (which only understands that shape) renders either path identically.
+ * Wire format matches the legacy Gemini/OpenAI services
+ * ({chunk, done, model, suggestions?, imageUrl?}) plus this path's own
+ * optional {ui?, sources?, actions?} on the final `done: true` event - see
+ * ui-schema.ts/ui-stream-filter.ts - so chat.service.ts's SSE parser renders
+ * either path's plain text identically and additively picks up the
+ * structured extras when present.
  *
  * Writes nothing to `res` until the first real output chunk is available;
  * if the workflow fails before that point, the error is rethrown so the
@@ -52,7 +127,8 @@ export async function streamGraphResponse(request: ChatStreamRequest, res: Respo
     messages: request.messages || [],
   });
 
-  const model: AIModelType = request.model || 'gemini-flash-latest';
+  const requestedModel: AIModelType = request.model || 'gemini-flash-latest';
+  const { modelToUse: model, switchNotice } = await checkModelQuota(requestedModel, ownerId);
 
   const initialState: Partial<AgentState> = {
     messages: toBaseMessages(windowedMessages),
@@ -70,7 +146,13 @@ export async function streamGraphResponse(request: ChatStreamRequest, res: Respo
 
   let wroteAnyOutput = false;
   let generatedImageUrl: string | null = null;
-  let fullText = '';
+  // The model may append a trailing ```ui fenced block (see
+  // ui_orchestrator:v1) with structured UI data. uiFilter withholds that
+  // block from the live token stream so its raw JSON never flashes on
+  // screen; visibleText accumulates only what actually gets shown to the
+  // user, which is also what follow-up suggestions are generated from.
+  const uiFilter = new UiBlockStreamFilter();
+  let visibleText = '';
 
   // Summed across every model invocation in this turn (the agent<->tools
   // loop can call the model more than once) - `usage_metadata` on the
@@ -89,9 +171,12 @@ export async function streamGraphResponse(request: ChatStreamRequest, res: Respo
       if (event.event === 'on_chat_model_stream') {
         const content = event.data?.chunk?.content;
         if (typeof content === 'string' && content.length > 0) {
-          wroteAnyOutput = true;
-          fullText += content;
-          res.write(`data: ${JSON.stringify({ chunk: content, done: false, model })}\n\n`);
+          const visible = uiFilter.push(content);
+          if (visible.length > 0) {
+            wroteAnyOutput = true;
+            visibleText += visible;
+            res.write(`data: ${JSON.stringify({ chunk: visible, done: false, model })}\n\n`);
+          }
         }
       } else if (event.event === 'on_chat_model_end') {
         const usage = event.data?.output?.usage_metadata;
@@ -121,12 +206,32 @@ export async function streamGraphResponse(request: ChatStreamRequest, res: Respo
     return;
   }
 
+  // Flush whatever the fence filter was still holding back (either trailing
+  // text that turned out not to be a ```ui fence, or - if a fence was
+  // opened - nothing, since that's the captured block below instead).
+  const { trailingVisible, rawUiBlock } = uiFilter.finish();
+  if (trailingVisible.length > 0) {
+    wroteAnyOutput = true;
+    visibleText += trailingVisible;
+    res.write(`data: ${JSON.stringify({ chunk: trailingVisible, done: false, model })}\n\n`);
+  }
+  const uiPayload = rawUiBlock ? extractOrchestratorUiBlock(rawUiBlock) : null;
+
   // Long-term memory write-back: deliberately AFTER the stream, and not
   // awaited, so the extraction gate/LLM call never adds latency to a turn.
   recordTurnMemories({ uid: ownerId, threadId: request.threadId, messages: request.messages || [] });
 
-  const suggestions = await generateFollowUpSuggestions(request.messages || [], fullText);
-  res.write(`data: ${JSON.stringify({ chunk: '', done: true, model, suggestions })}\n\n`);
+  const suggestions = await generateFollowUpSuggestions(request.messages || [], visibleText);
+  res.write(
+    `data: ${JSON.stringify({
+      chunk: '',
+      done: true,
+      model,
+      suggestions,
+      ...(uiPayload ? { ui: uiPayload.ui, sources: uiPayload.sources, actions: uiPayload.actions } : {}),
+      ...(switchNotice ? { modelSwitch: switchNotice } : {}),
+    })}\n\n`
+  );
   res.end();
 
   // Logged after res.end() so a Firestore hiccup never delays or breaks the

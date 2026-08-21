@@ -155,6 +155,17 @@ export class ModelsViewComponent implements OnInit {
     this.isDirty.set(true);
   }
 
+  /** Daily reply cap per signed-in user for one model - blank/0 means
+   *  unlimited. Never blocks a reply on its own when hit; graph.ts falls
+   *  back to a cheaper model instead (see orchestration/graph.ts
+   *  checkModelQuota). */
+  public updateDailyLimit(modelId: string, value: number | null): void {
+    this.configuredModels.update((models) =>
+      models.map((m) => (m.id === modelId ? { ...m, dailyLimitPerUser: value && value > 0 ? value : null } : m))
+    );
+    this.isDirty.set(true);
+  }
+
   public setDefaultModel(modelId: string): void {
     this.defaultModel.set(modelId);
     // Ensure the default model is enabled

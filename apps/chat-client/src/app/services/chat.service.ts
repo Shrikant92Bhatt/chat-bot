@@ -1,11 +1,16 @@
 import { Injectable, signal, computed, effect } from '@angular/core';
 import {
   AIModelType,
+  ChatAttachment,
   ChatMessage,
   ChatThread,
+  MessageRole,
   SelectableModel,
   SELECTABLE_MODELS,
   DEFAULT_MODEL_ID,
+  UIComponent,
+  OrchestratorSource,
+  OrchestratorAction,
 } from '@chat-monorepo/shared';
 import { AuthService } from './auth.service';
 import { getApiBaseUrl } from '../core/runtime-config';
@@ -39,6 +44,22 @@ export class ChatService {
   public uploadedDocuments = signal<string[]>([]);
   public documentUploadError = signal<string | null>(null);
 
+  // Photo/video attachments staged for the NEXT message (composer chips) -
+  // distinct from uploadedDocuments above, which join the RAG knowledge base
+  // rather than riding along with a single turn. See attachMedia() below.
+  public stagedAttachments = signal<ChatAttachment[]>([]);
+  public isUploadingAttachments = signal<boolean>(false);
+  public attachmentUploadError = signal<string | null>(null);
+
+  // Defaults mirror the backend's out-of-the-box values (see
+  // system-limits.service.ts DEFAULT_LIMITS) - loadEffectiveLimits() below
+  // overwrites these with whatever an admin has actually configured, so
+  // client-side pre-validation never drifts from what the server enforces.
+  public maxAttachments = signal<number>(4);
+  public maxAttachmentBytes = signal<number>(25 * 1024 * 1024);
+  private readonly ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'];
+  private readonly ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
+
   public activeThread = computed(() => {
     const id = this.activeThreadId();
     return this.threads().find((t) => t.id === id) || null;
@@ -53,6 +74,7 @@ export class ChatService {
   constructor(private authService: AuthService) {
     this.createInitialThread();
     void this.loadAvailableModels();
+    void this.loadEffectiveLimits();
 
     // Effect: Reacts to User Login/Logout state changes
     effect(
@@ -103,6 +125,28 @@ export class ChatService {
       }
     } catch (e) {
       console.warn('[ChatService] Could not fetch dynamic models list, using defaults:', e);
+    }
+  }
+
+  /**
+   * Fetches the currently effective (admin-editable, see
+   * apps/chat-api/src/services/system-limits.service.ts) attachment limits
+   * from the public /config endpoint, so client-side pre-validation in
+   * attachMedia() below always matches what the server will actually
+   * enforce instead of hardcoding a second, driftable copy. Silently keeps
+   * the built-in defaults on failure - this is a UX nicety (a tighter
+   * client-side error message before an upload even starts), not the real
+   * enforcement boundary, which stays server-side regardless.
+   */
+  private async loadEffectiveLimits(): Promise<void> {
+    try {
+      const res = await fetch(`${this.apiUrl}/config`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (typeof data.attachmentMaxCount === 'number') this.maxAttachments.set(data.attachmentMaxCount);
+      if (typeof data.attachmentMaxBytes === 'number') this.maxAttachmentBytes.set(data.attachmentMaxBytes);
+    } catch (e) {
+      console.warn('[ChatService] Could not fetch effective upload limits, using defaults:', e);
     }
   }
 
@@ -277,6 +321,20 @@ export class ChatService {
     this.selectedModel.set(model);
   }
 
+  /** Human-readable name for a model id, falling back to the raw id if it's
+   *  not in the currently loaded list (e.g. right after a modelSwitch, before
+   *  loadAvailableModels() has refreshed). */
+  public modelDisplayName(id: string): string {
+    return this.availableModels().find((m) => m.id === id)?.name || id;
+  }
+
+  public formatResetLabel(resetAt: number): string {
+    const diffMs = resetAt - Date.now();
+    if (diffMs <= 0) return 'resets now';
+    const hours = Math.round(diffMs / (60 * 60 * 1000));
+    return hours < 1 ? `resets in ${Math.max(1, Math.round(diffMs / 60000))}m` : `resets in ${hours}h`;
+  }
+
   public toggleMcp() {
     this.mcpEnabled.update((v) => !v);
   }
@@ -326,6 +384,82 @@ export class ChatService {
     } finally {
       this.isUploadingDocument.set(false);
     }
+  }
+
+  /**
+   * Uploads up to maxAttachments() photos/videos and stages them for the
+   * next sendMessage() call (composer chips, cleared once sent - see
+   * sendMessage below). Images are later sent to the model as vision input;
+   * videos are stored and shown in the chat only (see graph.ts
+   * toMessageContent()).
+   */
+  async attachMedia(files: File[]): Promise<void> {
+    if (!this.authService.userSignal()) {
+      this.attachmentUploadError.set('Sign in to attach photos or videos.');
+      return;
+    }
+    if (files.length === 0) return;
+
+    const limit = this.maxAttachments();
+    const room = limit - this.stagedAttachments().length;
+    if (room <= 0) {
+      this.attachmentUploadError.set(`You can attach up to ${limit} files per message.`);
+      return;
+    }
+
+    const toUpload = files.slice(0, room);
+    this.attachmentUploadError.set(
+      files.length > toUpload.length ? `Only attaching the first ${toUpload.length} — max ${limit} files per message.` : null
+    );
+
+    const maxBytes = this.maxAttachmentBytes();
+    for (const file of toUpload) {
+      const isImage = this.ALLOWED_IMAGE_TYPES.includes(file.type);
+      const isVideo = this.ALLOWED_VIDEO_TYPES.includes(file.type);
+      if (!isImage && !isVideo) {
+        this.attachmentUploadError.set(
+          `Unsupported file type "${file.type || file.name}". Supported: photos (jpg, png, webp, gif, heic) and video (mp4, mov, webm).`
+        );
+        return;
+      }
+      if (file.size > maxBytes) {
+        this.attachmentUploadError.set(`"${file.name}" is too large — attachments must be ${Math.round(maxBytes / (1024 * 1024))}MB or smaller.`);
+        return;
+      }
+    }
+
+    this.isUploadingAttachments.set(true);
+    try {
+      const formData = new FormData();
+      toUpload.forEach((file) => formData.append('files', file));
+
+      const response = await fetch(`${this.apiUrl}/attachments`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${this.authService.getIdToken()}` },
+        body: formData,
+      });
+
+      if (response.status === 401) {
+        this.authService.notifySessionExpired();
+        return;
+      }
+
+      const data = await response.json();
+      if (!response.ok || !Array.isArray(data.attachments)) {
+        throw new Error(data.error || 'Failed to upload attachment(s).');
+      }
+
+      this.stagedAttachments.update((current) => [...current, ...data.attachments]);
+    } catch (error: any) {
+      console.error('[ChatService] Attachment upload failed:', error);
+      this.attachmentUploadError.set(error.message || 'Failed to upload attachment(s).');
+    } finally {
+      this.isUploadingAttachments.set(false);
+    }
+  }
+
+  public removeStagedAttachment(id: string): void {
+    this.stagedAttachments.update((current) => current.filter((a) => a.id !== id));
   }
 
   async generateImage(prompt: string): Promise<void> {
@@ -396,7 +530,9 @@ export class ChatService {
 
   async sendMessage(userContent: string): Promise<void> {
     const currentThreadId = this.activeThreadId();
-    if (!currentThreadId || !userContent.trim() || this.isStreaming()) return;
+    const attachments = this.stagedAttachments();
+    const hasText = !!userContent.trim();
+    if (!currentThreadId || (!hasText && attachments.length === 0) || this.isStreaming()) return;
 
     // Enforce 1 message limit for unauthenticated users
     const isAuthenticated = !!this.authService.userSignal();
@@ -414,7 +550,10 @@ export class ChatService {
       role: 'user',
       content: userContent.trim(),
       timestamp: Date.now(),
+      attachments: attachments.length > 0 ? attachments : undefined,
     };
+    this.stagedAttachments.set([]);
+    this.attachmentUploadError.set(null);
 
     const assistantMessageId = 'msg-ai-' + Date.now();
     const assistantMessagePlaceholder: ChatMessage = {
@@ -429,7 +568,7 @@ export class ChatService {
     this.threads.update((threadsList) =>
       threadsList.map((t) => {
         if (t.id === currentThreadId) {
-          const updatedTitle = t.messages.length <= 1 ? userContent.slice(0, 30) + '...' : t.title;
+          const updatedTitle = t.messages.length <= 1 ? (hasText ? userContent.slice(0, 30) + '...' : '📎 Attachment') : t.title;
           return {
             ...t,
             title: updatedTitle,
@@ -447,15 +586,87 @@ export class ChatService {
       this.persistUserThreadHistory();
     }
 
+    const activeThread = this.activeThread();
+    const contextMessages = (activeThread?.messages || [])
+      .filter((m) => m.id !== assistantMessageId)
+      .map((m) => ({ role: m.role, content: m.content, attachments: m.attachments }));
+
+    await this.streamAssistantReply(currentThreadId, assistantMessageId, contextMessages, activeThread?.projectId ?? null);
+  }
+
+  /**
+   * Re-runs the latest assistant reply against the same trailing user turn,
+   * replacing it in place (ChatGPT/Gemini-style "Regenerate") rather than
+   * appending a new message. Only ever regenerates the LAST assistant
+   * message in the active thread - the UI only offers the control there
+   * (see chat-window.component.html), since regenerating an older reply
+   * would silently discard everything the user did after it.
+   */
+  async regenerateLastResponse(): Promise<void> {
+    const currentThreadId = this.activeThreadId();
+    if (!currentThreadId || this.isStreaming()) return;
+
+    const thread = this.activeThread();
+    if (!thread || thread.messages.length === 0) return;
+
+    const lastMessage = thread.messages[thread.messages.length - 1];
+    if (lastMessage.role !== 'assistant') return;
+
+    const assistantMessageId = lastMessage.id;
+    const contextMessages = thread.messages
+      .filter((m) => m.id !== assistantMessageId)
+      .map((m) => ({ role: m.role, content: m.content, attachments: m.attachments }));
+
+    // Nothing to regenerate from without a preceding user turn (e.g. the
+    // standalone welcome message in a fresh thread).
+    if (contextMessages.length === 0 || contextMessages[contextMessages.length - 1].role !== 'user') return;
+
+    // Reset the existing assistant message in place, keeping its id/position,
+    // and drop everything a previous run of it attached (image, UI cards,
+    // suggestions) so stale extras from the old reply don't linger.
+    this.threads.update((threadsList) =>
+      threadsList.map((t) =>
+        t.id === currentThreadId
+          ? {
+              ...t,
+              messages: t.messages.map((m) =>
+                m.id === assistantMessageId
+                  ? {
+                      ...m,
+                      content: '',
+                      error: false,
+                      imageUrl: undefined,
+                      ui: undefined,
+                      sources: undefined,
+                      actions: undefined,
+                      suggestions: undefined,
+                    }
+                  : m
+              ),
+            }
+          : t
+      )
+    );
+
+    await this.streamAssistantReply(currentThreadId, assistantMessageId, contextMessages, thread.projectId ?? null);
+  }
+
+  /**
+   * The fetch + SSE-parsing loop shared by sendMessage and
+   * regenerateLastResponse - both just prepare an assistant message id to
+   * stream into and the trailing context to send, then hand off here.
+   */
+  private async streamAssistantReply(
+    threadId: string,
+    assistantMessageId: string,
+    contextMessages: Array<{ role: MessageRole; content: string; attachments?: ChatAttachment[] }>,
+    projectId: string | null
+  ): Promise<void> {
+    const isAuthenticated = !!this.authService.userSignal();
     this.isStreaming.set(true);
     this.abortController = new AbortController();
 
     try {
-      const activeThread = this.activeThread();
-      const contextMessages = (activeThread?.messages || [])
-        .filter((m) => m.id !== assistantMessageId)
-        .map((m) => ({ role: m.role, content: m.content }));
-
       const response = await fetch(`${this.apiUrl}/stream`, {
         method: 'POST',
         headers: {
@@ -471,8 +682,8 @@ export class ChatService {
           // conversation summary instead of re-summarizing every turn, and is
           // what usage/cost records are attributed to; projectId pulls in
           // the project's instructions + files.
-          threadId: currentThreadId,
-          projectId: activeThread?.projectId ?? null,
+          threadId,
+          projectId,
         }),
         signal: this.abortController.signal,
       });
@@ -483,16 +694,37 @@ export class ChatService {
         // this fetch callback runs outside a direct user click, so calling it
         // straight away is liable to be blocked by the browser's popup blocker.
         this.authService.notifySessionExpired();
-        this.updateAssistantMessage(
-          currentThreadId,
-          assistantMessageId,
-          '🔒 Your session has expired. Please sign in again to continue.'
-        );
+        this.updateAssistantMessage(threadId, assistantMessageId, '🔒 Your session has expired. Please sign in again to continue.');
+        return;
+      }
+
+      if (response.status === 429) {
+        // Daily message quota reached (see auth.middleware.ts authenticateOrAllowTrial /
+        // AnonUsageService) - the backend already computed a friendly message and a
+        // reset time, so show those instead of a bare "HTTP Error 429".
+        let message = "You've reached your daily message limit. Please try again later.";
+        try {
+          const data = await response.json();
+          if (data?.message) message = data.message;
+          if (data?.resetAt) {
+            message += ` (resets ${new Date(data.resetAt).toLocaleString()})`;
+          }
+        } catch {
+          // Non-JSON or already-consumed body - fall back to the generic message above.
+        }
+        this.updateAssistantMessage(threadId, assistantMessageId, `⏳ ${message}`);
         return;
       }
 
       if (!response.ok) {
-        throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);
+        let message = `HTTP Error ${response.status}: ${response.statusText}`;
+        try {
+          const data = await response.json();
+          if (data?.message || data?.error) message = data.message || data.error;
+        } catch {
+          // Non-JSON or already-consumed body - fall back to the generic message above.
+        }
+        throw new Error(message);
       }
 
       const reader = response.body?.getReader();
@@ -526,14 +758,33 @@ export class ChatService {
                 accumulatedContent += data.chunk;
               }
 
-              this.updateAssistantMessage(currentThreadId, assistantMessageId, accumulatedContent);
+              this.updateAssistantMessage(threadId, assistantMessageId, accumulatedContent);
 
               if (data.imageUrl) {
-                this.setMessageImageUrl(currentThreadId, assistantMessageId, data.imageUrl);
+                this.setMessageImageUrl(threadId, assistantMessageId, data.imageUrl);
               }
 
               if (data.done && Array.isArray(data.suggestions) && data.suggestions.length > 0) {
-                this.setMessageSuggestions(currentThreadId, assistantMessageId, data.suggestions);
+                this.setMessageSuggestions(threadId, assistantMessageId, data.suggestions);
+              }
+
+              if (data.done && Array.isArray(data.ui) && data.ui.length > 0) {
+                this.setMessageUi(threadId, assistantMessageId, data.ui, data.sources, data.actions);
+              }
+
+              if (data.done && data.modelSwitch) {
+                const { fromModel, toModel, resetAt } = data.modelSwitch;
+                const notice = `> ℹ️ **${this.modelDisplayName(fromModel)}**'s daily limit was reached, so this reply used **${this.modelDisplayName(toModel)}** instead (${this.formatResetLabel(resetAt)}).\n\n`;
+                accumulatedContent = notice + accumulatedContent;
+                this.updateAssistantMessage(threadId, assistantMessageId, accumulatedContent);
+                this.setMessageModel(threadId, assistantMessageId, toModel);
+                // Switch the active selection too, so the next message
+                // doesn't immediately hit the same wall again - the
+                // exhausted model stays visible in the dropdown, just
+                // greyed out (see loadAvailableModels() below), until it
+                // resets or an admin raises the cap.
+                this.selectedModel.set(toModel);
+                void this.loadAvailableModels();
               }
             } catch (e) {
               // Ignore partial chunk parse failures
@@ -545,7 +796,7 @@ export class ChatService {
       if (error.name !== 'AbortError') {
         console.error('[ChatService] Stream Error:', error);
         this.updateAssistantMessage(
-          currentThreadId,
+          threadId,
           assistantMessageId,
           `⚠️ Failed to stream response from backend. Details: ${error.message}`
         );
@@ -556,6 +807,53 @@ export class ChatService {
       if (isAuthenticated) {
         this.persistUserThreadHistory();
       }
+    }
+  }
+
+  /**
+   * Formats a thread as a plain-text transcript for sharing - used by
+   * shareActiveThread() below. Deliberately plain text (not Markdown/HTML):
+   * the target is the OS share sheet / clipboard, not a renderer.
+   */
+  private formatThreadForSharing(thread: ChatThread): string {
+    const lines = thread.messages
+      .filter((m) => m.content && m.content.trim())
+      .map((m) => `${m.role === 'user' ? 'You' : 'NexusAI'}: ${m.content.trim()}`);
+    return `${thread.title}\n\n${lines.join('\n\n')}`;
+  }
+
+  /**
+   * Shares the active conversation via the device's native share sheet
+   * (navigator.share - Messages, Email, etc. on mobile). Falls back to
+   * copying the transcript to the clipboard on browsers that don't support
+   * it (most desktop browsers), returning 'copied' so the caller can show
+   * its own confirmation - there's no share-sheet equivalent to confirm with
+   * there.
+   */
+  public async shareActiveThread(): Promise<'shared' | 'copied' | 'cancelled' | 'unavailable'> {
+    const thread = this.activeThread();
+    if (!thread || !thread.messages.some((m) => m.role === 'user')) return 'unavailable';
+
+    const text = this.formatThreadForSharing(thread);
+
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      try {
+        await navigator.share({ title: thread.title, text });
+        return 'shared';
+      } catch (error: any) {
+        // AbortError: the user closed the share sheet without picking a
+        // target - not a failure, nothing to fall back to.
+        if (error?.name === 'AbortError') return 'cancelled';
+        console.warn('[ChatService] navigator.share failed, falling back to clipboard:', error);
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      return 'copied';
+    } catch (error) {
+      console.error('[ChatService] Clipboard fallback for sharing also failed:', error);
+      return 'unavailable';
     }
   }
 
@@ -593,6 +891,42 @@ export class ChatService {
       threadsList.map((t) => {
         if (t.id === threadId) {
           const updatedMessages = t.messages.map((m) => (m.id === messageId ? { ...m, suggestions } : m));
+          return { ...t, messages: updatedMessages };
+        }
+        return t;
+      })
+    );
+  }
+
+  /**
+   * Attaches the orchestrator's structured UI payload to a message, once,
+   * on the final `done: true` SSE event - mirrors setMessageSuggestions.
+   * `data.ui`/`sources`/`actions` are already validated server-side (see
+   * apps/chat-api/src/orchestration/ui-schema.ts) so this just stores them.
+   */
+  private setMessageUi(
+    threadId: string,
+    messageId: string,
+    ui: UIComponent[],
+    sources?: OrchestratorSource[],
+    actions?: OrchestratorAction[]
+  ) {
+    this.threads.update((threadsList) =>
+      threadsList.map((t) => {
+        if (t.id === threadId) {
+          const updatedMessages = t.messages.map((m) => (m.id === messageId ? { ...m, ui, sources, actions } : m));
+          return { ...t, messages: updatedMessages };
+        }
+        return t;
+      })
+    );
+  }
+
+  private setMessageModel(threadId: string, messageId: string, model: AIModelType) {
+    this.threads.update((threadsList) =>
+      threadsList.map((t) => {
+        if (t.id === threadId) {
+          const updatedMessages = t.messages.map((m) => (m.id === messageId ? { ...m, model } : m));
           return { ...t, messages: updatedMessages };
         }
         return t;

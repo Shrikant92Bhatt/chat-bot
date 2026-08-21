@@ -1,3 +1,5 @@
+import { UIComponent, OrchestratorSource, OrchestratorAction } from './orchestrator.interface';
+
 export type AIModelType = string;
 
 export interface SelectableModel {
@@ -11,6 +13,20 @@ export interface SelectableModel {
     completion: number; // USD per 1,000 tokens
   };
   enabled?: boolean;
+  /** Admin-set daily-per-user cap for this model (see
+   *  apps/chat-api/src/orchestration/graph.ts) - undefined/null means
+   *  unlimited. Costly models default to a cap; cheap ones don't. Hitting
+   *  it never blocks a request outright: the turn falls back to a cheaper
+   *  model instead (see AIProviderResponse.modelSwitch below). */
+  dailyLimitPerUser?: number | null;
+  /** Populated only on GET /api/chat/models for an AUTHENTICATED caller -
+   *  this model's current standing against dailyLimitPerUser for THAT
+   *  user, so the picker can grey it out before they even try it. Absent
+   *  for unlimited models and for unauthenticated requests. */
+  usage?: {
+    disabled: boolean;
+    resetAt: number;
+  };
 }
 
 export interface ModelConfigDto {
@@ -59,6 +75,25 @@ export const DEFAULT_MODEL_ID = 'gemini-flash-latest';
 
 export type MessageRole = 'user' | 'assistant' | 'system';
 
+/** 'image' attachments are sent to the model as vision input (see
+ *  apps/chat-api/src/orchestration/graph.ts toMessageContent()); 'video'
+ *  attachments are stored and shown in the chat only - no model today in
+ *  this app's gateway can actually watch/understand a video. */
+export type AttachmentKind = 'image' | 'video';
+
+/** A photo or video attached to a chat message. Uploaded via
+ *  POST /api/chat/attachments (see chat.routes.ts), which returns these
+ *  already-hosted (GCS) so the client never sends raw file bytes as part
+ *  of a chat turn. */
+export interface ChatAttachment {
+  id: string;
+  kind: AttachmentKind;
+  url: string;
+  contentType: string;
+  fileName: string;
+  sizeBytes?: number;
+}
+
 export interface ChatMessage {
   id: string;
   role: MessageRole;
@@ -69,6 +104,20 @@ export interface ChatMessage {
   /** Suggested follow-up questions, attached to the final assistant message of a turn. */
   suggestions?: string[];
   imageUrl?: string;
+  /** Photos/videos the user attached to this message, if any. */
+  attachments?: ChatAttachment[];
+  /**
+   * Approved interactive UI components the orchestrator attached to this
+   * reply (weather/stock cards, tables, charts, ...). Parsed and validated
+   * server-side — see apps/chat-api/src/orchestration/ui-schema.ts. Empty
+   * or absent for the overwhelming majority of replies, which are plain
+   * text/Markdown.
+   */
+  ui?: UIComponent[];
+  /** Sources cited for this reply's `ui` payload, if any. */
+  sources?: OrchestratorSource[];
+  /** Suggested follow-up actions tied to this reply's `ui` payload, if any. */
+  actions?: OrchestratorAction[];
 }
 
 export interface ChatThread {
@@ -95,6 +144,7 @@ export interface ChatStreamRequest {
   messages: Array<{
     role: MessageRole;
     content: string;
+    attachments?: ChatAttachment[];
   }>;
   model: AIModelType;
   temperature?: number;
@@ -194,6 +244,24 @@ export interface AIProviderResponse {
   };
   /** Set when a generate_image tool call produced an image this turn. */
   imageUrl?: string;
+  /** Approved UI components attached to this reply, sent once on the final (done: true) event. */
+  ui?: UIComponent[];
+  /** Sources for the `ui` payload, sent once on the final (done: true) event. */
+  sources?: OrchestratorSource[];
+  /** Suggested follow-up actions for the `ui` payload, sent once on the final (done: true) event. */
+  actions?: OrchestratorAction[];
+  /**
+   * Set once, on the final (done: true) event, when the requested model had
+   * hit its daily-per-user cap and this turn was transparently served by a
+   * cheaper model instead (see orchestration/graph.ts) - never a hard
+   * error. `model` above already reflects the model actually used; this is
+   * just the "why" for the UI to explain instead of a bare error.
+   */
+  modelSwitch?: {
+    fromModel: AIModelType;
+    toModel: AIModelType;
+    resetAt: number;
+  };
 }
 
 export interface StorageMetricsResponse {

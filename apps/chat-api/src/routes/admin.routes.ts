@@ -5,6 +5,8 @@ import { UserRegistryService, UserRole } from '../services/user-registry.service
 import { AnalyticsService, parseWindowDays } from '../services/analytics.service';
 import { StorageMetricsService } from '../storage/metrics';
 import { ModelConfigService } from '../services/model-config.service';
+import { SystemLimitsService } from '../services/system-limits.service';
+import { AnonUsageService } from '../services/anon-usage.service';
 
 /**
  * Admin-only API, mounted at /api/v1/admin (see main.ts). Backs the separate
@@ -272,6 +274,55 @@ router.put('/models/config', async (req: AuthenticatedRequest, res: Response) =>
   } catch (error) {
     console.error('[Admin Route] Failed to save model config:', error);
     res.status(500).json({ error: 'Failed to save model configuration.' });
+  }
+});
+
+/**
+ * GET /api/v1/admin/limits
+ * Reads the active operational limits (rate limits + upload size/count
+ * caps) from Firestore - see services/system-limits.service.ts.
+ */
+router.get('/limits', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const limits = await SystemLimitsService.getLimits();
+    res.json(limits);
+  } catch (error) {
+    console.error('[Admin Route] Failed to read system limits:', error);
+    res.status(500).json({ error: 'Failed to read system limits.' });
+  }
+});
+
+/**
+ * PUT /api/v1/admin/limits
+ * Updates the operational limits in Firestore. Every field is clamped to a
+ * hard safety range by SystemLimitsService.saveLimits() itself, so a
+ * malformed/out-of-range value here can't lock everyone out or open an
+ * unbounded upload hole - it's silently clamped rather than rejected.
+ */
+router.put('/limits', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const savedLimits = await SystemLimitsService.saveLimits(req.body || {});
+    res.json({ success: true, limits: savedLimits });
+  } catch (error) {
+    console.error('[Admin Route] Failed to save system limits:', error);
+    res.status(500).json({ error: 'Failed to save system limits.' });
+  }
+});
+
+/**
+ * GET /api/v1/admin/limits/usage
+ * Read-only snapshot of every currently-tracked rate-limit key (signed-in
+ * users AND anonymous IPs) against its current cap - "how much of today's
+ * quota is occupied" for the admin console's Limits view. Never consumes a
+ * counter (see AnonUsageService.listUsageSnapshot).
+ */
+router.get('/limits/usage', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const entries = await AnonUsageService.listUsageSnapshot();
+    res.json({ entries, count: entries.length });
+  } catch (error) {
+    console.error('[Admin Route] Failed to read rate-limit usage snapshot:', error);
+    res.status(500).json({ error: 'Failed to read rate-limit usage.' });
   }
 });
 

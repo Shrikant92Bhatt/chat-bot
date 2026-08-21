@@ -5,13 +5,14 @@ import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { ChatService } from '../../services/chat.service';
 import { AuthService } from '../../services/auth.service';
+import { UiBlockComponent } from '../ui-block/ui-block.component';
 
 marked.setOptions({ gfm: true, breaks: true });
 
 @Component({
   selector: 'app-chat-window',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, UiBlockComponent],
   changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './chat-window.component.html',
   // The host element sits inside a flex-col (<main>) alongside

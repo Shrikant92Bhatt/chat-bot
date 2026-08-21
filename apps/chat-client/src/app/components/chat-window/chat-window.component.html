@@ -19,16 +19,32 @@
 
     <div class="max-w-3xl mx-auto space-y-6">
       <!-- Chat Messages -->
-      <div *ngFor="let msg of chatService.activeMessages()">
+      <div *ngFor="let msg of chatService.activeMessages(); let last = last">
         <!-- User Message -->
         <div *ngIf="msg.role === 'user'" class="flex justify-end py-2 group">
           <div class="flex items-start gap-3 max-w-2xl">
             <div class="flex flex-col items-end gap-1 flex-1 min-w-0">
               <div class="text-[11px] text-slate-400 font-medium">{{ getUserDisplayName() }}</div>
-              <div class="px-4 py-3 rounded-2xl bg-indigo-500/15 text-slate-100 text-sm leading-relaxed">
+
+              <!-- Attached photos/videos -->
+              <div *ngIf="msg.attachments && msg.attachments.length > 0" class="flex flex-wrap justify-end gap-1.5 max-w-xs">
+                <div *ngFor="let att of msg.attachments" class="w-24 h-24 rounded-xl overflow-hidden border border-white/10 bg-black/30 shrink-0">
+                  <img
+                    *ngIf="att.kind === 'image'"
+                    [src]="att.url"
+                    [alt]="att.fileName"
+                    class="w-full h-full object-cover cursor-zoom-in"
+                    (click)="openImage(att.url)"
+                  />
+                  <video *ngIf="att.kind === 'video'" [src]="att.url" class="w-full h-full object-cover" controls></video>
+                </div>
+              </div>
+
+              <div *ngIf="msg.content" class="px-4 py-3 rounded-2xl bg-indigo-500/15 text-slate-100 text-sm leading-relaxed">
                 {{ msg.content }}
               </div>
               <button
+                *ngIf="msg.content"
                 (click)="copyMessage(msg.id, msg.content)"
                 class="flex items-center space-x-1 text-[11px] text-slate-400 hover:text-slate-300 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 pr-1 mt-1"
               >
@@ -121,6 +137,14 @@
                     </a>
                   </div>
                 </div>
+                <!-- Structured UI components (weather/stock cards, tables, charts, ...) -->
+                <app-ui-block
+                  *ngIf="msg.ui && msg.ui.length > 0"
+                  [components]="msg.ui"
+                  [sources]="msg.sources || []"
+                  [actions]="msg.actions || []"
+                  (actionSelected)="chatService.sendMessage($event.label)"
+                ></app-ui-block>
               </div>
 
               <!-- Copy action -->
@@ -141,6 +165,24 @@
                     </svg>
                     <span>Copy</span>
                   </ng-template>
+                </button>
+
+                <!-- Regenerate - only offered on the latest reply, since redoing an
+                     older one would discard every message the user sent after it. -->
+                <button
+                  *ngIf="last"
+                  (click)="chatService.regenerateLastResponse()"
+                  class="flex items-center space-x-1 text-[11px] text-slate-400 hover:text-slate-300 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100"
+                >
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                  <span>Regenerate</span>
                 </button>
               </div>
 
