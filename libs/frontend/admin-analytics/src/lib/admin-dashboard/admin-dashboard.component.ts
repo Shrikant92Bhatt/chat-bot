@@ -63,8 +63,10 @@ export type AdminView = 'overview' | 'users' | 'models' | 'limits';
 export class AdminDashboardComponent implements OnInit {
   private readonly api = inject(AdminApiService);
 
-  /** Emitted when the operator wants to leave the admin console. */
-  public readonly close = output<void>();
+  /** Emitted when the operator wants to leave the admin console. Named
+   *  `closed` rather than `close` - @angular-eslint/no-output-native flags
+   *  `close` as colliding with the native DOM `close` event. */
+  public readonly closed = output<void>();
 
   public readonly accessDenied = this.api.accessDenied;
 
