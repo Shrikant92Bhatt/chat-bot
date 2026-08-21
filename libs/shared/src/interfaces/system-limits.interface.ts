@@ -5,13 +5,18 @@
  * Backed by a single Firestore doc (see apps/chat-api/src/services/
  * system-limits.service.ts) with an in-memory TTL cache, the same pattern
  * ModelConfigService already established for dynamic model config.
+ *
+ * There is deliberately no flat per-user daily message cap here any more -
+ * that used to block a signed-in user's every model equally and surface as
+ * a bare "429" regardless of which (possibly free) model they were using.
+ * Cost control is now per-model (SelectableModel.dailyLimitPerUser, see
+ * chat.interface.ts) with a graceful fallback instead of a hard block - see
+ * orchestration/graph.ts.
  */
 export interface SystemLimitsDto {
   /** Free messages an unauthenticated visitor gets (per IP) before sign-in is required. */
   anonTrialMessageLimit: number;
-  /** Messages a signed-in user gets per rolling window before a 429. */
-  authDailyMessageLimit: number;
-  /** Length of the rolling rate-limit window, in hours. */
+  /** Length of the rolling rate-limit window, in hours - shared by the anon trial above and every model's dailyLimitPerUser. */
   rateLimitWindowHours: number;
   /** Max size (bytes) for a single knowledge-base document upload (.txt/.md/.csv/.json/.pdf). */
   documentUploadMaxBytes: number;
@@ -26,9 +31,11 @@ export interface SystemLimitsDto {
  *  "how much is occupied" panel. Never mutates the underlying counter -
  *  a read-only snapshot. */
 export interface RateLimitUsageEntry {
-  /** 'user:<uid>' or 'anon:<ip>', decoded for display. */
+  /** Decoded IP (kind 'anon') or uid (kind 'auth'), for display. */
   key: string;
   kind: 'auth' | 'anon';
+  /** Set only for kind 'auth' - which model this count is against. */
+  modelId?: string;
   count: number;
   limit: number;
   /** count / limit, 0..1+ (can exceed 1 only if the limit was lowered after the count accrued). */

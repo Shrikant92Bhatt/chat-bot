@@ -95,6 +95,11 @@ export class MessageInputComponent {
     this.isModelDropdownOpen = false;
   }
 
+  /** "resets in Xh"/"resets in Xm" for a disabled model's tooltip. */
+  modelResetLabel(resetAt: number): string {
+    return this.chatService.formatResetLabel(resetAt);
+  }
+
   @HostListener('document:click', ['$event'])
   onDocumentClick(event: MouseEvent) {
     const target = event.target as HTMLElement;

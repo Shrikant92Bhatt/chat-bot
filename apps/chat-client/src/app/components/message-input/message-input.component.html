@@ -58,9 +58,13 @@
               *ngFor="let m of availableModels()"
               type="button"
               (click)="selectModel(m.id)"
-              class="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-white/10 hover:text-white transition-colors"
+              [disabled]="m.usage?.disabled"
+              [title]="m.usage?.disabled ? ('Daily limit reached — ' + modelResetLabel(m.usage!.resetAt)) : ''"
+              class="w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between gap-2"
+              [ngClass]="m.usage?.disabled ? 'text-slate-600 cursor-not-allowed' : 'text-slate-300 hover:bg-white/10 hover:text-white'"
             >
-              {{ m.name }}
+              <span>{{ m.name }}</span>
+              <span *ngIf="m.usage?.disabled" class="text-[10px] text-slate-600 shrink-0">limit reached</span>
             </button>
           </div>
         </div>

@@ -10,6 +10,9 @@ import { generateFollowUpSuggestions } from '../services/suggestions.service';
 import { UsageService } from '../services/usage.service';
 import { UiBlockStreamFilter } from './ui-stream-filter';
 import { extractOrchestratorUiBlock } from './ui-schema';
+import { ModelConfigService } from '../services/model-config.service';
+import { SystemLimitsService } from '../services/system-limits.service';
+import { AnonUsageService } from '../services/anon-usage.service';
 
 const workflow = new StateGraph(AgentStateAnnotation)
   .addNode('agent', agentNode)
@@ -55,6 +58,47 @@ function toBaseMessages(
 }
 
 /**
+ * Cost control for signed-in users is per-MODEL (SelectableModel.
+ * dailyLimitPerUser, admin-editable in the Models console) rather than a
+ * flat per-user total - most models have no cap at all, and hitting one
+ * that does never blocks the turn: this picks a cheaper model to actually
+ * serve the reply with instead. Returns null (proceed with the requested
+ * model, nothing to report) when the model is uncapped, the user hasn't
+ * hit it, or there's no signed-in user to track (anonymous requests are
+ * already far more tightly limited by the trial gate in auth.middleware.ts).
+ */
+async function checkModelQuota(
+  requestedModel: AIModelType,
+  ownerId: string | undefined
+): Promise<{ modelToUse: AIModelType; switchNotice: { fromModel: AIModelType; toModel: AIModelType; resetAt: number } | null }> {
+  if (!ownerId) return { modelToUse: requestedModel, switchNotice: null };
+
+  const config = await ModelConfigService.getModelConfig();
+  const requested = config.models.find((m) => m.id === requestedModel);
+  const cap = requested?.dailyLimitPerUser;
+  if (!cap || cap <= 0) return { modelToUse: requestedModel, switchNotice: null };
+
+  const limits = await SystemLimitsService.getLimits();
+  const windowMs = limits.rateLimitWindowHours * 60 * 60 * 1000;
+  const result = await AnonUsageService.checkAndConsume(AnonUsageService.modelUsageKey(ownerId, requestedModel), cap, windowMs);
+  if (result.allowed) return { modelToUse: requestedModel, switchNotice: null };
+
+  // Prefer the configured default model as the fallback (it's the app's
+  // own pick for "the model that just works"); if that's somehow the same
+  // model that's over its cap, fall back to the first uncapped enabled
+  // model, and failing that, the hardcoded floor default.
+  const fallback =
+    (config.defaultModel !== requestedModel ? config.defaultModel : undefined) ||
+    config.models.find((m) => m.id !== requestedModel && m.enabled !== false && !m.dailyLimitPerUser)?.id ||
+    'gemini-flash-latest';
+
+  return {
+    modelToUse: fallback,
+    switchNotice: { fromModel: requestedModel, toModel: fallback, resetAt: result.resetAt },
+  };
+}
+
+/**
  * Runs the LangGraph orchestration workflow and streams the model's tokens
  * back to the client over SSE as they arrive.
  *
@@ -83,7 +127,8 @@ export async function streamGraphResponse(request: ChatStreamRequest, res: Respo
     messages: request.messages || [],
   });
 
-  const model: AIModelType = request.model || 'gemini-flash-latest';
+  const requestedModel: AIModelType = request.model || 'gemini-flash-latest';
+  const { modelToUse: model, switchNotice } = await checkModelQuota(requestedModel, ownerId);
 
   const initialState: Partial<AgentState> = {
     messages: toBaseMessages(windowedMessages),
@@ -184,6 +229,7 @@ export async function streamGraphResponse(request: ChatStreamRequest, res: Respo
       model,
       suggestions,
       ...(uiPayload ? { ui: uiPayload.ui, sources: uiPayload.sources, actions: uiPayload.actions } : {}),
+      ...(switchNotice ? { modelSwitch: switchNotice } : {}),
     })}\n\n`
   );
   res.end();

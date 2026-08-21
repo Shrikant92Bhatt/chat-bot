@@ -321,6 +321,20 @@ export class ChatService {
     this.selectedModel.set(model);
   }
 
+  /** Human-readable name for a model id, falling back to the raw id if it's
+   *  not in the currently loaded list (e.g. right after a modelSwitch, before
+   *  loadAvailableModels() has refreshed). */
+  public modelDisplayName(id: string): string {
+    return this.availableModels().find((m) => m.id === id)?.name || id;
+  }
+
+  public formatResetLabel(resetAt: number): string {
+    const diffMs = resetAt - Date.now();
+    if (diffMs <= 0) return 'resets now';
+    const hours = Math.round(diffMs / (60 * 60 * 1000));
+    return hours < 1 ? `resets in ${Math.max(1, Math.round(diffMs / 60000))}m` : `resets in ${hours}h`;
+  }
+
   public toggleMcp() {
     this.mcpEnabled.update((v) => !v);
   }
@@ -757,6 +771,21 @@ export class ChatService {
               if (data.done && Array.isArray(data.ui) && data.ui.length > 0) {
                 this.setMessageUi(threadId, assistantMessageId, data.ui, data.sources, data.actions);
               }
+
+              if (data.done && data.modelSwitch) {
+                const { fromModel, toModel, resetAt } = data.modelSwitch;
+                const notice = `> ℹ️ **${this.modelDisplayName(fromModel)}**'s daily limit was reached, so this reply used **${this.modelDisplayName(toModel)}** instead (${this.formatResetLabel(resetAt)}).\n\n`;
+                accumulatedContent = notice + accumulatedContent;
+                this.updateAssistantMessage(threadId, assistantMessageId, accumulatedContent);
+                this.setMessageModel(threadId, assistantMessageId, toModel);
+                // Switch the active selection too, so the next message
+                // doesn't immediately hit the same wall again - the
+                // exhausted model stays visible in the dropdown, just
+                // greyed out (see loadAvailableModels() below), until it
+                // resets or an admin raises the cap.
+                this.selectedModel.set(toModel);
+                void this.loadAvailableModels();
+              }
             } catch (e) {
               // Ignore partial chunk parse failures
             }
@@ -886,6 +915,18 @@ export class ChatService {
       threadsList.map((t) => {
         if (t.id === threadId) {
           const updatedMessages = t.messages.map((m) => (m.id === messageId ? { ...m, ui, sources, actions } : m));
+          return { ...t, messages: updatedMessages };
+        }
+        return t;
+      })
+    );
+  }
+
+  private setMessageModel(threadId: string, messageId: string, model: AIModelType) {
+    this.threads.update((threadsList) =>
+      threadsList.map((t) => {
+        if (t.id === threadId) {
+          const updatedMessages = t.messages.map((m) => (m.id === messageId ? { ...m, model } : m));
           return { ...t, messages: updatedMessages };
         }
         return t;

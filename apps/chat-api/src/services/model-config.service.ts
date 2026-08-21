@@ -33,6 +33,20 @@ const DEFAULT_COST_MAP: Record<string, { prompt: number; completion: number }> =
 
 const DEFAULT_FALLBACK_COST = { prompt: 0.001, completion: 0.003 };
 
+/**
+ * Default daily-per-user cap for the seeded models, keyed by id - "costly
+ * model can be used limited" out of the box, without an admin having to
+ * configure anything first. Undefined/absent = unlimited. Purely a seed:
+ * fully admin-editable afterward via saveModelConfig (see models-view.
+ * component.ts in the admin console).
+ */
+const DEFAULT_DAILY_LIMIT_MAP: Record<string, number> = {
+  'gpt-4o': 5,
+  'claude-sonnet': 5,
+  'gemini-pro-latest': 8,
+  grok: 5,
+};
+
 export class ModelConfigService {
   private static readonly SETTINGS_COLLECTION = 'settings';
   private static readonly MODEL_CONFIG_DOC = 'model_config';
@@ -77,6 +91,7 @@ export class ModelConfigService {
       models: (SELECTABLE_MODELS as SelectableModel[]).map((m) => ({
         ...m,
         pricing: DEFAULT_COST_MAP[m.id] || DEFAULT_FALLBACK_COST,
+        dailyLimitPerUser: DEFAULT_DAILY_LIMIT_MAP[m.id] ?? null,
       })),
       updatedAt: Date.now(),
     };
@@ -106,6 +121,8 @@ export class ModelConfigService {
               }
             : undefined,
           enabled: m.enabled !== false,
+          dailyLimitPerUser:
+            typeof m.dailyLimitPerUser === 'number' && m.dailyLimitPerUser > 0 ? Math.round(m.dailyLimitPerUser) : null,
         }))
       : existing.models;
 
