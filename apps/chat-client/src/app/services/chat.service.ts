@@ -654,8 +654,33 @@ export class ChatService {
         return;
       }
 
+      if (response.status === 429) {
+        // Daily message quota reached (see auth.middleware.ts authenticateOrAllowTrial /
+        // AnonUsageService) - the backend already computed a friendly message and a
+        // reset time, so show those instead of a bare "HTTP Error 429".
+        let message = "You've reached your daily message limit. Please try again later.";
+        try {
+          const data = await response.json();
+          if (data?.message) message = data.message;
+          if (data?.resetAt) {
+            message += ` (resets ${new Date(data.resetAt).toLocaleString()})`;
+          }
+        } catch {
+          // Non-JSON or already-consumed body - fall back to the generic message above.
+        }
+        this.updateAssistantMessage(threadId, assistantMessageId, `⏳ ${message}`);
+        return;
+      }
+
       if (!response.ok) {
-        throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);
+        let message = `HTTP Error ${response.status}: ${response.statusText}`;
+        try {
+          const data = await response.json();
+          if (data?.message || data?.error) message = data.message || data.error;
+        } catch {
+          // Non-JSON or already-consumed body - fall back to the generic message above.
+        }
+        throw new Error(message);
       }
 
       const reader = response.body?.getReader();
