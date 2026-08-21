@@ -1,4 +1,6 @@
 import { firestore } from '../db/firestore';
+import { RateLimitUsageEntry } from '@chat-monorepo/shared';
+import { SystemLimitsService } from './system-limits.service';
 
 /**
  * Firestore-backed persistent rate limiter, following the same
@@ -11,18 +13,11 @@ import { firestore } from '../db/firestore';
  * two instances handle requests for the same key at the same moment.
  *
  * Used for BOTH anonymous (keyed by IP) and authenticated (keyed by uid)
- * daily limits - see auth.middleware.ts's authenticateOrAllowTrial.
+ * daily limits - see auth.middleware.ts's authenticateOrAllowTrial. The
+ * limit/window values themselves are admin-editable (SystemLimitsService)
+ * rather than hardcoded here, so a limit change takes effect on the next
+ * request without a redeploy.
  */
-
-const WINDOW_MS = (Number(process.env.RATE_LIMIT_WINDOW_HOURS) || 24) * 60 * 60 * 1000;
-
-/** Anonymous (pre-sign-in) trial message limit, keyed by IP. Preserves the
- *  historical "1 free message before sign-in" behavior by default. */
-export const ANON_TRIAL_MESSAGE_LIMIT = Number(process.env.ANON_TRIAL_MESSAGE_LIMIT) || 1;
-
-/** Authenticated free-tier daily message limit, keyed by uid. Previously
- *  unlimited once signed in - this adds a real per-user daily quota. */
-export const AUTH_DAILY_MESSAGE_LIMIT = Number(process.env.AUTH_DAILY_MESSAGE_LIMIT) || 20;
 
 interface RateLimitDoc {
   count: number;
@@ -52,10 +47,10 @@ export class AnonUsageService {
   /**
    * Atomically checks the current window's count against `limit` and, if
    * under the limit, increments it. Returns whether the request is allowed.
-   * A stale window (older than WINDOW_MS) is reset to a fresh count of 1
+   * A stale window (older than windowMs) is reset to a fresh count of 1
    * rather than rejected.
    */
-  public static async checkAndConsume(key: string, limit: number): Promise<RateLimitResult> {
+  public static async checkAndConsume(key: string, limit: number, windowMs: number): Promise<RateLimitResult> {
     const docRef = this.rateLimitsCollection().doc(sanitizeKey(key));
     const now = Date.now();
 
@@ -64,7 +59,7 @@ export class AnonUsageService {
       const data = snap.exists ? (snap.data() as RateLimitDoc) : undefined;
 
       const windowStart = data?.windowStart ?? now;
-      const windowExpired = now - windowStart >= WINDOW_MS;
+      const windowExpired = now - windowStart >= windowMs;
       const currentCount = windowExpired ? 0 : data?.count ?? 0;
 
       if (currentCount >= limit) {
@@ -72,7 +67,7 @@ export class AnonUsageService {
           allowed: false,
           remaining: 0,
           limit,
-          resetAt: windowStart + WINDOW_MS,
+          resetAt: windowStart + windowMs,
         };
       }
 
@@ -89,18 +84,64 @@ export class AnonUsageService {
         allowed: true,
         remaining: Math.max(0, limit - newCount),
         limit,
-        resetAt: newWindowStart + WINDOW_MS,
+        resetAt: newWindowStart + windowMs,
       };
     });
   }
 
   /** Convenience wrapper for the anonymous-trial key shape. */
   public static async checkAnonTrial(ip: string): Promise<RateLimitResult> {
-    return this.checkAndConsume(`anon:${ip}`, ANON_TRIAL_MESSAGE_LIMIT);
+    const limits = await SystemLimitsService.getLimits();
+    return this.checkAndConsume(`anon:${ip}`, limits.anonTrialMessageLimit, limits.rateLimitWindowHours * 60 * 60 * 1000);
   }
 
   /** Convenience wrapper for the authenticated per-user daily limit. */
   public static async checkAuthDailyLimit(uid: string): Promise<RateLimitResult> {
-    return this.checkAndConsume(`user:${uid}`, AUTH_DAILY_MESSAGE_LIMIT);
+    const limits = await SystemLimitsService.getLimits();
+    return this.checkAndConsume(`user:${uid}`, limits.authDailyMessageLimit, limits.rateLimitWindowHours * 60 * 60 * 1000);
+  }
+
+  /**
+   * Read-only snapshot of every currently-tracked rate-limit key against its
+   * CURRENT (possibly just-changed) limit - powers the admin console's "how
+   * much of today's quota is used" panel. Never increments a counter; a
+   * window past its expiry reads as 0/reset rather than being treated as
+   * stale-but-still-counted.
+   *
+   * Bounded full-collection scan, same scale assumption as
+   * AnalyticsService's usage-collection reads - fine at this app's size
+   * (one doc per active user/IP per window), not intended to survive
+   * unbounded growth without a follow-up (e.g. TTL-deleting expired docs).
+   */
+  public static async listUsageSnapshot(): Promise<RateLimitUsageEntry[]> {
+    const limits = await SystemLimitsService.getLimits();
+    const windowMs = limits.rateLimitWindowHours * 60 * 60 * 1000;
+    const now = Date.now();
+
+    const snapshot = await this.rateLimitsCollection().get();
+
+    const entries: RateLimitUsageEntry[] = [];
+    for (const doc of snapshot.docs) {
+      const data = doc.data() as RateLimitDoc;
+      const windowExpired = now - data.windowStart >= windowMs;
+      const count = windowExpired ? 0 : data.count;
+      if (count <= 0) continue; // expired/empty windows aren't "occupying" anything right now
+
+      const decodedKey = decodeURIComponent(doc.id);
+      const kind: 'auth' | 'anon' = decodedKey.startsWith('user:') ? 'auth' : 'anon';
+      const limit = kind === 'auth' ? limits.authDailyMessageLimit : limits.anonTrialMessageLimit;
+      const windowStart = windowExpired ? now : data.windowStart;
+
+      entries.push({
+        key: decodedKey,
+        kind,
+        count,
+        limit,
+        percent: limit > 0 ? count / limit : 0,
+        resetAt: windowStart + windowMs,
+      });
+    }
+
+    return entries.sort((a, b) => b.percent - a.percent);
   }
 }

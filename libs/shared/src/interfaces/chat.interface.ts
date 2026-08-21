@@ -61,6 +61,25 @@ export const DEFAULT_MODEL_ID = 'gemini-flash-latest';
 
 export type MessageRole = 'user' | 'assistant' | 'system';
 
+/** 'image' attachments are sent to the model as vision input (see
+ *  apps/chat-api/src/orchestration/graph.ts toMessageContent()); 'video'
+ *  attachments are stored and shown in the chat only - no model today in
+ *  this app's gateway can actually watch/understand a video. */
+export type AttachmentKind = 'image' | 'video';
+
+/** A photo or video attached to a chat message. Uploaded via
+ *  POST /api/chat/attachments (see chat.routes.ts), which returns these
+ *  already-hosted (GCS) so the client never sends raw file bytes as part
+ *  of a chat turn. */
+export interface ChatAttachment {
+  id: string;
+  kind: AttachmentKind;
+  url: string;
+  contentType: string;
+  fileName: string;
+  sizeBytes?: number;
+}
+
 export interface ChatMessage {
   id: string;
   role: MessageRole;
@@ -71,6 +90,8 @@ export interface ChatMessage {
   /** Suggested follow-up questions, attached to the final assistant message of a turn. */
   suggestions?: string[];
   imageUrl?: string;
+  /** Photos/videos the user attached to this message, if any. */
+  attachments?: ChatAttachment[];
   /**
    * Approved interactive UI components the orchestrator attached to this
    * reply (weather/stock cards, tables, charts, ...). Parsed and validated
@@ -109,6 +130,7 @@ export interface ChatStreamRequest {
   messages: Array<{
     role: MessageRole;
     content: string;
+    attachments?: ChatAttachment[];
   }>;
   model: AIModelType;
   temperature?: number;

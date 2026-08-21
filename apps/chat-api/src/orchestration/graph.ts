@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { StateGraph, START, END } from '@langchain/langgraph';
 import { AIMessage, BaseMessage, HumanMessage, SystemMessage } from '@langchain/core/messages';
 // @ts-ignore: Assume type exists in shared workspace
-import { ChatStreamRequest, AIModelType } from '@chat-monorepo/shared';
+import { ChatAttachment, ChatStreamRequest, AIModelType } from '@chat-monorepo/shared';
 import { AgentState, AgentStateAnnotation } from './state';
 import { agentNode, toolsNode, shouldContinue } from './nodes';
 import { buildContext, recordTurnMemories } from '../context/context-builder';
@@ -20,11 +20,37 @@ const workflow = new StateGraph(AgentStateAnnotation)
 
 const compiledGraph = workflow.compile();
 
-function toBaseMessages(messages: Array<{ role: string; content: string }>): BaseMessage[] {
+/**
+ * Builds a HumanMessage's content, adding one OpenAI-style `image_url` part
+ * per image attachment so vision-capable models (Gemini/GPT-4o, both served
+ * through this app's OpenAI-compatible gateway - see llm/client.ts) can
+ * actually see the photo, not just its filename. Video attachments are
+ * intentionally left out here: no model behind this gateway can watch a
+ * video, so they're stored/shown in the UI only (see chat.routes.ts
+ * POST /attachments) and never sent as model input.
+ */
+type TextContentBlock = { type: 'text'; text: string };
+type ImageContentBlock = { type: 'image'; url: string; mimeType?: string };
+
+function toMessageContent(text: string, attachments?: ChatAttachment[]): string | Array<TextContentBlock | ImageContentBlock> {
+  const images = (attachments || []).filter((a) => a.kind === 'image');
+  if (images.length === 0) return text;
+
+  const parts: Array<TextContentBlock | ImageContentBlock> = [];
+  if (text) parts.push({ type: 'text', text });
+  for (const image of images) {
+    parts.push({ type: 'image', url: image.url, mimeType: image.contentType });
+  }
+  return parts;
+}
+
+function toBaseMessages(
+  messages: Array<{ role: string; content: string; attachments?: ChatAttachment[] }>
+): BaseMessage[] {
   return messages.map((m) => {
     if (m.role === 'assistant') return new AIMessage(m.content);
     if (m.role === 'system') return new SystemMessage(m.content);
-    return new HumanMessage(m.content);
+    return new HumanMessage({ content: toMessageContent(m.content, m.attachments) });
   });
 }
 

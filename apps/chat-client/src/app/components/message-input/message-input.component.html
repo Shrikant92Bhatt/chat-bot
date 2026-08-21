@@ -68,24 +68,37 @@
 
       <!-- Textarea + action buttons -->
       <div class="flex items-end pr-1">
-        <!-- Attach file to knowledge base (Chat mode only) -->
+        <!-- Attach a knowledge-base document, or a photo/video to this message (Chat mode only) -->
         <button
           *ngIf="chatService.chatMode() === 'chat'"
           type="button"
           (click)="fileInput.click()"
-          [disabled]="chatService.isUploadingDocument()"
-          title="Attach a file to your knowledge base"
+          [disabled]="chatService.isUploadingDocument() || chatService.isUploadingAttachments()"
+          title="Attach a file, photo, or video"
           class="p-2 ml-1 mb-1 rounded-full text-slate-400 hover:text-white hover:bg-white/5 disabled:opacity-40 transition-all flex items-center justify-center shrink-0"
         >
-          <svg *ngIf="!chatService.isUploadingDocument()" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg
+            *ngIf="!chatService.isUploadingDocument() && !chatService.isUploadingAttachments()"
+            class="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
           </svg>
-          <svg *ngIf="chatService.isUploadingDocument()" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+          <svg *ngIf="chatService.isUploadingDocument() || chatService.isUploadingAttachments()" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
           </svg>
         </button>
-        <input #fileInput type="file" hidden accept=".txt,.md,.csv,.json,.pdf" (change)="onFileSelected($event)" />
+        <input
+          #fileInput
+          type="file"
+          hidden
+          multiple
+          accept=".txt,.md,.csv,.json,.pdf,image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,video/mp4,video/quicktime,video/webm"
+          (change)="onFileSelected($event)"
+        />
 
         <textarea
           [(ngModel)]="messageText"
@@ -113,7 +126,7 @@
           <button
             *ngIf="!chatService.isStreaming()"
             type="submit"
-            [disabled]="!messageText.trim()"
+            [disabled]="!messageText.trim() && chatService.stagedAttachments().length === 0"
             class="p-2 rounded-full bg-white text-slate-900 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-200 transition-all flex items-center justify-center"
           >
             <svg class="w-4 h-4 transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -121,6 +134,25 @@
             </svg>
           </button>
         </div>
+      </div>
+
+      <!-- Photos/videos staged for this message -->
+      <div *ngIf="chatService.stagedAttachments().length > 0" class="flex flex-wrap gap-2 px-1 pt-2">
+        <div *ngFor="let att of chatService.stagedAttachments()" class="relative w-14 h-14 rounded-lg overflow-hidden bg-black/30 border border-white/10 group/att">
+          <img *ngIf="att.kind === 'image'" [src]="att.url" [alt]="att.fileName" class="w-full h-full object-cover" />
+          <video *ngIf="att.kind === 'video'" [src]="att.url" class="w-full h-full object-cover" muted></video>
+          <button
+            type="button"
+            (click)="chatService.removeStagedAttachment(att.id)"
+            title="Remove"
+            class="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-black/70 text-white flex items-center justify-center text-[10px] leading-none opacity-0 group-hover/att:opacity-100 transition-opacity"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+      <div *ngIf="chatService.attachmentUploadError()" class="px-1 pt-2 text-[11px] text-red-400">
+        {{ chatService.attachmentUploadError() }}
       </div>
 
       <!-- Uploaded knowledge-base document chips -->

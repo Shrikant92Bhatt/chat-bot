@@ -1,0 +1,208 @@
+<div class="space-y-6">
+  @if (toast()) {
+    <div
+      class="px-4 py-3 rounded-xl text-xs font-medium flex items-center justify-between transition-all"
+      [ngClass]="toast()?.type === 'success' ? 'bg-accentEmerald/10 border border-accentEmerald/30 text-accentEmerald' : 'bg-accentRose/10 border border-accentRose/30 text-accentRose'"
+    >
+      <span>{{ toast()?.message }}</span>
+      <button type="button" (click)="toast.set(null)" class="text-slate-400 hover:text-white ml-3">✕</button>
+    </div>
+  }
+
+  <!-- ── Editable limits ──────────────────────────────────────────────────── -->
+  <div class="rounded-2xl bg-white/[0.03] border border-white/[0.08] p-5 backdrop-blur-glass">
+    <div class="flex items-start justify-between gap-4 mb-5">
+      <div>
+        <h2 class="text-sm font-semibold text-slate-100">Operational limits</h2>
+        <p class="text-xs text-slate-500 mt-0.5 max-w-xl">
+          Rate limits and upload caps, editable without a redeploy. Changes take effect for new requests within
+          about a minute (server-side cache).
+        </p>
+      </div>
+      <button
+        type="button"
+        (click)="saveChanges()"
+        [disabled]="isSaving() || !isDirty() || isLoading()"
+        class="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-accentCyan to-accentViolet shadow-cyanGlow hover:shadow-glow transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        @if (isSaving()) {
+          <span class="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin"></span>
+          <span>Saving...</span>
+        } @else {
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          </svg>
+          <span>Save changes</span>
+        }
+      </button>
+    </div>
+
+    @if (isLoading()) {
+      <div class="flex items-center justify-center py-10">
+        <span class="w-6 h-6 rounded-full border-2 border-slate-800 border-t-accentCyan animate-spin" role="status"></span>
+      </div>
+    } @else if (loadError()) {
+      <p class="text-xs text-accentRose">{{ loadError() }}</p>
+    } @else if (form(); as f) {
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div>
+          <label class="block text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">
+            Anonymous trial messages
+          </label>
+          <input
+            type="number"
+            min="0"
+            max="100"
+            [ngModel]="f.anonTrialMessageLimit"
+            (ngModelChange)="updateField('anonTrialMessageLimit', $event)"
+            class="w-full px-3 py-2 rounded-lg bg-black/30 border border-white/10 text-sm text-slate-100 focus:outline-none focus:border-accentCyan/50"
+          />
+          <p class="text-[11px] text-slate-500 mt-1">Free messages per IP before sign-in is required.</p>
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">
+            Signed-in daily messages
+          </label>
+          <input
+            type="number"
+            min="1"
+            max="5000"
+            [ngModel]="f.authDailyMessageLimit"
+            (ngModelChange)="updateField('authDailyMessageLimit', $event)"
+            class="w-full px-3 py-2 rounded-lg bg-black/30 border border-white/10 text-sm text-slate-100 focus:outline-none focus:border-accentCyan/50"
+          />
+          <p class="text-[11px] text-slate-500 mt-1">Messages per signed-in user per window before a 429.</p>
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">
+            Rate-limit window (hours)
+          </label>
+          <input
+            type="number"
+            min="1"
+            max="720"
+            [ngModel]="f.rateLimitWindowHours"
+            (ngModelChange)="updateField('rateLimitWindowHours', $event)"
+            class="w-full px-3 py-2 rounded-lg bg-black/30 border border-white/10 text-sm text-slate-100 focus:outline-none focus:border-accentCyan/50"
+          />
+          <p class="text-[11px] text-slate-500 mt-1">How long both caps above take to reset. 24 = daily.</p>
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">
+            Document upload size (MB)
+          </label>
+          <input
+            type="number"
+            min="1"
+            max="50"
+            [ngModel]="f.documentUploadMaxMb"
+            (ngModelChange)="updateField('documentUploadMaxMb', $event)"
+            class="w-full px-3 py-2 rounded-lg bg-black/30 border border-white/10 text-sm text-slate-100 focus:outline-none focus:border-accentCyan/50"
+          />
+          <p class="text-[11px] text-slate-500 mt-1">Max size for a knowledge-base file (.txt/.md/.csv/.json/.pdf).</p>
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">
+            Attachment size (MB)
+          </label>
+          <input
+            type="number"
+            min="1"
+            max="50"
+            [ngModel]="f.attachmentMaxMb"
+            (ngModelChange)="updateField('attachmentMaxMb', $event)"
+            class="w-full px-3 py-2 rounded-lg bg-black/30 border border-white/10 text-sm text-slate-100 focus:outline-none focus:border-accentCyan/50"
+          />
+          <p class="text-[11px] text-slate-500 mt-1">Max size per chat photo/video attachment.</p>
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">
+            Attachments per message
+          </label>
+          <input
+            type="number"
+            min="1"
+            max="10"
+            [ngModel]="f.attachmentMaxCount"
+            (ngModelChange)="updateField('attachmentMaxCount', $event)"
+            class="w-full px-3 py-2 rounded-lg bg-black/30 border border-white/10 text-sm text-slate-100 focus:outline-none focus:border-accentCyan/50"
+          />
+          <p class="text-[11px] text-slate-500 mt-1">Max photos/videos a user can attach to one message.</p>
+        </div>
+      </div>
+    }
+  </div>
+
+  <!-- ── How much is occupied ─────────────────────────────────────────────── -->
+  <div class="rounded-2xl bg-white/[0.03] border border-white/[0.08] p-5 backdrop-blur-glass">
+    <div class="flex items-start justify-between gap-4 mb-4">
+      <div>
+        <h2 class="text-sm font-semibold text-slate-100">Quota usage right now</h2>
+        <p class="text-xs text-slate-500 mt-0.5">
+          Live snapshot of every active user/IP against their current cap. Read-only - doesn't consume anyone's quota.
+        </p>
+      </div>
+      <button
+        type="button"
+        (click)="loadUsage()"
+        [disabled]="isLoadingUsage()"
+        class="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-300 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+      >
+        <svg class="w-3.5 h-3.5" [ngClass]="{ 'animate-spin': isLoadingUsage() }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+        </svg>
+        Refresh
+      </button>
+    </div>
+
+    @if (isLoadingUsage()) {
+      <div class="flex items-center justify-center py-10">
+        <span class="w-6 h-6 rounded-full border-2 border-slate-800 border-t-accentCyan animate-spin" role="status"></span>
+      </div>
+    } @else if (usageError()) {
+      <p class="text-xs text-accentRose">{{ usageError() }}</p>
+    } @else if (usageEntries().length === 0) {
+      <p class="text-xs text-slate-500 py-6 text-center">No one has sent a message in the current window yet.</p>
+    } @else {
+      <div class="flex flex-wrap gap-4 mb-4 text-xs">
+        <span class="text-slate-400">{{ usageEntries().length }} active</span>
+        @if (nearCapCount() > 0) {
+          <span class="text-accentAmber">{{ nearCapCount() }} near their cap (≥80%)</span>
+        }
+        @if (atCapCount() > 0) {
+          <span class="text-accentRose">{{ atCapCount() }} at their cap</span>
+        }
+      </div>
+
+      <div class="space-y-2.5 max-h-96 overflow-y-auto pr-1">
+        @for (entry of usageEntries(); track entry.key) {
+          <div class="flex items-center gap-3">
+            <span
+              class="shrink-0 w-10 text-center text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full"
+              [ngClass]="entry.kind === 'auth' ? 'bg-accentCyan/10 text-accentCyan' : 'bg-white/5 text-slate-400'"
+            >
+              {{ entry.kind === 'auth' ? 'user' : 'ip' }}
+            </span>
+            <span class="w-40 sm:w-56 truncate text-xs text-slate-300 font-mono" [title]="formatKey(entry)">
+              {{ formatKey(entry) }}
+            </span>
+            <div class="flex-1 h-2 rounded-full bg-black/30 overflow-hidden min-w-[80px]">
+              <div
+                class="h-full rounded-full transition-all"
+                [ngClass]="barColor(entry.percent)"
+                [style.width.%]="barWidthPercent(entry.percent)"
+              ></div>
+            </div>
+            <span class="shrink-0 w-16 text-right text-xs tnum text-slate-300">{{ entry.count }} / {{ entry.limit }}</span>
+            <span class="shrink-0 w-24 text-right text-[11px] text-slate-500">{{ formatResetAt(entry.resetAt) }}</span>
+          </div>
+        }
+      </div>
+    }
+  </div>
+</div>

@@ -5,9 +5,14 @@ import { ProjectService } from '../projects/project.service';
 import { extractDocumentText } from '../rag/document-extractor';
 import { RagRetriever } from '../rag/retriever';
 import { GcsUploader } from '../storage/uploader';
+import { SystemLimitsService } from '../services/system-limits.service';
 
 const router = Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB
+// 50MB is a fixed safety ceiling only - the admin-editable
+// documentUploadMaxBytes (see system-limits.service.ts, same value used by
+// POST /api/chat/documents) is what's actually enforced, in-handler below.
+const HARD_MAX_DOCUMENT_BYTES = 50 * 1024 * 1024;
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: HARD_MAX_DOCUMENT_BYTES } });
 
 /**
  * Project CRUD + project-scoped file ingestion.
@@ -136,6 +141,14 @@ router.post('/:id/files', authenticateToken, upload.single('file'), async (req: 
     const file = req.file;
     if (!file) {
       res.status(400).json({ error: 'No file was uploaded (expected multipart field "file").' });
+      return;
+    }
+
+    const limits = await SystemLimitsService.getLimits();
+    if (file.size > limits.documentUploadMaxBytes) {
+      res.status(400).json({
+        error: `File is too large - documents must be ${Math.round(limits.documentUploadMaxBytes / (1024 * 1024))}MB or smaller.`,
+      });
       return;
     }
 
