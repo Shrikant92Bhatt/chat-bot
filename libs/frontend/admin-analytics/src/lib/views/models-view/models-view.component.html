@@ -260,6 +260,7 @@
                     min="1"
                     max="5000"
                     placeholder="Unlimited"
+                    [attr.aria-label]="'Daily reply cap per user for ' + model.name"
                     [ngModel]="model.dailyLimitPerUser || null"
                     (ngModelChange)="updateDailyLimit(model.id, $event)"
                     class="w-24 px-2 py-1 rounded-lg bg-black/30 border border-white/10 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-accentCyan/50"
@@ -354,8 +355,9 @@
 
         <div class="space-y-3 text-xs">
           <div>
-            <label class="block text-slate-400 mb-1">Model Slug / ID (e.g. openai/gpt-4.5-preview)</label>
+            <label for="customModelId" class="block text-slate-400 mb-1">Model Slug / ID (e.g. openai/gpt-4.5-preview)</label>
             <input
+              id="customModelId"
               type="text"
               [ngModel]="customId()"
               (ngModelChange)="customId.set($event)"
@@ -365,8 +367,9 @@
           </div>
 
           <div>
-            <label class="block text-slate-400 mb-1">Display Name (Friendly name)</label>
+            <label for="customModelName" class="block text-slate-400 mb-1">Display Name (Friendly name)</label>
             <input
+              id="customModelName"
               type="text"
               [ngModel]="customName()"
               (ngModelChange)="customName.set($event)"
@@ -377,8 +380,9 @@
 
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label class="block text-slate-400 mb-1">Provider</label>
+              <label for="customModelProvider" class="block text-slate-400 mb-1">Provider</label>
               <input
+                id="customModelProvider"
                 type="text"
                 [ngModel]="customProvider()"
                 (ngModelChange)="customProvider.set($event)"
@@ -387,8 +391,9 @@
               />
             </div>
             <div>
-              <label class="block text-slate-400 mb-1">Description (optional)</label>
+              <label for="customModelDescription" class="block text-slate-400 mb-1">Description (optional)</label>
               <input
+                id="customModelDescription"
                 type="text"
                 [ngModel]="customDescription()"
                 (ngModelChange)="customDescription.set($event)"
@@ -400,8 +405,9 @@
 
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label class="block text-slate-400 mb-1">Prompt Cost ($/1k tokens)</label>
+              <label for="customModelPromptCost" class="block text-slate-400 mb-1">Prompt Cost ($/1k tokens)</label>
               <input
+                id="customModelPromptCost"
                 type="number"
                 step="0.0001"
                 [ngModel]="customPromptCost()"
@@ -411,8 +417,9 @@
               />
             </div>
             <div>
-              <label class="block text-slate-400 mb-1">Completion Cost ($/1k tokens)</label>
+              <label for="customModelCompletionCost" class="block text-slate-400 mb-1">Completion Cost ($/1k tokens)</label>
               <input
+                id="customModelCompletionCost"
                 type="number"
                 step="0.0001"
                 [ngModel]="customCompletionCost()"

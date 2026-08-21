@@ -32,6 +32,6 @@
   <app-projects-modal *ngIf="isProjectsOpen" (closeModal)="closeProjects()"></app-projects-modal>
 
   <div *ngIf="isAdminViewOpen" class="fixed inset-0 z-50 bg-obsidian overflow-y-auto">
-    <lib-admin-dashboard (close)="closeAdminView()"></lib-admin-dashboard>
+    <lib-admin-dashboard (closed)="closeAdminView()"></lib-admin-dashboard>
   </div>
 </div>
