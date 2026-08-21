@@ -1,0 +1,18 @@
+steps:
+  # Build Frontend Client Docker Image only - used when the CI pipeline
+  # detects only apps/chat-client (or a shared dependency) changed, so an
+  # unrelated API-only PR doesn't rebuild/push an unchanged chat-client image.
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'asia-south1-docker.pkg.dev/$PROJECT_ID/chat-repo/chat-client:latest'
+      - '-f'
+      - 'Dockerfile.client'
+      - '.'
+
+images:
+  - 'asia-south1-docker.pkg.dev/$PROJECT_ID/chat-repo/chat-client:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
