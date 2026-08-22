@@ -86,6 +86,18 @@
           </div>
           <div class="flex flex-col gap-1 w-full min-w-0">
             <div class="text-slate-200 text-sm leading-relaxed">
+                <!-- Structured UI components (weather/stock cards, tables, charts, ...) - shown
+                     first, above the text: the card carries the at-a-glance answer, the Markdown
+                     below is supporting detail, not the other way around. -->
+                <app-ui-block
+                  *ngIf="msg.ui && msg.ui.length > 0"
+                  [components]="msg.ui"
+                  [sources]="msg.sources || []"
+                  [actions]="msg.actions || []"
+                  (actionSelected)="chatService.sendMessage($event.label)"
+                  class="block mb-3"
+                ></app-ui-block>
+
                 <!-- Markdown HTML Output -->
                 <div class="markdown-body" [innerHTML]="renderMarkdown(msg.content)"></div>
 
@@ -141,14 +153,6 @@
                     </a>
                   </div>
                 </div>
-                <!-- Structured UI components (weather/stock cards, tables, charts, ...) -->
-                <app-ui-block
-                  *ngIf="msg.ui && msg.ui.length > 0"
-                  [components]="msg.ui"
-                  [sources]="msg.sources || []"
-                  [actions]="msg.actions || []"
-                  (actionSelected)="chatService.sendMessage($event.label)"
-                ></app-ui-block>
               </div>
 
               <!-- Copy action -->
