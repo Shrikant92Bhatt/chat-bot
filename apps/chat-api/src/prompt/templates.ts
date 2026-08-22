@@ -162,7 +162,8 @@ export const PROMPT_TEMPLATES: Record<string, PromptTemplate> = {
       'their JSON output straight into the component fields rather than re-deriving or rounding values.\n' +
       '- If a tool call failed, use ERROR_CARD (title, message, toolName?) to report it instead of guessing.\n' +
       '- WEATHER_CARD: {location, current:{temperature, condition, humidity, windSpeed}, forecast?:[{date, ' +
-      'temperatureHigh, temperatureLow, condition, precipitationProbability}]}.\n' +
+      'temperatureHigh, temperatureLow, condition, precipitationProbability}], hourly?:[{time, temperature}]}. ' +
+      'get_weather returns forecast and hourly already populated - include both in full, do not drop them.\n' +
       '- STOCK_CARD: {symbol, name, price, change, changePercent, currency}.\n' +
       '- STOCK_CHART: {symbol, name?, currency?, interval?, points:[{timestamp, price}]}.\n' +
       '- TABLE: {columns:[string], rows:[[string|number|null]]}.\n' +

@@ -61,6 +61,11 @@ export interface WeatherForecastDay {
   precipitationProbability: number;
 }
 
+export interface WeatherHourlyPoint {
+  time: string;
+  temperature: number;
+}
+
 export interface WeatherCardData {
   location: string;
   current: {
@@ -70,6 +75,7 @@ export interface WeatherCardData {
     windSpeed: number;
   };
   forecast?: WeatherForecastDay[];
+  hourly?: WeatherHourlyPoint[];
 }
 
 export interface StockCardData {

@@ -9,6 +9,7 @@ import {
   OrchestratorSource,
   StockChartData,
   UIComponent,
+  WeatherHourlyPoint,
 } from '@chat-monorepo/shared';
 
 /**
@@ -51,10 +52,40 @@ export class UiBlockComponent {
     return this.sanitizer.sanitize(SecurityContext.HTML, cleanHtml) ?? '';
   }
 
+  /**
+   * Maps a weather condition string to an emoji + a Tailwind animation
+   * utility (pulse/bounce - the only two of Tailwind's four built-in
+   * keyframe animations that read as "weather" rather than "loading
+   * spinner"; no custom keyframes needed). Matched by keyword rather than
+   * exact string so it stays correct however the description was phrased,
+   * whether from get_weather's own WMO_CONDITIONS wording (weather.ts) or
+   * a differently-worded fallback source.
+   */
+  public weatherIcon(condition: string): { emoji: string; anim: string } {
+    const c = (condition || '').toLowerCase();
+    if (c.includes('thunder')) return { emoji: '⛈️', anim: 'animate-pulse' };
+    if (c.includes('freezing') || c.includes('sleet')) return { emoji: '🌨️', anim: 'animate-bounce' };
+    if (c.includes('snow')) return { emoji: '❄️', anim: 'animate-pulse' };
+    if (c.includes('drizzle') || c.includes('shower')) return { emoji: '🌦️', anim: 'animate-bounce' };
+    if (c.includes('rain')) return { emoji: '🌧️', anim: 'animate-bounce' };
+    if (c.includes('fog') || c.includes('mist') || c.includes('haze')) return { emoji: '🌫️', anim: '' };
+    if (c.includes('overcast')) return { emoji: '☁️', anim: '' };
+    if (c.includes('cloud')) return { emoji: '⛅', anim: '' };
+    if (c.includes('clear') || c.includes('sun')) return { emoji: '☀️', anim: 'animate-pulse' };
+    return { emoji: '🌡️', anim: '' };
+  }
+
   public changeColorClass(change: number): string {
     if (change > 0) return 'text-accentEmerald';
     if (change < 0) return 'text-accentRose';
     return 'text-slate-400';
+  }
+
+  /** Arrow + tint reflecting a stock's move, reusing the same green/red tokens changeColorClass uses. */
+  public stockTrend(change: number): { arrow: string; bg: string; border: string } {
+    if (change > 0) return { arrow: '▲', bg: 'bg-accentEmerald/[0.06]', border: 'border-accentEmerald/20' };
+    if (change < 0) return { arrow: '▼', bg: 'bg-accentRose/[0.06]', border: 'border-accentRose/20' };
+    return { arrow: '▬', bg: 'bg-white/[0.03]', border: 'border-white/10' };
   }
 
   public osmLink(lat: number, lng: number, zoom = 12): string {
@@ -178,6 +209,41 @@ export class UiBlockComponent {
         percent: Math.round(percent * 100),
       };
     });
+  }
+
+  /** 12h/am-pm label from an Open-Meteo hourly ISO timestamp ("...T15:00" -> "3pm"). */
+  private formatHour(iso: string): string {
+    const match = iso.match(/T(\d{2}):/);
+    if (!match) return '';
+    let hour = parseInt(match[1], 10);
+    const suffix = hour >= 12 ? 'pm' : 'am';
+    hour = hour % 12 || 12;
+    return `${hour}${suffix}`;
+  }
+
+  public weatherHourlyPoints(hourly?: WeatherHourlyPoint[]): string {
+    if (!hourly || hourly.length === 0) return '';
+    const temps = hourly.map((h) => h.temperature);
+    const min = Math.min(...temps);
+    const max = Math.max(...temps);
+    const range = max === min ? 1 : max - min;
+    const step = this.xStep(hourly.length);
+    return hourly.map((h, i) => `${this.pad + i * step},${this.toY(h.temperature, min, min + range)}`).join(' ');
+  }
+
+  public weatherHourlyMarkers(hourly?: WeatherHourlyPoint[]): Array<{ x: number; y: number; temp: number; label: string }> {
+    if (!hourly || hourly.length === 0) return [];
+    const temps = hourly.map((h) => h.temperature);
+    const min = Math.min(...temps);
+    const max = Math.max(...temps);
+    const range = max === min ? 1 : max - min;
+    const step = this.xStep(hourly.length);
+    return hourly.map((h, i) => ({
+      x: this.pad + i * step,
+      y: this.toY(h.temperature, min, min + range),
+      temp: h.temperature,
+      label: this.formatHour(h.time),
+    }));
   }
 
   public stockSparklinePoints(data: StockChartData): string {

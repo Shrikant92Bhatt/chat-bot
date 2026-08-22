@@ -55,6 +55,16 @@ const weatherCardData = z.object({
     )
     .max(14)
     .optional(),
+  /** Short-range hourly trend for the temperature sparkline under the forecast strip. */
+  hourly: z
+    .array(
+      z.object({
+        time: z.string(),
+        temperature: z.number(),
+      })
+    )
+    .max(12)
+    .optional(),
 });
 
 const stockCardData = z.object({

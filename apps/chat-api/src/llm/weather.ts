@@ -13,6 +13,7 @@ export interface WeatherResult {
     condition: string;
     precipitationProbability: number;
   }>;
+  hourly: Array<{ time: string; temperature: number }>;
 }
 
 /**
@@ -81,6 +82,7 @@ export async function getWeather(location: string): Promise<WeatherResult> {
   const forecastUrl =
     `https://api.open-meteo.com/v1/forecast?latitude=${place.latitude}&longitude=${place.longitude}` +
     '&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code' +
+    '&hourly=temperature_2m' +
     '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max' +
     '&timezone=auto&forecast_days=5';
   const forecastRes = await fetch(forecastUrl);
@@ -108,6 +110,20 @@ export async function getWeather(location: string): Promise<WeatherResult> {
     }
   }
 
+  // Next 24h of the hourly series, sampled every 3h (8 points) - enough for
+  // a readable trend line without bloating the JSON the model has to
+  // re-emit into the ```ui block. current.time and hourly.time are both
+  // local-timezone ISO strings from the same request (timezone=auto), so a
+  // plain string comparison finds "now" without any server/client tz math.
+  const hourly: WeatherResult['hourly'] = [];
+  const hourlySeries = forecastData?.hourly;
+  if (hourlySeries?.time && current.time) {
+    const startIndex = Math.max(0, hourlySeries.time.findIndex((t: string) => t >= current.time));
+    for (let i = startIndex; i < hourlySeries.time.length && hourly.length < 8; i += 3) {
+      hourly.push({ time: hourlySeries.time[i], temperature: hourlySeries.temperature_2m[i] });
+    }
+  }
+
   return {
     location: resolvedName,
     current: {
@@ -117,5 +133,6 @@ export async function getWeather(location: string): Promise<WeatherResult> {
       windSpeed: current.wind_speed_10m,
     },
     forecast,
+    hourly,
   };
 }
