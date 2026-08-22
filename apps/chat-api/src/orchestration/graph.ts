@@ -114,14 +114,28 @@ async function checkModelQuota(
  * caller (chat.routes.ts) can fall back to the legacy AIRouterService
  * without having already sent a partial response.
  */
-export async function streamGraphResponse(request: ChatStreamRequest, res: Response, ownerId?: string): Promise<void> {
+export async function streamGraphResponse(
+  request: ChatStreamRequest,
+  res: Response,
+  ownerId?: string,
+  ownerProfile?: { name?: string; email?: string }
+): Promise<void> {
   const requestStartedAt = Date.now();
   // Single context-assembly step: project instructions + long-term memory +
   // RAG + conversation summarization, gathered once per request. The
   // resulting bundle is handed to the graph in state and turned into the
   // system prompt by nodes.ts `assembleAgentMessages` (via the Prompt Manager).
+  //
+  // ownerProfile's name/email come straight from the verified Google
+  // session (auth.middleware.ts) - it's the one piece of "who is this"
+  // the model previously had zero access to. Without it, a signed-in
+  // user asking "do you know me?" got "no" even though the app has known
+  // their name since login; memories/the "About you" profile only cover
+  // what got explicitly said or written, never this baseline identity.
   const { context, messages: windowedMessages } = await buildContext({
     uid: ownerId,
+    userName: ownerProfile?.name,
+    userEmail: ownerProfile?.email,
     threadId: request.threadId,
     projectId: request.projectId ?? null,
     messages: request.messages || [],

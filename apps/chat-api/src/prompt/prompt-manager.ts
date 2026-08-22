@@ -44,6 +44,9 @@ export function estimateTokens(text: string): number {
  * Produced by context/context-builder.ts, consumed here.
  */
 export interface AssembledContext {
+  /** From the verified Google session - the one piece of "who is this" that's true for every turn, not just what got said/written. */
+  accountName?: string | null;
+  accountEmail?: string | null;
   projectName?: string | null;
   projectInstructions?: string | null;
   /** Durable user-level facts from long-term memory. */
@@ -62,8 +65,9 @@ export const EMPTY_CONTEXT: AssembledContext = {};
  * Block order is deliberate — most durable/authoritative first, most
  * volatile last, so later blocks read as "for this turn" rather than as
  * standing instructions:
- *   system identity -> UI response contract -> tool policy -> project
- *   instructions -> memories -> RAG excerpts -> conversation summary.
+ *   system identity -> UI response contract -> tool policy -> account
+ *   identity -> project instructions -> memories -> RAG excerpts ->
+ *   conversation summary.
  *
  * Returns null when there is nothing at all to say (never happens today,
  * since system:v1 is unconditional, but keeps callers honest).
@@ -73,6 +77,19 @@ export function buildSystemPrompt(context: AssembledContext, options: { mcpEnabl
 
   if (options.mcpEnabled) {
     blocks.push(renderPrompt('tool_selection:v1'));
+  }
+
+  // Anonymous users have neither field - nothing to say here, memories/
+  // the explicit "About you" profile (also injected below, via
+  // context.memories) are the only things this app can ever know about them.
+  if (context.accountName && context.accountName.trim()) {
+    const email = context.accountEmail?.trim();
+    blocks.push(
+      renderPrompt('account_identity:v1', {
+        name: context.accountName.trim(),
+        emailNote: email ? ` (${email})` : '',
+      })
+    );
   }
 
   if (context.projectInstructions && context.projectInstructions.trim()) {

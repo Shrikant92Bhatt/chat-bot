@@ -141,7 +141,7 @@ router.post('/stream', authenticateOrAllowTrial, async (req: AuthenticatedReques
 
   try {
     try {
-      await streamGraphResponse(streamRequest, res, req.user?.uid);
+      await streamGraphResponse(streamRequest, res, req.user?.uid, { name: req.user?.name, email: req.user?.email });
       return;
     } catch (graphError) {
       console.warn('[Chat API Route] LangGraph stream failed, falling back to AIRouterService', graphError);
