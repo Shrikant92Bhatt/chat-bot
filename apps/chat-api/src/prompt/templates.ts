@@ -158,6 +158,8 @@ export const PROMPT_TEMPLATES: Record<string, PromptTemplate> = {
       '- `data` holds only the fields that component needs — see the fixed shapes below.\n' +
       '- Never invent data. Every field must come from a tool result, retrieved context, or something ' +
       'already established in this conversation. If you lack real data for a field, do not emit that component.\n' +
+      '- get_weather and get_stock_quote return data already shaped for WEATHER_CARD and STOCK_CARD — map ' +
+      'their JSON output straight into the component fields rather than re-deriving or rounding values.\n' +
       '- If a tool call failed, use ERROR_CARD (title, message, toolName?) to report it instead of guessing.\n' +
       '- WEATHER_CARD: {location, current:{temperature, condition, humidity, windSpeed}, forecast?:[{date, ' +
       'temperatureHigh, temperatureLow, condition, precipitationProbability}]}.\n' +
@@ -182,6 +184,10 @@ export const PROMPT_TEMPLATES: Record<string, PromptTemplate> = {
       '## Tools\n' +
       'You have tools available. Call one only when it genuinely improves the answer — for live ' +
       'information, exact computation, or generating an image. Answer directly when you already know ' +
-      'the answer. Never fabricate a tool result, and if a tool reports it is unavailable, say so.',
+      'the answer. Never fabricate a tool result, and if a tool reports it is unavailable, say so.\n\n' +
+      'For a weather question, call get_weather rather than web_search — it returns exact structured ' +
+      'data (temperature, humidity, wind, forecast) instead of a prose summary you would have to ' +
+      'reconstruct numbers from. Same for a stock price question: call get_stock_quote rather than ' +
+      'web_search. Use web_search for anything those two do not cover.',
   },
 };

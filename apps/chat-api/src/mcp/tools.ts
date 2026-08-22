@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { tool } from '@langchain/core/tools';
 import { generateImage } from '../llm/image-gen';
 import { performWebSearch } from '../llm/web-search';
+import { getWeather } from '../llm/weather';
+import { getStockQuote } from '../llm/stock';
 import { executeSandboxedCode } from '../tools/code-sandbox';
 
 /**
@@ -88,6 +90,50 @@ const codeInterpreterTool = tool(
   }
 );
 
+const weatherTool = tool(
+  async ({ location }: { location: string }) => {
+    try {
+      const weather = await getWeather(location);
+      return JSON.stringify({ success: true, ...weather });
+    } catch (error) {
+      console.error(`[mcp/tools] get_weather failed for "${location}":`, error);
+      return JSON.stringify({ success: false, error: (error as Error).message });
+    }
+  },
+  {
+    name: 'get_weather',
+    description:
+      'Gets the current weather and 5-day forecast for a location, as exact structured data (temperature, ' +
+      'humidity, wind speed, conditions) - not a summarized description. Prefer this over web_search for ' +
+      'any weather question, and use its output directly for a WEATHER_CARD.',
+    schema: z.object({
+      location: z.string().describe('The place name, e.g. "Pune" or "London, UK".'),
+    }),
+  }
+);
+
+const stockQuoteTool = tool(
+  async ({ symbol }: { symbol: string }) => {
+    try {
+      const quote = await getStockQuote(symbol);
+      return JSON.stringify({ success: true, ...quote });
+    } catch (error) {
+      console.error(`[mcp/tools] get_stock_quote failed for "${symbol}":`, error);
+      return JSON.stringify({ success: false, error: (error as Error).message });
+    }
+  },
+  {
+    name: 'get_stock_quote',
+    description:
+      'Gets the current price and change for a stock ticker symbol, as exact structured data (price, change, ' +
+      'change percent, currency) - not a summarized description. Prefer this over web_search for any stock ' +
+      'price question, and use its output directly for a STOCK_CARD.',
+    schema: z.object({
+      symbol: z.string().describe('The ticker symbol, e.g. "AAPL" or "TSLA".'),
+    }),
+  }
+);
+
 const generateImageTool = tool(
   async ({ prompt }: { prompt: string }) => {
     try {
@@ -107,4 +153,4 @@ const generateImageTool = tool(
   }
 );
 
-export const MCP_TOOLS = [calculatorTool, webSearchTool, codeInterpreterTool, generateImageTool];
+export const MCP_TOOLS = [calculatorTool, webSearchTool, weatherTool, stockQuoteTool, codeInterpreterTool, generateImageTool];
