@@ -7,6 +7,9 @@ import { SummarizationService, SimpleMessage } from '../summarization/summarizer
 
 export interface ContextRequest {
   uid?: string;
+  /** From the verified Google session (auth.middleware.ts) - see buildContext's account-identity block below. */
+  userName?: string;
+  userEmail?: string;
   threadId?: string;
   projectId?: string | null;
   messages: SimpleMessage[];
@@ -37,7 +40,7 @@ export interface BuiltContext {
  * turn.
  */
 export async function buildContext(request: ContextRequest): Promise<BuiltContext> {
-  const { uid, threadId, projectId, messages } = request;
+  const { uid, userName, userEmail, threadId, projectId, messages } = request;
   const history = messages || [];
   const lastUserMessage = [...history].reverse().find((m) => m.role === 'user');
   const query = lastUserMessage?.content || '';
@@ -72,6 +75,8 @@ export async function buildContext(request: ContextRequest): Promise<BuiltContex
 
   return {
     context: {
+      accountName: userName ?? null,
+      accountEmail: userEmail ?? null,
       projectName: project?.name ?? null,
       projectInstructions: project?.instructions ?? null,
       memories,

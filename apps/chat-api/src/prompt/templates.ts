@@ -19,7 +19,8 @@ export type PromptTemplateId =
   | 'memory_extraction'
   | 'tool_selection'
   | 'project'
-  | 'ui_orchestrator';
+  | 'ui_orchestrator'
+  | 'account_identity';
 
 export interface PromptTemplate {
   id: PromptTemplateId;
@@ -174,6 +175,20 @@ export const PROMPT_TEMPLATES: Record<string, PromptTemplate> = {
       'fenced code block in the Markdown answer (e.g. a downloadable snippet).\n' +
       '- CONFIRMATION_CARD: {title, description?, confirmLabel?, cancelLabel?, actionId?} — for a ' +
       'yes/no decision the user needs to make before you proceed.',
+  },
+
+  'account_identity:v1': {
+    id: 'account_identity',
+    version: 'v1',
+    description:
+      'The signed-in user\'s name/email from their verified Google session. {{name}} and {{emailNote}} ' +
+      '(pre-formatted as " (email)" or empty) are set by prompt-manager.buildSystemPrompt, not the caller.',
+    variables: ['name', 'emailNote'],
+    template:
+      '## Who you\'re talking to\n' +
+      'The signed-in user is {{name}}{{emailNote}}. Use their name naturally when it helps - a greeting, ' +
+      'personalizing an example - not in every reply. This is account identity only; it does not mean you ' +
+      'know anything else about them beyond what appears in the sections below, if present.',
   },
 
   'tool_selection:v1': {
