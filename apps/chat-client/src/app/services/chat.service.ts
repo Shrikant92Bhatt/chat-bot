@@ -1,4 +1,5 @@
 import { Injectable, signal, computed, effect } from '@angular/core';
+import { Location } from '@angular/common';
 import {
   AIModelType,
   ChatAttachment,
@@ -77,10 +78,35 @@ export class ChatService {
 
   private abortController: AbortController | null = null;
 
-  constructor(private authService: AuthService) {
+  // The thread id from the URL at page load (/chat/:id), consumed once by
+  // loadUserThreadHistory() to resume that exact thread on reload instead of
+  // always landing on a fresh blank one. Read before createInitialThread()
+  // runs below so a reload's URL is captured before anything overwrites it.
+  private pendingRouteThreadId: string | null = this.extractThreadIdFromUrl();
+
+  private extractThreadIdFromUrl(): string | null {
+    const match = window.location.pathname.match(/^\/chat\/([^/]+)$/);
+    return match ? decodeURIComponent(match[1]) : null;
+  }
+
+  constructor(
+    private authService: AuthService,
+    private location: Location
+  ) {
     this.createInitialThread();
     void this.loadAvailableModels();
     void this.loadEffectiveLimits();
+
+    // Keeps the URL in sync with whichever thread is active - every path
+    // that changes activeThreadId (selectThread, createNewThread, initial
+    // load, history restore) runs through here rather than each call site
+    // managing the URL itself. replaceState (not pushState/Router.navigate)
+    // on purpose: the goal is "reload lands back on this chat", not a
+    // browser-history entry per thread switch.
+    effect(() => {
+      const id = this.activeThreadId();
+      if (id) this.location.replaceState(`/chat/${id}`);
+    });
 
     // Effect: Reacts to User Login/Logout state changes
     effect(
@@ -226,10 +252,25 @@ export class ChatService {
         const data = await response.json();
         const loadedThreads: ChatThread[] = data.threads;
         if (loadedThreads && loadedThreads.length > 0) {
-          // Every fresh load starts a new chat rather than resuming the
-          // last one - history is still there in the sidebar to pick up.
-          // Not persisted until the user actually sends a message, so an
-          // idle page load doesn't clutter saved history with empties.
+          // A reload whose URL names a thread that's actually in this
+          // user's history (/chat/:id) resumes that exact thread instead of
+          // always landing on a fresh blank one - consumed once so it can't
+          // affect a later in-session reload of loadUserThreadHistory.
+          const routeThreadId = this.pendingRouteThreadId;
+          this.pendingRouteThreadId = null;
+          const resumedThread = routeThreadId ? loadedThreads.find((t) => t.id === routeThreadId) : undefined;
+          if (resumedThread) {
+            this.threads.set(loadedThreads);
+            this.activeThreadId.set(resumedThread.id);
+            return;
+          }
+
+          // No URL, or the URL's thread id is "stuck" (not found in this
+          // user's history, e.g. a stale link or another account's chat) -
+          // fall back to a fresh new chat, same as before. History is still
+          // there in the sidebar to pick up. Not persisted until the user
+          // actually sends a message, so an idle page load doesn't clutter
+          // saved history with empties.
           const freshThread: ChatThread = {
             id: 'thread-' + Date.now(),
             title: 'New Chat',
@@ -870,22 +911,18 @@ export class ChatService {
   }
 
   /**
-   * Shares the active conversation via the device's native share sheet
-   * (navigator.share - Messages, Email, etc. on mobile). Falls back to
-   * copying the transcript to the clipboard on browsers that don't support
-   * it (most desktop browsers), returning 'copied' so the caller can show
-   * its own confirmation - there's no share-sheet equivalent to confirm with
-   * there.
+   * Shares plain text via the device's native share sheet (navigator.share -
+   * Messages, Email, etc. on mobile). Falls back to copying to the clipboard
+   * on browsers that don't support it (most desktop browsers), returning
+   * 'copied' so the caller can show its own confirmation - there's no
+   * share-sheet equivalent to confirm with there. Shared by
+   * shareActiveThread() (whole conversation) and shareMessage() (a single
+   * response) below.
    */
-  public async shareActiveThread(): Promise<'shared' | 'copied' | 'cancelled' | 'unavailable'> {
-    const thread = this.activeThread();
-    if (!thread || !thread.messages.some((m) => m.role === 'user')) return 'unavailable';
-
-    const text = this.formatThreadForSharing(thread);
-
+  private async shareText(title: string, text: string): Promise<'shared' | 'copied' | 'cancelled' | 'unavailable'> {
     if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
       try {
-        await navigator.share({ title: thread.title, text });
+        await navigator.share({ title, text });
         return 'shared';
       } catch (error: any) {
         // AbortError: the user closed the share sheet without picking a
@@ -902,6 +939,19 @@ export class ChatService {
       console.error('[ChatService] Clipboard fallback for sharing also failed:', error);
       return 'unavailable';
     }
+  }
+
+  /** Shares the active conversation - see shareText() above for the share/clipboard behavior. */
+  public async shareActiveThread(): Promise<'shared' | 'copied' | 'cancelled' | 'unavailable'> {
+    const thread = this.activeThread();
+    if (!thread || !thread.messages.some((m) => m.role === 'user')) return 'unavailable';
+    return this.shareText(thread.title, this.formatThreadForSharing(thread));
+  }
+
+  /** Shares a single assistant response - see shareText() above for the share/clipboard behavior. */
+  public async shareMessage(content: string): Promise<'shared' | 'copied' | 'cancelled' | 'unavailable'> {
+    if (!content || !content.trim()) return 'unavailable';
+    return this.shareText('NexusAI', content.trim());
   }
 
   public stopStreaming() {

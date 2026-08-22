@@ -61,6 +61,12 @@ export class ChatWindowComponent implements AfterViewChecked {
   public copiedMessageId = signal<string | null>(null);
   private copiedResetTimeout: ReturnType<typeof setTimeout> | null = null;
 
+  // Which message's share fell back to clipboard/failed, and what to say -
+  // only set for those two cases, same as navbar's shareChat(): the OS
+  // share sheet already gives its own confirmation when it succeeds.
+  public shareFeedback = signal<{ id: string; message: string } | null>(null);
+  private shareFeedbackTimeout: ReturnType<typeof setTimeout> | null = null;
+
   constructor(
     public chatService: ChatService,
     public authService: AuthService,
@@ -143,6 +149,24 @@ export class ChatWindowComponent implements AfterViewChecked {
       this.copiedMessageId.set(null);
       this.copiedResetTimeout = null;
     }, 2000);
+  }
+
+  /** Shares a single response via the device's native share sheet, falling back to clipboard. */
+  public async shareMessage(id: string, content: string): Promise<void> {
+    const result = await this.chatService.shareMessage(content);
+    if (result === 'copied') {
+      this.flashShareFeedback(id, 'Copied to clipboard');
+    } else if (result === 'unavailable') {
+      this.flashShareFeedback(id, "Couldn't share this");
+    }
+    // 'shared' and 'cancelled' need no feedback here - the OS share sheet
+    // already gave its own confirmation, or the user just closed it.
+  }
+
+  private flashShareFeedback(id: string, message: string): void {
+    if (this.shareFeedbackTimeout) clearTimeout(this.shareFeedbackTimeout);
+    this.shareFeedback.set({ id, message });
+    this.shareFeedbackTimeout = setTimeout(() => this.shareFeedback.set(null), 2000);
   }
 
   /**

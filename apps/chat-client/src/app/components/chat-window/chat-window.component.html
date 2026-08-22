@@ -156,7 +156,7 @@
               </div>
 
               <!-- Copy action -->
-              <div *ngIf="msg.content && !(chatService.isStreaming() && !msg.content)" class="flex justify-start pt-2">
+              <div *ngIf="msg.content && !(chatService.isStreaming() && !msg.content)" class="flex items-center justify-start gap-3 pt-2">
                 <button
                   (click)="copyMessage(msg.id, msg.content)"
                   class="flex items-center space-x-1 text-[11px] text-slate-400 hover:text-slate-300 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100"
@@ -191,6 +191,23 @@
                     />
                   </svg>
                   <span>Regenerate</span>
+                </button>
+
+                <!-- Share this response - device share sheet, falling back to clipboard. -->
+                <button
+                  (click)="shareMessage(msg.id, msg.content)"
+                  class="flex items-center space-x-1 text-[11px] text-slate-400 hover:text-slate-300 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100"
+                >
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M8.684 13.342a3 3 0 100 2.316m0-2.316a3 3 0 010-2.316m0 2.316l6.632 3.316m-6.632-5.632l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 8.632a3 3 0 105.367 2.684 3 3 0 00-5.367-2.684z"
+                    />
+                  </svg>
+                  <span *ngIf="shareFeedback()?.id !== msg.id">Share</span>
+                  <span *ngIf="shareFeedback()?.id === msg.id">{{ shareFeedback()?.message }}</span>
                 </button>
               </div>
 
