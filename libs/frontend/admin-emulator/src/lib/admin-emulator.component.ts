@@ -1,6 +1,7 @@
-import { Component, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ADMIN_API_BASE_URL, ADMIN_AUTH_BRIDGE } from '@chat-monorepo/admin-analytics';
 
 export interface StageState {
   id: string;
@@ -59,31 +60,41 @@ export interface StageState {
           *ngFor="let stage of stages(); let i = index"
           (click)="selectedStage.set(stage)"
           [ngClass]="{
-            'border-cyan-500 bg-cyan-950/20 ring-1 ring-cyan-500/50': selectedStage()?.id === stage.id,
-            'border-emerald-500/50 bg-emerald-950/10': stage.status === 'completed',
-            'border-amber-500/50 bg-amber-950/10 animate-pulse': stage.status === 'running',
+            'border-cyan-500 bg-cyan-950/20 ring-1 ring-cyan-500/50 scale-[1.02] shadow-cyanGlow': selectedStage()?.id === stage.id,
+            'border-emerald-500/50 bg-emerald-950/20 shadow-emerald-500/10': stage.status === 'completed',
+            'border-amber-400 bg-amber-500/20 animate-pulse ring-2 ring-amber-400/50 scale-105 z-10 shadow-lg shadow-amber-500/20': stage.status === 'running',
             'border-slate-700 bg-white/5 opacity-60': stage.status === 'idle' || stage.status === 'skipped'
           }"
-          class="p-4 rounded-xl border backdrop-blur-md cursor-pointer transition hover:border-cyan-400/80 relative overflow-hidden"
+          class="p-4 rounded-xl border backdrop-blur-md cursor-pointer transition-all duration-300 hover:border-cyan-400/80 relative overflow-hidden group"
         >
+          <!-- Active Stage Progress Bar Indicator -->
+          <div
+            *ngIf="stage.status === 'running'"
+            class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 animate-pulse"
+          ></div>
+          <div
+            *ngIf="stage.status === 'completed'"
+            class="absolute top-0 left-0 right-0 h-1 bg-emerald-400"
+          ></div>
+
           <div class="flex items-center justify-between mb-2">
             <span class="text-xs font-bold text-slate-400 uppercase tracking-wide">Node #0{{ i + 1 }}</span>
             <span
               [ngClass]="{
                 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30': stage.status === 'completed',
-                'bg-amber-500/20 text-amber-400 border-amber-500/30': stage.status === 'running',
+                'bg-amber-500/20 text-amber-300 border-amber-400 animate-bounce': stage.status === 'running',
                 'bg-slate-700/40 text-slate-400 border-slate-600': stage.status === 'idle' || stage.status === 'skipped'
               }"
-              class="text-[10px] px-2 py-0.5 rounded-full border uppercase font-medium"
+              class="text-[10px] px-2.5 py-0.5 rounded-full border uppercase font-medium transition-all"
             >
-              {{ stage.status }}
+              {{ stage.status === 'running' ? '⚡ RUNNING' : stage.status }}
             </span>
           </div>
-          <h3 class="text-base font-semibold text-white mb-1">{{ stage.name }}</h3>
+          <h3 class="text-base font-semibold text-white mb-1 group-hover:text-cyan-300 transition-colors">{{ stage.name }}</h3>
           <p class="text-xs text-slate-400 line-clamp-1">{{ stage.description }}</p>
           <div class="mt-3 text-[11px] text-slate-400 flex justify-between items-center">
             <span>Latency</span>
-            <span class="font-mono text-cyan-300">{{ stage.durationMs }}ms</span>
+            <span class="font-mono text-cyan-300 font-bold">{{ stage.durationMs }}ms</span>
           </div>
         </div>
       </div>
@@ -115,6 +126,9 @@ export interface StageState {
   `,
 })
 export class AdminEmulatorComponent {
+  private readonly auth = inject(ADMIN_AUTH_BRIDGE, { optional: true });
+  private readonly baseUrl = inject(ADMIN_API_BASE_URL, { optional: true });
+
   queryText = 'Explain RAG search and memory optimization';
   isRunning = signal<boolean>(false);
 
@@ -133,14 +147,15 @@ export class AdminEmulatorComponent {
 
   runEmulation() {
     this.isRunning.set(true);
-    const token = localStorage.getItem('auth_token') || '';
+    const token = this.auth ? this.auth.getIdToken() : (localStorage.getItem('auth_token') || '');
+    const apiHost = this.baseUrl || '';
 
     // Reset stages
     this.stages.update((st) =>
       st.map((s) => ({ ...s, status: 'idle', durationMs: 0, inputPayload: null, outputPayload: null }))
     );
 
-    fetch('/api/v1/admin/emulator/stream', {
+    fetch(`${apiHost}/api/v1/admin/emulator/stream`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
