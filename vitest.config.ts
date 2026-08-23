@@ -7,6 +7,8 @@ export default defineConfig({
       '**/vitest.config.{mjs,js,ts,mts}',
       '!vitest.config.{mjs,js,ts,mts}',
       '!vite.config.{mjs,js,ts,mts}',
+      '!**/.claude/**',
+      '!**/node_modules/**',
     ],
   },
 });
