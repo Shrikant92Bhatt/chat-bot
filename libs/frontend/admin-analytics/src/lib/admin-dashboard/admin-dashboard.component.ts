@@ -139,12 +139,12 @@ export class AdminDashboardComponent implements OnInit {
       this.api.getUsers(),
     ]);
 
-    if (summary.status === 'fulfilled') {
-      this.summary.set(summary.value.summary);
-      this.daily.set(summary.value.daily);
-      this.totalUsers.set(summary.value.totalUsers);
+    if (summary.status === 'fulfilled' && summary.value) {
+      this.summary.set(summary.value.summary ?? null);
+      this.daily.set(summary.value.daily ?? []);
+      this.totalUsers.set(summary.value.totalUsers ?? 0);
     } else {
-      this.recordPanelError('summary', summary.reason);
+      this.recordPanelError('summary', summary.status === 'rejected' ? summary.reason : new Error('No summary data returned.'));
     }
 
     if (byUser.status === 'fulfilled') {
