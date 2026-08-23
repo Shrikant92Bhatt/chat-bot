@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, inject, signal, computed, output, OnInit } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject, signal, computed, output, input, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import {
   AdminApiService,
@@ -69,14 +69,14 @@ export class AdminDashboardComponent implements OnInit {
    *  `close` as colliding with the native DOM `close` event. */
   public readonly closed = output<void>();
 
+  /** Optional initial view passed from host app (e.g. 'emulator' or 'overview'). */
+  public readonly initialView = input<AdminView>('overview');
+
   public readonly accessDenied = this.api.accessDenied;
 
   public readonly windowPresets = WINDOW_PRESETS;
   public readonly windowDays = signal<number>(30);
   public readonly activeView = signal<AdminView>('overview');
-  // 'limits' loads its own data independently of everything else this shell
-  // owns (see LimitsViewComponent.ngOnInit) - it doesn't scope to the
-  // header's date-range filter and isn't part of loadAll()'s Promise.allSettled.
 
   /** First load - shows the full-page loader. */
   public readonly isInitialLoading = signal(true);
@@ -103,11 +103,17 @@ export class AdminDashboardComponent implements OnInit {
   );
 
   ngOnInit(): void {
+    if (this.initialView()) {
+      this.activeView.set(this.initialView());
+    }
     void this.loadAll();
   }
 
   public setView(view: AdminView): void {
     this.activeView.set(view);
+    if (window.location.pathname.startsWith('/admin')) {
+      window.history.replaceState(null, '', `/admin/${view}`);
+    }
   }
 
   public async setWindow(days: number): Promise<void> {

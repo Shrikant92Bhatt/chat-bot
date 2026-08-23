@@ -1,5 +1,5 @@
-import { Component, ChangeDetectionStrategy } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, ChangeDetectionStrategy, OnInit } from '@angular/core';
+import { CommonModule, Location } from '@angular/common';
 import { NavbarComponent } from './components/navbar/navbar.component';
 import { SidebarComponent } from './components/sidebar/sidebar.component';
 import { ChatWindowComponent } from './components/chat-window/chat-window.component';
@@ -29,26 +29,35 @@ import { AuthService } from './services/auth.service';
   changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './app.component.html',
 })
-export class AppComponent {
+export class AppComponent implements OnInit {
   public isSettingsOpen = false;
   public isProjectsOpen = false;
-
-  // Entry point visibility only - never the real authorization boundary.
-  // Every admin API call independently re-checks the role server-side (see
-  // requireAdmin), so a stale/wrong client-side role here can hide or show
-  // the button but can never actually grant access.
   public isAdminViewOpen = false;
+  public initialAdminView = 'overview';
 
   public get canSeeAdminEntry(): boolean {
     return this.authService.userSignal()?.role === 'admin';
   }
 
-  public openAdminView(): void {
+  ngOnInit(): void {
+    const path = window.location.pathname;
+    if (path.startsWith('/admin')) {
+      this.isAdminViewOpen = true;
+      if (path.includes('/emulator')) {
+        this.initialAdminView = 'emulator';
+      }
+    }
+  }
+
+  public openAdminView(initialView: string = 'overview'): void {
+    this.initialAdminView = initialView;
     this.isAdminViewOpen = true;
+    this.location.replaceState(`/admin/${initialView}`);
   }
 
   public closeAdminView(): void {
     this.isAdminViewOpen = false;
+    this.location.replaceState('/chat');
   }
 
   public openSettings() {
@@ -66,16 +75,14 @@ export class AppComponent {
   public closeProjects() {
     this.isProjectsOpen = false;
   }
-  // Matches the `lg:` breakpoint the sidebar/backdrop templates key off of -
-  // keeps the sidebar as a full overlay (not sharing width with the chat)
-  // on phones and most tablets, not just narrow phone widths.
-  private static readonly MOBILE_BREAKPOINT_PX = 1024;
 
-  // Default closed on phone-width viewports so the sidebar doesn't cover
-  // the whole chat on first load; still defaults open on desktop.
+  private static readonly MOBILE_BREAKPOINT_PX = 1024;
   public isSidebarOpen = window.innerWidth >= AppComponent.MOBILE_BREAKPOINT_PX;
 
-  constructor(public authService: AuthService) {}
+  constructor(
+    public authService: AuthService,
+    private location: Location
+  ) {}
 
   public closeSidebarOnMobile(): void {
     if (window.innerWidth < AppComponent.MOBILE_BREAKPOINT_PX) {
