@@ -3,12 +3,8 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     projects: [
-      '**/vite.config.{mjs,js,ts,mts}',
-      '**/vitest.config.{mjs,js,ts,mts}',
-      '!vitest.config.{mjs,js,ts,mts}',
-      '!vite.config.{mjs,js,ts,mts}',
-      '!**/.claude/**',
-      '!**/node_modules/**',
+      'vite.config.ts',
+      'libs/frontend/admin-analytics/vite.config.mts',
     ],
   },
 });

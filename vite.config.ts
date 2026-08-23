@@ -4,7 +4,7 @@ import path from 'path';
 export default defineConfig({
   resolve: {
     alias: {
-      '@chat-monorepo/shared': path.resolve(__dirname, './libs/shared/src/index.ts'),
+      '@chat-monorepo/shared': path.resolve(__dirname, 'libs/shared/src/index.ts'),
     },
   },
   test: {
