@@ -19,6 +19,9 @@
       "@chat-monorepo/shared": ["./libs/shared/src/index.ts"],
       "@chat-monorepo/admin-analytics": [
         "./libs/frontend/admin-analytics/src/index.ts"
+      ],
+      "@chat-monorepo/admin-emulator": [
+        "./libs/frontend/admin-emulator/src/index.ts"
       ]
     }
   },
