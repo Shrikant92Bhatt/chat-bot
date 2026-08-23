@@ -99,6 +99,33 @@ export interface StageState {
         </div>
       </div>
 
+      <!-- Visual Pipeline Data Flow Diagram -->
+      <div class="mb-8 p-6 rounded-xl backdrop-blur-md bg-white/5 border border-white/10">
+        <h3 class="text-sm font-bold uppercase tracking-wider text-slate-300 mb-4 flex items-center gap-2">
+          <span>🔄 Subsystem Data Flow & Connector Pipeline</span>
+          <span *ngIf="isRunning()" class="text-xs text-cyan-400 animate-pulse font-normal">● Live Data Packets Flowing</span>
+        </h3>
+        <div class="flex items-center justify-between overflow-x-auto py-4 px-2 gap-2 border border-white/5 rounded-lg bg-slate-900/60">
+          <ng-container *for="let stage of stages(); let i = index">
+            <div
+              (click)="selectedStage.set(stage)"
+              [ngClass]="{
+                'bg-amber-500/30 text-amber-300 border-amber-400 ring-2 ring-amber-400/50 scale-105': stage.status === 'running',
+                'bg-emerald-500/20 text-emerald-400 border-emerald-500/40': stage.status === 'completed',
+                'bg-slate-800 text-slate-400 border-slate-700': stage.status === 'idle' || stage.status === 'skipped'
+              }"
+              class="px-3 py-2 rounded-lg border text-xs font-semibold whitespace-nowrap cursor-pointer transition-all duration-300 flex items-center gap-1.5 shadow-md"
+            >
+              <span class="w-2 h-2 rounded-full" [ngClass]="stage.status === 'running' ? 'bg-amber-400 animate-ping' : stage.status === 'completed' ? 'bg-emerald-400' : 'bg-slate-600'"></span>
+              <span>{{ stage.name }}</span>
+            </div>
+            <div *ngIf="i < stages().length - 1" class="text-slate-600 font-mono text-sm px-1 flex items-center">
+              <span [ngClass]="stages()[i].status === 'completed' ? 'text-cyan-400 animate-pulse' : 'text-slate-700'">➔</span>
+            </div>
+          </ng-container>
+        </div>
+      </div>
+
       <!-- Detail Payload Inspector -->
       <div *ngIf="selectedStage()" class="p-6 rounded-xl backdrop-blur-md bg-white/5 border border-white/10">
         <div class="flex items-center justify-between mb-4 border-b border-white/10 pb-3">
