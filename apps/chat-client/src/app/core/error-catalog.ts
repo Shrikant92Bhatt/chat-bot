@@ -7,75 +7,68 @@ export interface UserFriendlyError {
 }
 
 export function formatUserFriendlyError(status: number, rawMessage?: string): UserFriendlyError {
-  const refId = `ERR-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+  const refId = `REF-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
 
   switch (status) {
     case 400:
       return {
         code: 'ERR_BAD_REQUEST',
         refId,
-        title: 'Invalid Request',
-        message: rawMessage || 'The request sent to the authentication service was malformed.',
-        suggestion: 'Please refresh the page and try signing in again.',
+        title: 'Sign-in Failed',
+        message: 'The sign-in request could not be processed. Please try again.',
+        suggestion: 'If the problem persists, please refresh the page.',
       };
     case 401:
       return {
         code: 'ERR_UNAUTHORIZED',
         refId,
         title: 'Authentication Required',
-        message: 'Your Google sign-in session could not be verified by the server.',
-        suggestion: 'Please select your Google account and sign in again.',
+        message: 'Your Google sign-in session could not be verified.',
+        suggestion: 'Please sign in again with your Google account.',
       };
     case 403:
       return {
         code: 'ERR_ACCESS_DENIED',
         refId,
         title: 'Access Restricted',
-        message: rawMessage || 'Sign-in was rejected by server authorization policies.',
-        suggestion: 'Ensure your account has proper permissions or contact support.',
+        message: 'Your account does not have permission to access this resource.',
+        suggestion: 'Please contact your administrator if you believe this is an error.',
       };
     case 404:
       return {
-        code: 'ERR_ROUTE_NOT_FOUND',
+        code: 'ERR_NOT_FOUND',
         refId,
-        title: 'Service Endpoint Unavailable',
-        message: 'The authentication service endpoint was not found on the server.',
-        suggestion: 'Verify backend API service routing and container health.',
+        title: 'Service Temporarily Unavailable',
+        message: 'The authentication service could not be reached.',
+        suggestion: 'Please try again in a few moments.',
       };
     case 405:
       return {
-        code: 'ERR_METHOD_NOT_ALLOWED',
+        code: 'ERR_SIGNIN_UNAVAILABLE',
         refId,
-        title: 'HTTP Method Discrepancy',
-        message: 'The authentication request used an invalid HTTP method for this endpoint.',
-        suggestion: 'Ensure POST request headers and route handlers match server API specifications.',
+        title: 'Sign-in Service Update',
+        message: 'The sign-in service is currently being updated or temporarily unavailable.',
+        suggestion: 'Please refresh the page and try signing in again.',
       };
     case 429:
       return {
         code: 'ERR_TOO_MANY_REQUESTS',
         refId,
-        title: 'Rate Limit Reached',
-        message: 'Too many sign-in attempts were made in a short period.',
-        suggestion: 'Please wait a minute before trying to sign in again.',
+        title: 'Too Many Attempts',
+        message: 'Multiple sign-in attempts were detected.',
+        suggestion: 'Please wait a minute before trying again.',
       };
     case 500:
     case 502:
     case 503:
     case 504:
-      return {
-        code: 'ERR_SERVER_TEMPORARY_ISSUE',
-        refId,
-        title: 'Server Temporarily Unavailable',
-        message: 'The backend service encountered a temporary glitch while establishing your session.',
-        suggestion: 'Our system has logged this incident. Please try again in a few moments.',
-      };
     default:
       return {
-        code: `ERR_HTTP_${status}`,
+        code: 'ERR_SERVER_ISSUE',
         refId,
-        title: 'Authentication Notice',
-        message: rawMessage || 'An unexpected response was received during sign-in.',
-        suggestion: 'Please verify your network connection and try again.',
+        title: 'Sign-in Temporarily Unavailable',
+        message: rawMessage || 'We encountered a temporary problem while signing you in.',
+        suggestion: 'Please try again in a few moments.',
       };
   }
 }
