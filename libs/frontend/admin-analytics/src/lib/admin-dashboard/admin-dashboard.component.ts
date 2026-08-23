@@ -147,28 +147,28 @@ export class AdminDashboardComponent implements OnInit {
       this.recordPanelError('summary', summary.status === 'rejected' ? summary.reason : new Error('No summary data returned.'));
     }
 
-    if (byUser.status === 'fulfilled') {
-      this.usageByUser.set(byUser.value.users);
+    if (byUser.status === 'fulfilled' && byUser.value) {
+      this.usageByUser.set(byUser.value.users ?? []);
     } else {
-      this.recordPanelError('byUser', byUser.reason);
+      this.recordPanelError('byUser', byUser.status === 'rejected' ? byUser.reason : new Error('No user usage data returned.'));
     }
 
-    if (byModel.status === 'fulfilled') {
-      this.usageByModel.set(byModel.value.models);
+    if (byModel.status === 'fulfilled' && byModel.value) {
+      this.usageByModel.set(byModel.value.models ?? []);
     } else {
-      this.recordPanelError('byModel', byModel.reason);
+      this.recordPanelError('byModel', byModel.status === 'rejected' ? byModel.reason : new Error('No model usage data returned.'));
     }
 
-    if (storage.status === 'fulfilled') {
+    if (storage.status === 'fulfilled' && storage.value) {
       this.storage.set(storage.value);
     } else {
-      this.recordPanelError('storage', storage.reason);
+      this.recordPanelError('storage', storage.status === 'rejected' ? storage.reason : new Error('No storage data returned.'));
     }
 
-    if (users.status === 'fulfilled') {
-      this.registeredUsers.set(users.value.users);
+    if (users.status === 'fulfilled' && users.value) {
+      this.registeredUsers.set(users.value.users ?? []);
     } else {
-      this.recordPanelError('users', users.reason);
+      this.recordPanelError('users', users.status === 'rejected' ? users.reason : new Error('No registered users data returned.'));
     }
 
     this.isInitialLoading.set(false);
