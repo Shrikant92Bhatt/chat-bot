@@ -14,6 +14,7 @@ import { OverviewViewComponent } from '../views/overview-view/overview-view.comp
 import { UsersViewComponent } from '../views/users-view/users-view.component';
 import { ModelsViewComponent } from '../views/models-view/models-view.component';
 import { LimitsViewComponent } from '../views/limits-view/limits-view.component';
+import { AdminEmulatorComponent } from '@chat-monorepo/admin-emulator';
 
 /** Date-range presets. One control, above everything it scopes. */
 const WINDOW_PRESETS = [
@@ -22,7 +23,7 @@ const WINDOW_PRESETS = [
   { days: 90, label: 'Last 90 days', short: '90d' },
 ] as const;
 
-export type AdminView = 'overview' | 'users' | 'models' | 'limits';
+export type AdminView = 'overview' | 'users' | 'models' | 'limits' | 'emulator';
 
 /**
  * The admin console's shell - embedded directly into the host app's shell
