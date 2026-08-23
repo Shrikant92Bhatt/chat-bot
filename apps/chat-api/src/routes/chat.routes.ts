@@ -123,6 +123,22 @@ router.post('/stream', authenticateOrAllowTrial, async (req: AuthenticatedReques
     return;
   }
 
+  // Hard ceiling across every model. Must run before SSE headers so the
+  // client can parse a JSON 429 (see chat.service.ts).
+  if (req.user?.uid) {
+    const daily = await AnonUsageService.checkAuthDaily(req.user.uid);
+    if (!daily.allowed) {
+      res.status(429).json({
+        error: 'RateLimitExceeded',
+        message: `You've reached today's message limit (${daily.limit}). Try a different time window, or ask an admin to raise the signed-in daily cap.`,
+        resetAt: daily.resetAt,
+        remaining: daily.remaining,
+        limit: daily.limit,
+      });
+      return;
+    }
+  }
+
   // Set SSE Headers
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');

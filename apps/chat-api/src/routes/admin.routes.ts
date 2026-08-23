@@ -7,6 +7,7 @@ import { StorageMetricsService } from '../storage/metrics';
 import { ModelConfigService } from '../services/model-config.service';
 import { SystemLimitsService } from '../services/system-limits.service';
 import { AnonUsageService } from '../services/anon-usage.service';
+import { runEmulatedPipeline } from '../emulator/emulator.service';
 
 /**
  * Admin-only API, mounted at /api/v1/admin (see main.ts). Backs the separate
@@ -323,6 +324,23 @@ router.get('/limits/usage', async (req: AuthenticatedRequest, res: Response) => 
   } catch (error) {
     console.error('[Admin Route] Failed to read rate-limit usage snapshot:', error);
     res.status(500).json({ error: 'Failed to read rate-limit usage.' });
+  }
+});
+
+/**
+ * POST /api/v1/admin/emulator/stream
+ * Body: { query: string }
+ * SSE endpoint emitting step-by-step pipeline emulation events.
+ */
+router.post('/emulator/stream', async (req: AuthenticatedRequest, res: Response) => {
+  const query = req.body?.query || 'Explain how the quantum routing agent works.';
+  try {
+    await runEmulatedPipeline(query, res);
+  } catch (error) {
+    console.error('[Admin Route] Emulator stream failed:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Emulator stream error.' });
+    }
   }
 });
 

@@ -13,17 +13,16 @@ import { ModelConfigService } from './model-config.service';
  * transaction gives an atomic check-and-increment that's correct even when
  * two instances handle requests for the same key at the same moment.
  *
- * Two independent uses, two independent key shapes:
+ * Three independent uses, three key shapes:
  *  - Anonymous pre-sign-in trial, keyed `anon:{ip}` - see
  *    auth.middleware.ts's authenticateOrAllowTrial. Blocks with a 401
  *    (sign-in required), same as always.
  *  - Per-user, PER-MODEL daily quota, keyed `user:{uid}:model:{modelId}` -
- *    see orchestration/graph.ts. There is deliberately no flat per-user
- *    total any more (that used to block every model equally and confused
- *    users with a bare "429" for hitting an unrelated cap); only models an
- *    admin has explicitly given a dailyLimitPerUser (see
- *    model-config.service.ts) are tracked at all, and hitting one never
- *    blocks the request - graph.ts falls back to a cheaper model instead.
+ *    see orchestration/graph.ts. Hitting one never blocks the request -
+ *    graph.ts falls back to a cheaper model instead.
+ *  - Per-user GLOBAL daily quota, keyed `user:{uid}:global` - hard ceiling
+ *    across every model so uncapped Flash cannot run unbounded. Hitting it
+ *    429s (see chat.routes.ts POST /stream).
  */
 
 interface RateLimitDoc {
@@ -63,6 +62,19 @@ export class AnonUsageService {
    *  on the key format. */
   public static modelUsageKey(uid: string, modelId: string): string {
     return `user:${uid}:model:${modelId}`;
+  }
+
+  public static globalUsageKey(uid: string): string {
+    return `user:${uid}:global`;
+  }
+
+  public static async checkAuthDaily(uid: string): Promise<RateLimitResult> {
+    const limits = await SystemLimitsService.getLimits();
+    return this.checkAndConsume(
+      this.globalUsageKey(uid),
+      limits.authDailyMessageLimit,
+      limits.rateLimitWindowHours * 60 * 60 * 1000
+    );
   }
 
   /**
@@ -163,6 +175,22 @@ export class AnonUsageService {
           count,
           limit: limits.anonTrialMessageLimit,
           percent: limits.anonTrialMessageLimit > 0 ? count / limits.anonTrialMessageLimit : 0,
+          resetAt: windowStart + windowMs,
+        });
+        continue;
+      }
+
+      const globalMatch = decodedKey.match(/^user:(.+):global$/);
+      if (globalMatch) {
+        const uid = globalMatch[1];
+        const limit = limits.authDailyMessageLimit;
+        entries.push({
+          key: uid,
+          kind: 'auth',
+          modelId: 'all-models',
+          count,
+          limit,
+          percent: limit > 0 ? count / limit : 0,
           resetAt: windowStart + windowMs,
         });
         continue;

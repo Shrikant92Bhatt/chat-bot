@@ -160,11 +160,9 @@ export async function authenticateToken(
  * server-side via Firestore so it survives a page reload, cleared browser
  * storage, a redeploy, AND is consistent across Cloud Run's multiple
  * concurrent instances), then requires Google Sign-In. A valid Bearer token
- * bypasses the anonymous trial limit entirely and has no flat daily cap of
- * its own - cost control for signed-in users is per-MODEL instead (see
- * orchestration/graph.ts), applied only to models an admin has explicitly
- * capped, and never blocks the request outright (it falls back to a
- * cheaper model rather than 429ing).
+ * bypasses the anonymous trial. Signed-in users still have a global daily
+ * cap (authDailyMessageLimit, enforced on POST /stream). Per-model caps
+ * remain a fallback-to-cheaper-model path, not a 429.
  */
 export async function authenticateOrAllowTrial(
   req: AuthenticatedRequest,

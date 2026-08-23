@@ -4,6 +4,7 @@ import { RagRetriever } from '../rag/retriever';
 import { MemoryService } from '../memory/memory.service';
 import { ProjectService } from '../projects/project.service';
 import { SummarizationService, SimpleMessage } from '../summarization/summarizer';
+import { HeadroomCompressor } from './headroom-compressor';
 
 export interface ContextRequest {
   uid?: string;
@@ -60,10 +61,13 @@ export async function buildContext(request: ContextRequest): Promise<BuiltContex
   }
 
   const memories = memoriesResult.status === 'fulfilled' ? memoriesResult.value : [];
-  const ragContext = ragResult.status === 'fulfilled' ? ragResult.value : [];
+  const rawRagContext = ragResult.status === 'fulfilled' ? ragResult.value : [];
   if (ragResult.status === 'rejected') {
     console.error('[ContextBuilder] RAG retrieval failed:', ragResult.reason);
   }
+
+  // Compress RAG chunks via Headroom CCR pattern to minimize token usage
+  const { chunks: ragContext } = HeadroomCompressor.compressRagChunks(rawRagContext);
 
   const conversation =
     conversationResult.status === 'fulfilled'
