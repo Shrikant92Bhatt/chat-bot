@@ -147,7 +147,7 @@ export class AdminEmulatorComponent {
 
   runEmulation() {
     this.isRunning.set(true);
-    const token = this.auth ? this.auth.getIdToken() : (localStorage.getItem('auth_token') || '');
+    const token = this.auth?.getIdToken() || '';
     const apiHost = this.baseUrl || '';
 
     // Reset stages
