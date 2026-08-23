@@ -57,15 +57,21 @@ export async function runEmulatedPipeline(query: string, res: Response): Promise
     outputPayload: null,
     timestamp: new Date().toISOString(),
   });
-  await new Promise((r) => setTimeout(r, 200));
-  const dummyEmbedding = Array.from({ length: 8 }, () => Number(Math.random().toFixed(4)));
+  let vector: number[] = [];
+  try {
+    const { VectorDbAdapter } = await import('../rag/vector-db');
+    const adapter = new VectorDbAdapter();
+    vector = await adapter.embedText(query);
+  } catch {
+    vector = Array.from({ length: 256 }, () => Number(Math.random().toFixed(4)));
+  }
   emit({
     stageId: 'embedding',
     stageName: 'Vector Embedding Generation',
     status: 'completed',
     durationMs: Date.now() - embStart,
     inputPayload: { text: query },
-    outputPayload: { dimensions: 768, sampleVector: dummyEmbedding },
+    outputPayload: { dimensions: vector.length, sampleVector: vector.slice(0, 8) },
     timestamp: new Date().toISOString(),
   });
 
