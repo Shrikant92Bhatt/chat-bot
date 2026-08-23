@@ -19,7 +19,8 @@
     "serve": {
       "executor": "@nx/js:node",
       "options": {
-        "buildTarget": "chat-api:build"
+        "buildTarget": "chat-api:build",
+        "runtimeArgs": ["-r", "tsconfig-paths/register"]
       }
     }
   }

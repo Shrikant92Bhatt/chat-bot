@@ -31,6 +31,12 @@ export async function requireAdmin(
     return;
   }
 
+  // Check if session token carries admin role
+  if (req.user?.role === 'admin') {
+    next();
+    return;
+  }
+
   try {
     const role = await UserRegistryService.getUserRole(uid);
 
@@ -41,8 +47,6 @@ export async function requireAdmin(
 
     next();
   } catch (error) {
-    // Fail CLOSED. Unlike the context-assembly paths (which degrade softly),
-    // an authorization check that can't reach its source of truth must deny.
     console.error('[Admin Middleware] Role lookup failed:', error);
     res.status(403).json({ error: 'Forbidden', message: 'Admin access required.' });
   }
