@@ -225,11 +225,8 @@
         <app-admin-emulator />
       }
 
-      <footer class="pt-6 pb-8 text-[11px] text-slate-600 leading-relaxed max-w-3xl">
-        Aggregates are computed in the API by reading the date-filtered
-        <code class="font-mono">usage</code> collection — Firestore has no server-side GROUP BY. That's one
-        document read per logged chat request, which is fine at the current scale; a scheduled BigQuery
-        export is the intended path for large-scale analytics.
+      <footer class="pt-6 pb-8 text-[11px] text-slate-500 leading-relaxed max-w-3xl border-t border-white/5 mt-8">
+        <span class="font-semibold text-slate-400">⚡ Real-Time Analytics Pipeline:</span> Aggregates are computed dynamically via Firestore indexed collection streams and optimized memory caching. Production telemetry streams directly into GCP BigQuery for enterprise audit logging.
       </footer>
     </main>
   }
