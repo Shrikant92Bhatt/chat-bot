@@ -16,9 +16,8 @@
         <h2 class="text-sm font-semibold text-slate-100">Operational limits</h2>
         <p class="text-xs text-slate-500 mt-0.5 max-w-xl">
           Rate limits and upload caps, editable without a redeploy. Changes take effect for new requests within
-          about a minute (server-side cache). Per-model daily caps for signed-in users live on the
-          <span class="text-slate-400">Models</span> tab instead - hitting one never blocks a reply, it falls
-          back to a cheaper model.
+          about a minute (server-side cache). Signed-in daily total is a hard stop (429). Per-model caps on
+          the <span class="text-slate-400">Models</span> tab still fall back to a cheaper model instead of blocking.
         </p>
       </div>
       <button
@@ -64,6 +63,22 @@
         </div>
 
         <div>
+          <label for="authDailyMessageLimit" class="block text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">
+            Signed-in messages / window
+          </label>
+          <input
+            id="authDailyMessageLimit"
+            type="number"
+            min="1"
+            max="500"
+            [ngModel]="f.authDailyMessageLimit"
+            (ngModelChange)="updateField('authDailyMessageLimit', $event)"
+            class="w-full px-3 py-2 rounded-lg bg-black/30 border border-white/10 text-sm text-slate-100 focus:outline-none focus:border-accentCyan/50"
+          />
+          <p class="text-[11px] text-slate-500 mt-1">Hard cap per signed-in user across every model. Returns 429 when hit.</p>
+        </div>
+
+        <div>
           <label for="rateLimitWindowHours" class="block text-[11px] font-medium text-slate-400 uppercase tracking-wider mb-1.5">
             Rate-limit window (hours)
           </label>
@@ -76,7 +91,7 @@
             (ngModelChange)="updateField('rateLimitWindowHours', $event)"
             class="w-full px-3 py-2 rounded-lg bg-black/30 border border-white/10 text-sm text-slate-100 focus:outline-none focus:border-accentCyan/50"
           />
-          <p class="text-[11px] text-slate-500 mt-1">How long both caps above take to reset. 24 = daily.</p>
+          <p class="text-[11px] text-slate-500 mt-1">How long the trial, signed-in daily, and per-model caps reset. 24 = daily.</p>
         </div>
 
         <div>
@@ -172,7 +187,7 @@
       </div>
 
       <div class="space-y-2.5 max-h-96 overflow-y-auto pr-1">
-        @for (entry of usageEntries(); track entry.key) {
+        @for (entry of usageEntries(); track entry.kind + entry.key + (entry.modelId || '') ) {
           <div class="flex items-center gap-3">
             <span
               class="shrink-0 w-10 text-center text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded-full"

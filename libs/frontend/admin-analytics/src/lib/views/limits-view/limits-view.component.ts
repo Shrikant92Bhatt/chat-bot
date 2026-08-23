@@ -8,6 +8,7 @@ import { RateLimitUsageEntry, SystemLimitsDto } from '@chat-monorepo/shared';
  *  UI, converted back to bytes only when saving. */
 interface LimitsFormState {
   anonTrialMessageLimit: number;
+  authDailyMessageLimit: number;
   rateLimitWindowHours: number;
   documentUploadMaxMb: number;
   attachmentMaxMb: number;
@@ -17,6 +18,7 @@ interface LimitsFormState {
 function toFormState(limits: SystemLimitsDto): LimitsFormState {
   return {
     anonTrialMessageLimit: limits.anonTrialMessageLimit,
+    authDailyMessageLimit: limits.authDailyMessageLimit,
     rateLimitWindowHours: limits.rateLimitWindowHours,
     documentUploadMaxMb: Math.round(limits.documentUploadMaxBytes / (1024 * 1024)),
     attachmentMaxMb: Math.round(limits.attachmentMaxBytes / (1024 * 1024)),
@@ -28,10 +30,9 @@ function toFormState(limits: SystemLimitsDto): LimitsFormState {
  * Admin-editable operational limits - the rate-limit and upload-size/count
  * constants that used to be hardcoded (or env-only) across anon-usage.service.ts
  * and chat.routes.ts. Same shape as ModelsViewComponent: load, edit locally
- * (isDirty gate), save on demand. There is no flat per-user daily message
- * cap here any more - cost control for signed-in users is per-model (see
- * ModelsViewComponent's dailyLimitPerUser field) with a graceful fallback
- * instead of a hard block, so it lives there instead of as a number here.
+ * (isDirty gate), save on demand. authDailyMessageLimit is the hard
+ * signed-in ceiling (429). Per-model dailyLimitPerUser on the Models tab
+ * still falls back to a cheaper model instead of blocking.
  * The second half of this view is read-only: a live snapshot of how much
  * of today's quota every active IP/user-model pair has used, so an admin
  * can see whether a limit is actually biting before changing it.
@@ -111,6 +112,7 @@ export class LimitsViewComponent implements OnInit {
     try {
       const res = await this.api.saveLimits({
         anonTrialMessageLimit: current.anonTrialMessageLimit,
+        authDailyMessageLimit: current.authDailyMessageLimit,
         rateLimitWindowHours: current.rateLimitWindowHours,
         documentUploadMaxBytes: current.documentUploadMaxMb * 1024 * 1024,
         attachmentMaxBytes: current.attachmentMaxMb * 1024 * 1024,
@@ -130,6 +132,9 @@ export class LimitsViewComponent implements OnInit {
     // Backend already returns just the uid/ip (see anon-usage.service.ts
     // listUsageSnapshot) - append the model for 'auth' entries, since each
     // one is now a per-model count, not a single per-user total.
+    if (entry.kind === 'auth' && entry.modelId === 'all-models') {
+      return `${entry.key} · daily total`;
+    }
     return entry.kind === 'auth' && entry.modelId ? `${entry.key} · ${entry.modelId}` : entry.key;
   }
 

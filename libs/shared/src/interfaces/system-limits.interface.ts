@@ -6,16 +6,15 @@
  * system-limits.service.ts) with an in-memory TTL cache, the same pattern
  * ModelConfigService already established for dynamic model config.
  *
- * There is deliberately no flat per-user daily message cap here any more -
- * that used to block a signed-in user's every model equally and surface as
- * a bare "429" regardless of which (possibly free) model they were using.
- * Cost control is now per-model (SelectableModel.dailyLimitPerUser, see
- * chat.interface.ts) with a graceful fallback instead of a hard block - see
- * orchestration/graph.ts.
+ * Per-model caps (SelectableModel.dailyLimitPerUser) still fall back to a
+ * cheaper model instead of 429ing. authDailyMessageLimit is the hard ceiling
+ * across every model so uncapped Flash cannot run unbounded.
  */
 export interface SystemLimitsDto {
   /** Free messages an unauthenticated visitor gets (per IP) before sign-in is required. */
   anonTrialMessageLimit: number;
+  /** Hard daily (window) cap for a signed-in user across all models. Hitting it returns 429. */
+  authDailyMessageLimit: number;
   /** Length of the rolling rate-limit window, in hours - shared by the anon trial above and every model's dailyLimitPerUser. */
   rateLimitWindowHours: number;
   /** Max size (bytes) for a single knowledge-base document upload (.txt/.md/.csv/.json/.pdf). */
