@@ -10,7 +10,7 @@ test.describe('Deep Subsystem & Emulator Interactive E2E Suite', () => {
           email: 'admin@example.com',
           displayName: 'Test Admin',
           photoURL: '',
-          idToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOiJhZG1pbi10ZXN0LXVpZCIsImVtYWlsIjoiYWRtaW5AZXhhbXBsZS5jb20iLCJuYW1lIjoiVGVzdCBBZG1pbiIsInJvbGUiOiJhZG1pbiIsImV4cCI6OTk5OTk5OTk5OX0.mockSignature',
+          idToken: 'mock_e2e_session_token',
           role: 'admin',
         })
       );
