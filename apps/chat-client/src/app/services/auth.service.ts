@@ -1,6 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 import { UserSession } from '@chat-monorepo/shared';
 import { getApiBaseUrl } from '../core/runtime-config';
+import { UserFriendlyError, formatUserFriendlyError } from '../core/error-catalog';
 
 declare const google: any;
 
@@ -14,10 +15,8 @@ export class AuthService {
   // user's Google ID token has expired (detected on load or on a 401 from the API).
   public sessionExpired = signal<boolean>(false);
 
-  // User-visible message for a failed sign-in attempt (popup blocked, backend
-  // unreachable, token rejected, etc). Previously these failures were only
-  // console.error'd, so a broken login looked like nothing happened at all.
-  public loginError = signal<string | null>(null);
+  // User-visible user-friendly error object for sign-in failures
+  public loginError = signal<UserFriendlyError | null>(null);
 
   // Reads configured Google Client ID from backend .env or localStorage
   public googleClientId = signal<string>(
@@ -98,9 +97,10 @@ export class AuthService {
       currentClientId = this.googleClientId().trim();
     }
     if (!currentClientId) {
-      const message = 'Could not reach the sign-in service. Check your connection and try again.';
       console.error('[Google Auth] No Google Client ID available. Ensure GOOGLE_CLIENT_ID is set in .env.');
-      this.loginError.set(message);
+      this.loginError.set(
+        formatUserFriendlyError(500, 'Authentication configuration is missing. Please contact system administrator.')
+      );
       return;
     }
 
@@ -122,9 +122,10 @@ export class AuthService {
         this.triggerOAuth2TokenClient(currentClientId);
       }
     } else {
-      const message = 'Sign-in is still loading. Please try again in a moment.';
       console.error('[Google Auth] Google Identity Services script not loaded');
-      this.loginError.set(message);
+      this.loginError.set(
+        formatUserFriendlyError(503, 'Google Identity Services library is still loading. Please try again.')
+      );
     }
   }
 
@@ -138,20 +139,24 @@ export class AuthService {
             if (tokenResponse && tokenResponse.access_token) {
               this.exchangeGoogleTokenForSession(tokenResponse.access_token);
             } else {
-              this.loginError.set('Google sign-in did not return a token. Please try again.');
+              this.loginError.set(
+                formatUserFriendlyError(401, 'Google sign-in did not return a valid authentication token.')
+              );
             }
           },
           error_callback: (err: any) => {
             console.error('[Google Auth] OAuth2 popup failed:', err);
             this.loginError.set(
-              'The Google sign-in popup was blocked or closed. Please allow popups for this site and try again.'
+              formatUserFriendlyError(400, 'The Google sign-in popup was blocked or closed before completion.')
             );
           },
         });
         client.requestAccessToken();
       } catch (e) {
         console.error('[Google Auth] OAuth2 Token client failed:', e);
-        this.loginError.set('Google sign-in failed to start. Please try again.');
+        this.loginError.set(
+          formatUserFriendlyError(500, 'Google sign-in client failed to start. Please refresh and try again.')
+        );
       }
     }
   }
@@ -178,11 +183,7 @@ export class AuthService {
       });
       if (!res.ok) {
         console.error('[Google Auth] Failed to exchange Google token for an app session:', res.status);
-        this.loginError.set(
-          res.status === 403
-            ? 'Sign-in was rejected by the server. Please try again or contact support.'
-            : `Sign-in failed (server returned ${res.status}). Please try again.`
-        );
+        this.loginError.set(formatUserFriendlyError(res.status));
         return;
       }
       const data = await res.json();
@@ -197,7 +198,9 @@ export class AuthService {
       this.setUserSession(session);
     } catch (e) {
       console.error('[Google Auth] Session exchange failed:', e);
-      this.loginError.set('Could not reach the server to complete sign-in. Please check your connection and try again.');
+      this.loginError.set(
+        formatUserFriendlyError(503, 'Could not reach the authentication service. Please check your network connection.')
+      );
     }
   }
 
