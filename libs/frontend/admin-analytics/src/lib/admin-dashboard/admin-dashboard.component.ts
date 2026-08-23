@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, inject, signal, computed, output, OnInit } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject, signal, computed, output, input, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import {
   AdminApiService,
@@ -69,14 +69,14 @@ export class AdminDashboardComponent implements OnInit {
    *  `close` as colliding with the native DOM `close` event. */
   public readonly closed = output<void>();
 
+  /** Optional initial view passed from host app (e.g. 'emulator' or 'overview'). */
+  public readonly initialView = input<AdminView>('overview');
+
   public readonly accessDenied = this.api.accessDenied;
 
   public readonly windowPresets = WINDOW_PRESETS;
   public readonly windowDays = signal<number>(30);
   public readonly activeView = signal<AdminView>('overview');
-  // 'limits' loads its own data independently of everything else this shell
-  // owns (see LimitsViewComponent.ngOnInit) - it doesn't scope to the
-  // header's date-range filter and isn't part of loadAll()'s Promise.allSettled.
 
   /** First load - shows the full-page loader. */
   public readonly isInitialLoading = signal(true);
@@ -103,11 +103,17 @@ export class AdminDashboardComponent implements OnInit {
   );
 
   ngOnInit(): void {
+    if (this.initialView()) {
+      this.activeView.set(this.initialView());
+    }
     void this.loadAll();
   }
 
   public setView(view: AdminView): void {
     this.activeView.set(view);
+    if (window.location.pathname.startsWith('/admin')) {
+      window.history.replaceState(null, '', `/admin/${view}`);
+    }
   }
 
   public async setWindow(days: number): Promise<void> {
@@ -133,36 +139,36 @@ export class AdminDashboardComponent implements OnInit {
       this.api.getUsers(),
     ]);
 
-    if (summary.status === 'fulfilled') {
-      this.summary.set(summary.value.summary);
-      this.daily.set(summary.value.daily);
-      this.totalUsers.set(summary.value.totalUsers);
+    if (summary.status === 'fulfilled' && summary.value) {
+      this.summary.set(summary.value.summary ?? null);
+      this.daily.set(summary.value.daily ?? []);
+      this.totalUsers.set(summary.value.totalUsers ?? 0);
     } else {
-      this.recordPanelError('summary', summary.reason);
+      this.recordPanelError('summary', summary.status === 'rejected' ? summary.reason : new Error('No summary data returned.'));
     }
 
-    if (byUser.status === 'fulfilled') {
-      this.usageByUser.set(byUser.value.users);
+    if (byUser.status === 'fulfilled' && byUser.value) {
+      this.usageByUser.set(byUser.value.users ?? []);
     } else {
-      this.recordPanelError('byUser', byUser.reason);
+      this.recordPanelError('byUser', byUser.status === 'rejected' ? byUser.reason : new Error('No user usage data returned.'));
     }
 
-    if (byModel.status === 'fulfilled') {
-      this.usageByModel.set(byModel.value.models);
+    if (byModel.status === 'fulfilled' && byModel.value) {
+      this.usageByModel.set(byModel.value.models ?? []);
     } else {
-      this.recordPanelError('byModel', byModel.reason);
+      this.recordPanelError('byModel', byModel.status === 'rejected' ? byModel.reason : new Error('No model usage data returned.'));
     }
 
-    if (storage.status === 'fulfilled') {
+    if (storage.status === 'fulfilled' && storage.value) {
       this.storage.set(storage.value);
     } else {
-      this.recordPanelError('storage', storage.reason);
+      this.recordPanelError('storage', storage.status === 'rejected' ? storage.reason : new Error('No storage data returned.'));
     }
 
-    if (users.status === 'fulfilled') {
-      this.registeredUsers.set(users.value.users);
+    if (users.status === 'fulfilled' && users.value) {
+      this.registeredUsers.set(users.value.users ?? []);
     } else {
-      this.recordPanelError('users', users.reason);
+      this.recordPanelError('users', users.status === 'rejected' ? users.reason : new Error('No registered users data returned.'));
     }
 
     this.isInitialLoading.set(false);

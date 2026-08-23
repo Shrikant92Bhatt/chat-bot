@@ -1,6 +1,6 @@
 {
   "name": "@chat-monorepo/source",
-  "version": "1.11.0",
+  "version": "1.12.0",
   "license": "MIT",
   "private": true,
   "scripts": {
@@ -64,11 +64,13 @@
     "@nx/express": "23.1.1",
     "@nx/js": "23.1.1",
     "@nx/node": "23.1.1",
+    "@nx/playwright": "^23.1.1",
     "@nx/vite": "23.1.1",
     "@nx/vitest": "23.1.1",
     "@nx/web": "23.1.1",
     "@nx/workspace": "23.1.1",
     "@oxc-project/runtime": "^0.115.0",
+    "@playwright/test": "^1.62.1",
     "@schematics/angular": "22.0.9",
     "@swc/helpers": "~0.5.18",
     "@types/cors": "^2.8.17",
