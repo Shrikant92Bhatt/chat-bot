@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, inject, signal, computed, output, input, OnInit } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject, signal, computed, output, input, OnInit, effect, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import {
   AdminApiService,
@@ -57,12 +57,29 @@ export type AdminView = 'overview' | 'users' | 'models' | 'limits' | 'emulator';
 @Component({
   selector: 'lib-admin-dashboard',
   standalone: true,
-  imports: [CommonModule, OverviewViewComponent, UsersViewComponent, ModelsViewComponent, LimitsViewComponent],
+  imports: [
+    CommonModule,
+    OverviewViewComponent,
+    UsersViewComponent,
+    ModelsViewComponent,
+    LimitsViewComponent,
+    AdminEmulatorComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './admin-dashboard.component.html',
 })
 export class AdminDashboardComponent implements OnInit {
   private readonly api = inject(AdminApiService);
+  private readonly cdr = inject(ChangeDetectorRef);
+
+  constructor() {
+    effect(() => {
+      const view = this.initialView();
+      if (view) {
+        this.activeView.set(view);
+      }
+    });
+  }
 
   /** Emitted when the operator wants to leave the admin console. Named
    *  `closed` rather than `close` - @angular-eslint/no-output-native flags
@@ -105,6 +122,9 @@ export class AdminDashboardComponent implements OnInit {
   ngOnInit(): void {
     if (this.initialView()) {
       this.activeView.set(this.initialView());
+      if (this.initialView() === 'emulator') {
+        this.isInitialLoading.set(false);
+      }
     }
     void this.loadAll();
   }
@@ -173,6 +193,7 @@ export class AdminDashboardComponent implements OnInit {
 
     this.isInitialLoading.set(false);
     this.isRefreshing.set(false);
+    this.cdr.markForCheck();
   }
 
   private recordPanelError(panel: string, reason: unknown): void {

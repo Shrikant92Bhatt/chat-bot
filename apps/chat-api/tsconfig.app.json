@@ -1,9 +1,15 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "ignoreDeprecations": "6.0",
     "outDir": "../../dist/apps/chat-api",
     "rootDir": "../..",
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "@chat-monorepo/shared": ["../../libs/shared/src/index.ts"]
+    }
   },
   "exclude": ["**/*.spec.ts"],
   "include": [

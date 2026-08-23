@@ -1,11 +1,36 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Deep Subsystem & Emulator Interactive E2E Suite', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        'NEXUS_AUTH_SESSION',
+        JSON.stringify({
+          uid: 'admin-test-uid',
+          email: 'admin@example.com',
+          displayName: 'Test Admin',
+          photoURL: '',
+          idToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOiJhZG1pbi10ZXN0LXVpZCIsImVtYWlsIjoiYWRtaW5AZXhhbXBsZS5jb20iLCJuYW1lIjoiVGVzdCBBZG1pbiIsInJvbGUiOiJhZG1pbiIsImV4cCI6OTk5OTk5OTk5OX0.mockSignature',
+          role: 'admin',
+        })
+      );
+    });
+  });
+
   test('should open emulator tab, type query into test bench, and verify node state transition', async ({ page }) => {
     await page.goto('/admin/emulator');
 
+    const adminBtn = page.locator('button[title="Admin console"]');
+    if (await adminBtn.isVisible()) {
+      await adminBtn.click();
+    }
+
+    const emulatorTab = page.locator('button', { hasText: 'Emulator' });
+    await expect(emulatorTab).toBeVisible({ timeout: 15000 });
+    await emulatorTab.click();
+
     // 1. Check title & layout presence
-    await expect(page.locator('h1')).toContainText('Subsystem Orchestration Emulator');
+    await expect(page.locator('h1').filter({ hasText: 'Subsystem Orchestration Emulator' })).toBeVisible({ timeout: 15000 });
 
     // 2. Locate Test Bench Input and submit test query
     const input = page.locator('input[placeholder*="Type any test query"]');

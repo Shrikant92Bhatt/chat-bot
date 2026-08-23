@@ -122,21 +122,23 @@ export class AdminApiService {
 
     const res = await fetch(`${this.baseUrl}/api/v1/admin${path}`, { ...init, headers });
 
+    let body: any = null;
+    try {
+      body = await res.json();
+    } catch {
+      /* non-JSON error body */
+    }
+
     if (res.status === 401) {
-      this.auth.notifySessionExpired();
-      throw new AdminApiError(401, 'Unauthorized', 'Your session has expired. Please sign in again.');
+      if (body?.error === 'TokenExpired') {
+        this.auth.notifySessionExpired();
+      }
+      throw new AdminApiError(401, body?.error || 'Unauthorized', body?.message || 'Your session has expired. Please sign in again.');
     }
 
     if (res.status === 403) {
       this.accessDenied.set(true);
       throw new AdminApiError(403, 'Forbidden', 'Admin access required.');
-    }
-
-    let body: any = null;
-    try {
-      body = await res.json();
-    } catch {
-      /* non-JSON error body - fall through to the generic message below */
     }
 
     if (!res.ok) {
