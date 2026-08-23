@@ -1,7 +1,7 @@
 import { Component, HostListener, ChangeDetectionStrategy, OnDestroy, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { AIModelType } from '@chat-monorepo/shared';
+import { AIModelType, SelectableModel } from '@chat-monorepo/shared';
 import { ChatService } from '../../services/chat.service';
 import { ProjectService } from '../../services/project.service';
 
@@ -42,6 +42,8 @@ export class MessageInputComponent implements OnDestroy {
   private dictationBaseText = '';
 
   public availableModels = computed(() => this.chatService.availableModels());
+  /** availableModels() grouped by provider, in first-seen order, for the dropdown. */
+  public groupedModels = computed(() => this.groupModelsByProvider(this.availableModels()));
 
   /** Name of the project this conversation is scoped to, or null. */
   public activeProjectName = computed(() =>
@@ -181,6 +183,45 @@ export class MessageInputComponent implements OnDestroy {
   selectModel(id: string): void {
     this.chatService.setModel(id as AIModelType);
     this.isModelDropdownOpen = false;
+  }
+
+  private groupModelsByProvider(models: SelectableModel[]): Array<{ provider: string; models: SelectableModel[] }> {
+    const order: string[] = [];
+    const byProvider = new Map<string, SelectableModel[]>();
+    for (const m of models) {
+      const provider = m.provider?.trim() || 'Other';
+      if (!byProvider.has(provider)) {
+        byProvider.set(provider, []);
+        order.push(provider);
+      }
+      byProvider.get(provider)!.push(m);
+    }
+    return order.map((provider) => ({ provider, models: byProvider.get(provider)! }));
+  }
+
+  /**
+   * Coarse token-cost tier for the dropdown badge, from completion pricing
+   * (USD/1K tokens - the dominant cost driver, since replies run longer than
+   * prompts). null when a model has no pricing data (badge is omitted).
+   */
+  tokenTier(model: SelectableModel): 'low' | 'medium' | 'high' | null {
+    const cost = model.pricing?.completion ?? model.pricing?.prompt;
+    if (cost == null) return null;
+    if (cost <= 0.001) return 'low';
+    if (cost <= 0.006) return 'medium';
+    return 'high';
+  }
+
+  tokenTierLabel(tier: 'low' | 'medium' | 'high'): string {
+    return tier === 'low' ? 'Low' : tier === 'medium' ? 'Med' : 'High';
+  }
+
+  tokenTierClass(tier: 'low' | 'medium' | 'high'): string {
+    return tier === 'low'
+      ? 'bg-emerald-500/15 text-emerald-400'
+      : tier === 'medium'
+      ? 'bg-amber-500/15 text-amber-400'
+      : 'bg-accentRose/15 text-accentRose';
   }
 
   /** "resets in Xh"/"resets in Xm" for a disabled model's tooltip. */

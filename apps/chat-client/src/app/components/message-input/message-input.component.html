@@ -52,20 +52,31 @@
           </button>
           <div
             *ngIf="isModelDropdownOpen"
-            class="absolute bottom-full mb-1.5 right-0 w-48 bg-slate-900 border border-white/10 rounded-xl shadow-xl overflow-hidden z-50 py-1"
+            class="absolute bottom-full mb-1.5 right-0 w-64 max-h-80 overflow-y-auto bg-slate-900 border border-white/10 rounded-xl shadow-xl z-50 py-1"
           >
-            <button
-              *ngFor="let m of availableModels()"
-              type="button"
-              (click)="selectModel(m.id)"
-              [disabled]="m.usage?.disabled"
-              [title]="m.usage?.disabled ? ('Daily limit reached — ' + modelResetLabel(m.usage!.resetAt)) : ''"
-              class="w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between gap-2"
-              [ngClass]="m.usage?.disabled ? 'text-slate-600 cursor-not-allowed' : 'text-slate-300 hover:bg-white/10 hover:text-white'"
-            >
-              <span>{{ m.name }}</span>
-              <span *ngIf="m.usage?.disabled" class="text-[10px] text-slate-600 shrink-0">limit reached</span>
-            </button>
+            <div *ngFor="let group of groupedModels()">
+              <div class="px-4 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">{{ group.provider }}</div>
+              <button
+                *ngFor="let m of group.models"
+                type="button"
+                (click)="selectModel(m.id)"
+                [disabled]="m.usage?.disabled"
+                [title]="m.usage?.disabled ? ('Daily limit reached — ' + modelResetLabel(m.usage!.resetAt)) : ''"
+                class="w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between gap-2"
+                [ngClass]="m.usage?.disabled ? 'text-slate-600 cursor-not-allowed' : 'text-slate-300 hover:bg-white/10 hover:text-white'"
+              >
+                <span class="flex items-center gap-1.5 min-w-0">
+                  <span class="truncate">{{ m.name }}</span>
+                  <span
+                    *ngIf="tokenTier(m) as tier"
+                    [title]="tier + ' relative token cost'"
+                    class="shrink-0 px-1.5 py-0.5 rounded-full text-[9px] font-semibold leading-none"
+                    [ngClass]="tokenTierClass(tier)"
+                  >{{ tokenTierLabel(tier) }}</span>
+                </span>
+                <span *ngIf="m.usage?.disabled" class="text-[10px] text-slate-600 shrink-0">limit reached</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
