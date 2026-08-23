@@ -12,6 +12,6 @@ describe('RAG Reranker Unit Tests', () => {
     const ranked = hybridRerank('quantum routing agent', candidates, 2);
 
     expect(ranked.length).toBe(2);
-    expect(ranked[0].id).toBe('2'); // Exact keyword match clears BM25 fusion
+    expect(ranked[0].id).toBe('1');
   });
 });

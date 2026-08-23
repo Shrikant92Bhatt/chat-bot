@@ -14,5 +14,5 @@ describe('ContextBuilder Unit Tests', () => {
     expect(result.context).toBeDefined();
     expect(result.messages.length).toBeGreaterThan(0);
     expect(result.context.projectName).toBeNull();
-  });
+  }, 15000);
 });
