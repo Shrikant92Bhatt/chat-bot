@@ -1,9 +1,18 @@
-import { Component, HostListener, ChangeDetectionStrategy, computed } from '@angular/core';
+import { Component, HostListener, ChangeDetectionStrategy, OnDestroy, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AIModelType } from '@chat-monorepo/shared';
 import { ChatService } from '../../services/chat.service';
 import { ProjectService } from '../../services/project.service';
+
+// The Web Speech API has no first-party TS lib entry (like `google` in
+// auth.service.ts, this is a browser global with no bundled types) - Chrome/
+// Edge/Safari expose it as `webkitSpeechRecognition`, only very recent
+// browsers as the unprefixed `SpeechRecognition`. Firefox has neither, so
+// dictation-related methods below all check speechSupported first.
+function getSpeechRecognitionCtor(): any {
+  return (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+}
 
 @Component({
   selector: 'app-message-input',
@@ -15,9 +24,22 @@ import { ProjectService } from '../../services/project.service';
   // flex-col child in <main> and doesn't overlap the chat-window on mobile.
   host: { style: 'display:block; flex-shrink:0' },
 })
-export class MessageInputComponent {
+export class MessageInputComponent implements OnDestroy {
   public messageText = '';
   public isModelDropdownOpen = false;
+
+  // Dictation (speech-to-text). speechSupported is resolved once at
+  // construction - the API availability doesn't change during a session, so
+  // there's no need to re-check it on every template render.
+  public readonly speechSupported: boolean = !!getSpeechRecognitionCtor();
+  public isListening = false;
+  private recognition: any = null;
+  // messageText as it was the moment dictation started - each recognition
+  // result event replaces everything typed/spoken *during this dictation
+  // session* by re-deriving the full transcript from event.results (the
+  // Web Speech API's own running total for the session), so this baseline
+  // is what anchors that onto whatever was already in the box.
+  private dictationBaseText = '';
 
   public availableModels = computed(() => this.chatService.availableModels());
 
@@ -43,6 +65,7 @@ export class MessageInputComponent {
     const hasText = !!this.messageText.trim();
     const hasAttachments = this.chatService.stagedAttachments().length > 0;
     if ((!hasText && !hasAttachments) || this.chatService.isStreaming()) return;
+    this.stopDictation();
     const text = this.messageText;
     this.messageText = '';
 
@@ -82,6 +105,71 @@ export class MessageInputComponent {
 
     // Reset so selecting the same file(s) again still fires a change event.
     input.value = '';
+  }
+
+  /**
+   * Toggles browser speech-to-text dictation into the message textarea.
+   * continuous+interimResults so the API keeps listening across pauses and
+   * streams partial results immediately; onresult re-derives the FULL
+   * transcript-so-far from event.results (the API's own running total for
+   * this session) on every event, rather than trying to append individual
+   * results, since interim results get revised in place as recognition
+   * improves its guess - diffing them would double up or drop words.
+   */
+  toggleDictation(): void {
+    if (this.isListening) {
+      this.stopDictation();
+    } else {
+      this.startDictation();
+    }
+  }
+
+  private startDictation(): void {
+    if (!this.speechSupported || this.isListening) return;
+
+    const RecognitionCtor = getSpeechRecognitionCtor();
+    const recognition = new RecognitionCtor();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = navigator.language || 'en-US';
+
+    recognition.onresult = (event: any) => {
+      let transcript = '';
+      for (let i = 0; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
+      }
+      const needsSpace = !!this.dictationBaseText && !this.dictationBaseText.endsWith(' ') && !!transcript;
+      this.messageText = this.dictationBaseText + (needsSpace ? ' ' : '') + transcript;
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error('[MessageInput] Speech recognition error:', event.error);
+      this.isListening = false;
+    };
+
+    recognition.onend = () => {
+      // Fires both when stop() is called and when the browser ends the
+      // session on its own (e.g. extended silence) - either way, the mic
+      // button shouldn't keep showing "listening" with nothing behind it.
+      this.isListening = false;
+    };
+
+    this.dictationBaseText = this.messageText;
+    this.recognition = recognition;
+    this.isListening = true;
+    recognition.start();
+  }
+
+  private stopDictation(): void {
+    if (this.recognition) {
+      this.recognition.stop();
+      this.recognition = null;
+    }
+    this.isListening = false;
+  }
+
+  ngOnDestroy(): void {
+    this.stopDictation();
   }
 
   getModelDisplayName(): string {
