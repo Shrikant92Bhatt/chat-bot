@@ -9,7 +9,7 @@ describe('MemoryExtractor Unit Tests', () => {
 
     const candidate2 = looksMemorable('Remember that I prefer concise code answers');
     expect(candidate2.memorable).toBe(true);
-    expect(candidate2.kind).toBe('instruction');
+    expect(candidate2.kind).toBe('preference');
   });
 
   it('should reject generic questions or short greetings from memory extraction', () => {
