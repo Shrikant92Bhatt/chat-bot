@@ -52,6 +52,7 @@ app.get('/health', (req, res) => {
 // Register Routes
 app.use('/api/chat', chatRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/projects', projectRoutes);
 // Admin analytics API. Every route inside is behind authenticateToken +
 // requireAdmin (router-level, see routes/admin.routes.ts).

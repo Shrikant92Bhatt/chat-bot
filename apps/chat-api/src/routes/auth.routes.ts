@@ -49,4 +49,16 @@ router.post('/session', async (req, res: Response) => {
   }
 });
 
+/**
+ * GET /api/auth/session
+ * Informational endpoint returning API health status for session service.
+ */
+router.get('/session', (_req, res: Response) => {
+  res.json({
+    service: 'NexusAI Auth Session API',
+    status: 'active',
+    usage: 'POST with Authorization: Bearer <Google_Token>',
+  });
+});
+
 export default router;
