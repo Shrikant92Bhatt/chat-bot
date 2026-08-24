@@ -60,132 +60,95 @@ export interface StageState {
         </div>
       </div>
 
-      <!-- Interactive System Architecture Flow Canvas (With Animated Directional Arrows) -->
-      <div class="mb-8 p-6 rounded-2xl backdrop-blur-xl bg-slate-900/60 border border-white/10 shadow-2xl">
-        <div class="flex items-center justify-between mb-4 border-b border-white/10 pb-3">
-          <div>
-            <h3 class="text-sm font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
-              <span>🗺️ Architectural Node Map & Stream Flow</span>
-            </h3>
-            <p class="text-xs text-slate-400 mt-0.5">Click any subsystem node to inspect architectural role, data flow, and live payloads.</p>
-          </div>
-          <div *ngIf="isRunning()" class="flex items-center gap-2 text-xs font-mono text-cyan-400 bg-cyan-950/60 px-3 py-1.5 rounded-full border border-cyan-800 animate-pulse">
-            <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
-            <span>DATA PACKETS TRANSMITTING</span>
-          </div>
-        </div>
+      <!-- All-in-One Expanded Subsystem Pipeline (Input & Output Visible Side-by-Side for Every Stage) -->
+      <div class="space-y-6">
+        <div
+          *ngFor="let stage of stages(); let i = index"
+          [ngClass]="{
+            'border-emerald-500/50 bg-slate-900/90 shadow-emerald-500/10': stage.status === 'completed',
+            'border-amber-400 bg-amber-950/20 ring-2 ring-amber-400/50 animate-pulse shadow-xl shadow-amber-500/20': stage.status === 'running',
+            'border-slate-800 bg-slate-900/50 opacity-80': stage.status === 'idle' || stage.status === 'skipped'
+          }"
+          class="p-6 rounded-2xl border backdrop-blur-xl transition-all duration-300 relative shadow-2xl overflow-hidden"
+        >
+          <!-- Top Accent Line -->
+          <div *ngIf="stage.status === 'running'" class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 animate-pulse"></div>
+          <div *ngIf="stage.status === 'completed'" class="absolute top-0 left-0 right-0 h-1 bg-emerald-400"></div>
 
-        <!-- Node Chain with Arrows -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 pt-2">
-          <div
-            *ngFor="let stage of stages(); let i = index"
-            (click)="selectedStage.set(stage)"
-            [ngClass]="{
-              'border-cyan-400 bg-cyan-950/40 ring-2 ring-cyan-400/60 scale-[1.03] shadow-xl shadow-cyan-500/20 z-10': selectedStage()?.id === stage.id,
-              'border-emerald-500/60 bg-emerald-950/20 shadow-emerald-500/10': stage.status === 'completed',
-              'border-amber-400 bg-amber-500/20 animate-pulse ring-2 ring-amber-400/50 scale-[1.04] z-20 shadow-xl shadow-amber-500/30': stage.status === 'running',
-              'border-slate-800 bg-slate-900/40 opacity-70': stage.status === 'idle' || stage.status === 'skipped'
-            }"
-            class="p-4 rounded-xl border backdrop-blur-md cursor-pointer transition-all duration-300 relative group overflow-hidden flex flex-col justify-between"
-          >
-            <!-- Top Progress Line -->
-            <div *ngIf="stage.status === 'running'" class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 animate-pulse"></div>
-            <div *ngIf="stage.status === 'completed'" class="absolute top-0 left-0 right-0 h-1 bg-emerald-400"></div>
-
-            <div>
-              <!-- Node Number & Status -->
-              <div class="flex items-center justify-between mb-2">
-                <span class="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest bg-slate-800/80 px-2 py-0.5 rounded border border-white/5">NODE 0{{ i + 1 }}</span>
-                <span
-                  [ngClass]="{
-                    'bg-emerald-500/20 text-emerald-400 border-emerald-500/30': stage.status === 'completed',
-                    'bg-amber-500/20 text-amber-300 border-amber-400 animate-bounce': stage.status === 'running',
-                    'bg-slate-800/60 text-slate-400 border-slate-700': stage.status === 'idle' || stage.status === 'skipped'
-                  }"
-                  class="text-[10px] font-mono px-2 py-0.5 rounded-full border uppercase font-semibold"
-                >
-                  {{ stage.status === 'running' ? '⚡ RUNNING' : stage.status }}
-                </span>
-              </div>
-
-              <!-- Node Title & Subsystem Badge -->
-              <h3 class="text-base font-bold text-white group-hover:text-cyan-300 transition-colors flex items-center gap-1.5 mb-1">
+          <!-- Stage Header Bar -->
+          <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 pb-3 border-b border-white/10">
+            <div class="flex items-center gap-3">
+              <span class="text-xs font-mono font-bold text-cyan-400 bg-cyan-950/80 border border-cyan-800/80 px-2.5 py-1 rounded-lg">STAGE 0{{ i + 1 }}</span>
+              <h2 class="text-lg font-bold text-white flex items-center gap-2">
                 <span>{{ stage.name }}</span>
-              </h3>
-              <p class="text-[11px] font-mono text-cyan-400/90 mb-2">{{ stage.subsystem }}</p>
-
-              <!-- Short Architectural Role -->
-              <p class="text-xs text-slate-300 line-clamp-2 leading-relaxed mb-3">{{ stage.description }}</p>
+                <span class="text-xs font-normal text-slate-400 font-mono">({{ stage.subsystem }})</span>
+              </h2>
             </div>
 
-            <!-- Bottom Flow & Latency -->
-            <div class="pt-3 border-t border-white/5 flex items-center justify-between text-[11px]">
-              <span class="text-slate-400 font-mono">Latency</span>
-              <span class="font-mono text-cyan-300 font-bold bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-800/50">{{ stage.durationMs }}ms</span>
+            <div class="flex items-center gap-3">
+              <span
+                [ngClass]="{
+                  'bg-emerald-500/20 text-emerald-400 border-emerald-500/40': stage.status === 'completed',
+                  'bg-amber-500/20 text-amber-300 border-amber-400 animate-bounce': stage.status === 'running',
+                  'bg-slate-800 text-slate-400 border-slate-700': stage.status === 'idle' || stage.status === 'skipped'
+                }"
+                class="text-xs font-mono px-3 py-1 rounded-full border uppercase font-bold tracking-wide"
+              >
+                {{ stage.status === 'running' ? '⚡ EXECUTING' : stage.status }}
+              </span>
+              <span class="text-xs font-mono text-cyan-300 font-bold bg-slate-950 px-3 py-1 rounded-lg border border-white/10">
+                ⏱️ {{ stage.durationMs }}ms
+              </span>
+            </div>
+          </div>
+
+          <!-- Architectural Explanation & Data Flow -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div class="p-3.5 rounded-xl bg-slate-950/80 border border-cyan-500/20">
+              <h4 class="text-[11px] font-bold uppercase tracking-wider text-cyan-400 mb-1 flex items-center gap-1.5">
+                <span>📘 What Happens Here</span>
+              </h4>
+              <p class="text-xs text-slate-300 leading-relaxed">{{ stage.explanation }}</p>
             </div>
 
-            <!-- Directional Flow Arrow (Right / Down) -->
-            <div *ngIf="i < stages().length - 1" class="hidden md:flex absolute -right-3 top-1/2 -translate-y-1/2 z-30 w-6 h-6 rounded-full bg-slate-900 border border-white/10 items-center justify-center text-slate-400 text-xs shadow-lg">
-              <span [ngClass]="stages()[i].status === 'completed' ? 'text-cyan-400 animate-pulse font-bold' : 'text-slate-600'">➔</span>
+            <div class="p-3.5 rounded-xl bg-slate-950/80 border border-indigo-500/20">
+              <h4 class="text-[11px] font-bold uppercase tracking-wider text-indigo-400 mb-1 flex items-center gap-1.5">
+                <span>🔀 Data Flow Contract</span>
+              </h4>
+              <p class="text-xs text-slate-300 leading-relaxed">{{ stage.dataFlowText }}</p>
             </div>
           </div>
-        </div>
-      </div>
 
-      <!-- Stage Explanation & Data Flow Inspector -->
-      <div *ngIf="selectedStage() as stage" class="p-6 rounded-2xl backdrop-blur-xl bg-slate-900/80 border border-white/10 shadow-2xl">
-        <!-- Stage Header & Title -->
-        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-white/10 pb-4">
-          <div>
-            <div class="flex items-center gap-2 mb-1">
-              <span class="text-xs font-mono px-2.5 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800 uppercase font-bold">{{ stage.subsystem }}</span>
-              <span class="text-xs font-mono text-slate-400">ID: {{ stage.id }}</span>
+          <!-- INPUT vs OUTPUT Side-by-Side Live Data Telemetry -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- INPUT SECTION -->
+            <div class="rounded-xl border border-emerald-500/30 bg-slate-950/90 overflow-hidden shadow-inner">
+              <div class="px-4 py-2 bg-emerald-950/60 border-b border-emerald-500/30 flex items-center justify-between">
+                <span class="text-xs font-bold font-mono text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <span>📥 SECTION INPUT (DATA IN)</span>
+                </span>
+                <span class="text-[10px] font-mono text-emerald-500/70">PAYLOAD JSON</span>
+              </div>
+              <pre class="p-4 text-xs font-mono text-emerald-300 overflow-x-auto max-h-52 font-mono leading-relaxed">{{ (stage.inputPayload ? (stage.inputPayload | json) : '// Awaiting graph trigger...') }}</pre>
             </div>
-            <h2 class="text-xl font-bold text-white flex items-center gap-2">
-              <span>{{ stage.name }}</span>
-              <span class="text-sm font-normal text-slate-400">— Architectural Breakdown</span>
-            </h2>
+
+            <!-- OUTPUT SECTION -->
+            <div class="rounded-xl border border-cyan-500/30 bg-slate-950/90 overflow-hidden shadow-inner">
+              <div class="px-4 py-2 bg-cyan-950/60 border-b border-cyan-500/30 flex items-center justify-between">
+                <span class="text-xs font-bold font-mono text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <span>📤 SECTION OUTPUT (DATA OUT)</span>
+                </span>
+                <span class="text-[10px] font-mono text-cyan-500/70">TELEMETRY RESULT</span>
+              </div>
+              <pre class="p-4 text-xs font-mono text-cyan-300 overflow-x-auto max-h-52 font-mono leading-relaxed">{{ (stage.outputPayload ? (stage.outputPayload | json) : '// Awaiting stage completion...') }}</pre>
+            </div>
           </div>
 
-          <div class="flex items-center gap-3">
-            <span class="text-xs font-mono text-slate-400">Node Latency:</span>
-            <span class="text-sm font-mono text-cyan-300 font-bold bg-slate-950 px-3 py-1 rounded-lg border border-white/10">{{ stage.durationMs }}ms</span>
-          </div>
-        </div>
-
-        <!-- Architectural Explanation Banner -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          <div class="p-4 rounded-xl bg-slate-950/80 border border-cyan-500/30">
-            <h4 class="text-xs font-bold uppercase tracking-wider text-cyan-400 mb-2 flex items-center gap-1.5">
-              <span>📘 How This Subsystem Works</span>
-            </h4>
-            <p class="text-xs text-slate-200 leading-relaxed">{{ stage.explanation }}</p>
-          </div>
-
-          <div class="p-4 rounded-xl bg-slate-950/80 border border-indigo-500/30">
-            <h4 class="text-xs font-bold uppercase tracking-wider text-indigo-400 mb-2 flex items-center gap-1.5">
-              <span>🔀 Data Transformation & Flow</span>
-            </h4>
-            <p class="text-xs text-slate-200 leading-relaxed">{{ stage.dataFlowText }}</p>
-          </div>
-        </div>
-
-        <!-- Raw Payload Inspector Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 flex items-center justify-between">
-              <span>📥 Node Input Payload</span>
-              <span class="text-[10px] font-mono text-slate-500">JSON DATA</span>
-            </h4>
-            <pre class="p-4 rounded-xl bg-slate-950 border border-white/10 text-xs font-mono text-emerald-400 overflow-x-auto max-h-64 shadow-inner">{{ stage.inputPayload | json }}</pre>
-          </div>
-
-          <div>
-            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 flex items-center justify-between">
-              <span>📤 Node Output Telemetry</span>
-              <span class="text-[10px] font-mono text-slate-500">TRANSFORMED STREAM</span>
-            </h4>
-            <pre class="p-4 rounded-xl bg-slate-950 border border-white/10 text-xs font-mono text-cyan-400 overflow-x-auto max-h-64 shadow-inner">{{ stage.outputPayload | json }}</pre>
+          <!-- Directional Arrow Connector to Next Section -->
+          <div *ngIf="i < stages().length - 1" class="flex justify-center my-4">
+            <div class="w-8 h-8 rounded-full bg-slate-900 border border-white/20 flex items-center justify-center text-slate-400 text-sm shadow-lg">
+              <span [ngClass]="stages()[i].status === 'completed' ? 'text-cyan-400 animate-pulse font-bold' : 'text-slate-600'">⬇️</span>
+            </div>
           </div>
         </div>
       </div>
