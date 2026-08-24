@@ -157,6 +157,10 @@ export interface ChatStreamRequest {
   threadId?: string;
   /** When set, project instructions + project-scoped RAG documents are injected into context. */
   projectId?: string | null;
+  /** Opt-in deep research: always plan (skipping the recency heuristic) and
+   *  allow a wider search fan-out. See apps/chat-api/src/orchestration/research.ts.
+   *  Requires mcpEnabled - with tools off there is no search backend to plan for. */
+  deepResearch?: boolean;
 }
 
 /** One row logged per completed chat request - see

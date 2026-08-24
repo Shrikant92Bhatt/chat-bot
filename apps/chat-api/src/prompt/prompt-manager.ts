@@ -55,6 +55,12 @@ export interface AssembledContext {
   ragContext?: string[];
   /** Rolling summary of the conversation turns that were dropped from the window. */
   conversationSummary?: string | null;
+  /**
+   * Evidence gathered by the research node for THIS turn, pre-formatted by
+   * orchestration/research.ts. The most volatile block there is - it is
+   * true as of a few seconds ago and has no bearing on any later turn.
+   */
+  researchFindings?: string | null;
 }
 
 export const EMPTY_CONTEXT: AssembledContext = {};
@@ -67,7 +73,7 @@ export const EMPTY_CONTEXT: AssembledContext = {};
  * standing instructions:
  *   system identity -> UI response contract -> tool policy -> account
  *   identity -> project instructions -> memories -> RAG excerpts ->
- *   conversation summary.
+ *   conversation summary -> this turn's research findings.
  *
  * Returns null when there is nothing at all to say (never happens today,
  * since system:v1 is unconditional, but keeps callers honest).
@@ -115,6 +121,13 @@ export function buildSystemPrompt(context: AssembledContext, options: { mcpEnabl
 
   if (context.conversationSummary && context.conversationSummary.trim()) {
     blocks.push(renderPrompt('conversation_summary:v1', { summary: context.conversationSummary.trim() }));
+  }
+
+  // Last, deliberately: this is the only block that was true seconds ago
+  // rather than for the whole conversation, and it should read as evidence
+  // for this answer rather than as a standing instruction.
+  if (context.researchFindings && context.researchFindings.trim()) {
+    blocks.push(renderPrompt('research_findings:v1', { findings: context.researchFindings.trim() }));
   }
 
   const joined = blocks.filter(Boolean).join('\n\n');

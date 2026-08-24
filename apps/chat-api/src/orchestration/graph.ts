@@ -5,6 +5,7 @@ import { AIMessage, BaseMessage, HumanMessage, SystemMessage } from '@langchain/
 import { ChatAttachment, ChatStreamRequest, AIModelType } from '@chat-monorepo/shared';
 import { AgentState, AgentStateAnnotation } from './state';
 import { agentNode, toolsNode, shouldContinue } from './nodes';
+import { researchNode } from './research';
 import { buildContext, recordTurnMemories } from '../context/context-builder';
 import { generateFollowUpSuggestions } from '../services/suggestions.service';
 import { UsageService } from '../services/usage.service';
@@ -14,10 +15,17 @@ import { ModelConfigService } from '../services/model-config.service';
 import { SystemLimitsService } from '../services/system-limits.service';
 import { AnonUsageService } from '../services/anon-usage.service';
 
+// `research` runs once, ahead of the agent, and self-skips cheaply when the
+// turn doesn't need it (see orchestration/research.ts) - which is why it's
+// an unconditional edge rather than a branch: the decision needs the
+// planner's judgement, not just routing, and keeping it inside the node
+// leaves one place that decides whether research happened.
 const workflow = new StateGraph(AgentStateAnnotation)
+  .addNode('research', researchNode)
   .addNode('agent', agentNode)
   .addNode('tools', toolsNode)
-  .addEdge(START, 'agent')
+  .addEdge(START, 'research')
+  .addEdge('research', 'agent')
   .addConditionalEdges('agent', shouldContinue, { tools: 'tools', end: END })
   .addEdge('tools', 'agent');
 
@@ -154,12 +162,17 @@ export async function streamGraphResponse(
     userId: ownerId ?? null,
     projectId: request.projectId ?? null,
     threadId: request.threadId ?? null,
+    deepResearch: request.deepResearch ?? false,
   };
 
   const eventStream = compiledGraph.streamEvents(initialState, { version: 'v2' });
 
   let wroteAnyOutput = false;
   let generatedImageUrl: string | null = null;
+  // Citations behind whatever the research node gathered this turn, shown
+  // to the user alongside any sources the model itself declared in its
+  // ```ui block (the two are merged on the final event below).
+  let researchSources: Array<{ url: string; title?: string }> = [];
   // The model may append a trailing ```ui fenced block (see
   // ui_orchestrator:v1) with structured UI data. uiFilter withholds that
   // block from the live token stream so its raw JSON never flashes on
@@ -199,6 +212,11 @@ export async function streamGraphResponse(
           inputTokens = (inputTokens ?? 0) + (usage.input_tokens ?? 0);
           outputTokens = (outputTokens ?? 0) + (usage.output_tokens ?? 0);
         }
+      } else if (event.event === 'on_chain_end' && event.name === 'research') {
+        const output = event.data?.output as Partial<AgentState> | undefined;
+        if (output?.researchSources?.length) {
+          researchSources = output.researchSources;
+        }
       } else if (event.event === 'on_chain_end' && event.name === 'tools') {
         const output = event.data?.output as Partial<AgentState> | undefined;
         if (output?.generatedImageUrl) {
@@ -235,6 +253,16 @@ export async function streamGraphResponse(
   // awaited, so the extraction gate/LLM call never adds latency to a turn.
   recordTurnMemories({ uid: ownerId, threadId: request.threadId, messages: request.messages || [] });
 
+  // The model's own declared sources and the research node's citations are
+  // both "where this answer came from", so they arrive as one list, deduped
+  // by URL with the model's own entries kept first.
+  const declaredSources = uiPayload?.sources ?? [];
+  const seenSourceUrls = new Set(declaredSources.map((s) => s.url).filter(Boolean));
+  const mergedSources = [
+    ...declaredSources,
+    ...researchSources.filter((s) => s.url && !seenSourceUrls.has(s.url)),
+  ];
+
   const suggestions = await generateFollowUpSuggestions(request.messages || [], visibleText);
   res.write(
     `data: ${JSON.stringify({
@@ -242,7 +270,8 @@ export async function streamGraphResponse(
       done: true,
       model,
       suggestions,
-      ...(uiPayload ? { ui: uiPayload.ui, sources: uiPayload.sources, actions: uiPayload.actions } : {}),
+      ...(uiPayload ? { ui: uiPayload.ui, actions: uiPayload.actions } : {}),
+      ...(mergedSources.length > 0 ? { sources: mergedSources } : {}),
       ...(switchNotice ? { modelSwitch: switchNotice } : {}),
     })}\n\n`
   );

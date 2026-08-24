@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { tool } from '@langchain/core/tools';
 import { generateImage } from '../llm/image-gen';
 import { performWebSearch } from '../llm/web-search';
+import { browsePage } from '../llm/browse-page';
 import { getWeather } from '../llm/weather';
 import { getStockQuote } from '../llm/stock';
 import { executeSandboxedCode } from '../tools/code-sandbox';
@@ -51,6 +52,29 @@ const webSearchTool = tool(
     description: 'Searches the web for real-time, current information (e.g. weather, news, prices, recent events) and returns a grounded answer with sources.',
     schema: z.object({
       query: z.string().describe('The search query.'),
+    }),
+  }
+);
+
+const browsePageTool = tool(
+  async ({ url }: { url: string }) => {
+    try {
+      const page = await browsePage(url);
+      return JSON.stringify({ success: true, ...page });
+    } catch (error) {
+      console.error(`[mcp/tools] browse_page failed for "${url}":`, error);
+      return JSON.stringify({ success: false, url, error: (error as Error).message });
+    }
+  },
+  {
+    name: 'browse_page',
+    description:
+      'Fetches a web page and returns its main readable text (navigation, ads and scripts stripped). Use this ' +
+      'after web_search when a result looks authoritative and you need the full detail behind it - exact ' +
+      'figures, tables, dates or the reasoning behind a claim, which a search summary drops. Pass a URL from a ' +
+      'search citation rather than one you invented.',
+    schema: z.object({
+      url: z.string().describe('The absolute http(s) URL of the page to read.'),
     }),
   }
 );
@@ -153,4 +177,12 @@ const generateImageTool = tool(
   }
 );
 
-export const MCP_TOOLS = [calculatorTool, webSearchTool, weatherTool, stockQuoteTool, codeInterpreterTool, generateImageTool];
+export const MCP_TOOLS = [
+  calculatorTool,
+  webSearchTool,
+  browsePageTool,
+  weatherTool,
+  stockQuoteTool,
+  codeInterpreterTool,
+  generateImageTool,
+];
