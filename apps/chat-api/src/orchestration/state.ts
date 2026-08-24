@@ -53,6 +53,29 @@ export const AgentStateAnnotation = Annotation.Root({
     reducer: (_left, right) => right,
     default: () => null,
   }),
+  /**
+   * Opt-in deep research: skips the recency heuristic (always plans) and
+   * allows a wider search fan-out. See orchestration/research.ts.
+   */
+  deepResearch: Annotation<boolean>({
+    reducer: (_left, right) => right,
+    default: () => false,
+  }),
+  /** True once the research node actually gathered evidence for this turn. */
+  researchRan: Annotation<boolean>({
+    reducer: (_left, right) => right,
+    default: () => false,
+  }),
+  /** The queries the planner chose - surfaced for the admin emulator. */
+  researchQueries: Annotation<string[]>({
+    reducer: (_left, right) => right,
+    default: () => [],
+  }),
+  /** Deduplicated citations behind this turn's findings, shown to the user. */
+  researchSources: Annotation<Array<{ url: string; title?: string }>>({
+    reducer: (_left, right) => right,
+    default: () => [],
+  }),
 });
 
 export type AgentState = typeof AgentStateAnnotation.State;

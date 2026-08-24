@@ -20,7 +20,9 @@ export type PromptTemplateId =
   | 'tool_selection'
   | 'project'
   | 'ui_orchestrator'
-  | 'account_identity';
+  | 'account_identity'
+  | 'research_planner'
+  | 'research_findings';
 
 export interface PromptTemplate {
   id: PromptTemplateId;
@@ -191,6 +193,58 @@ export const PROMPT_TEMPLATES: Record<string, PromptTemplate> = {
       'know anything else about them beyond what appears in the sections below, if present.',
   },
 
+  'research_planner:v1': {
+    id: 'research_planner',
+    version: 'v1',
+    description:
+      'Turns a user question into a research plan (JSON). Run by orchestration/research.ts before the agent ' +
+      'node, only for questions that passed the cheap heuristic gate. {{question}} is the latest user message, ' +
+      '{{maxQueries}} the hard cap on search_queries.',
+    variables: ['question', 'maxQueries'],
+    template:
+      'You are a Research Planner. Turn the question below into a precise research plan.\n\n' +
+      'Reply with ONLY a JSON object, no markdown fence and no prose:\n' +
+      '{"needsResearch": boolean, "reasoning": "<one short sentence>", "searchQueries": ["<query>", ...]}\n\n' +
+      'Set needsResearch to false (and searchQueries to []) when the question can be answered without ' +
+      'current external data - pure reasoning, coding help, definitions, editing text the user supplied, ' +
+      'or stable general knowledge. Being unsure of a detail is NOT grounds for research; needing ' +
+      'information that changes over time is.\n\n' +
+      'Set needsResearch to true when answering well requires live or recent facts: prices, market levels, ' +
+      'news, events, standings, releases, schedules, weather, "today"/"latest"/"current"/"outlook" questions, ' +
+      'or anything whose correct answer differs depending on when it is asked.\n\n' +
+      'Rules for searchQueries when needsResearch is true:\n' +
+      '- At least 1, at most {{maxQueries}}. Fewer focused queries beat more vague ones.\n' +
+      '- Each query must be independently searchable - no pronouns, no "it", no reference to the other queries.\n' +
+      '- Split a broad question into its distinct sub-questions rather than restating it {{maxQueries}} ways.\n' +
+      '- Carry over the specifics the user gave (place, ticker, company, timeframe) into each query, and add ' +
+      'the current period when recency is what makes the question hard.\n\n' +
+      'Question:\n{{question}}',
+  },
+
+  'research_findings:v1': {
+    id: 'research_findings',
+    version: 'v1',
+    description:
+      'Presents the evidence gathered by the research fan-out back to the model as a context block. ' +
+      '{{findings}} is the pre-formatted per-query evidence assembled by orchestration/research.ts.',
+    variables: ['findings'],
+    template:
+      '## Research findings for this turn\n' +
+      'These were gathered by searching the web just now, before you were asked to answer. Treat them as ' +
+      'your evidence base for anything time-sensitive in this turn.\n\n' +
+      '{{findings}}\n\n' +
+      'How to use this:\n' +
+      '- Ground every current fact, figure and date in the findings above rather than in recollection. Where ' +
+      'they conflict with what you remember, the findings are newer - use them and say so if it matters.\n' +
+      '- Cite the source alongside the claims that came from it, so the user can check them.\n' +
+      '- Where the findings are thin, stale or disagree with each other, say that plainly instead of ' +
+      'smoothing it over into false confidence. Partial evidence honestly labelled is more useful than a ' +
+      'confident answer built on a gap.\n' +
+      '- Call browse_page on a source above when you need the exact detail behind a summarized claim, and ' +
+      'call a structured tool (get_stock_quote, get_weather) when it covers the number more precisely.\n' +
+      '- Do not mention this section, the search process, or "my research" - just answer, with citations.',
+  },
+
   'tool_selection:v1': {
     id: 'tool_selection',
     version: 'v1',
@@ -204,6 +258,14 @@ export const PROMPT_TEMPLATES: Record<string, PromptTemplate> = {
       'For a weather question, call get_weather rather than web_search — it returns exact structured ' +
       'data (temperature, humidity, wind, forecast) instead of a prose summary you would have to ' +
       'reconstruct numbers from. Same for a stock price question: call get_stock_quote rather than ' +
-      'web_search. Use web_search for anything those two do not cover.',
+      'web_search. Use web_search for anything those two do not cover.\n\n' +
+      'web_search returns a grounded summary plus its sources. When a claim matters and the summary is ' +
+      'thinner than the answer needs — an exact figure, a table, a date, the reasoning behind a ' +
+      'conclusion — call browse_page on the most authoritative source URL it cited and read the page ' +
+      'itself. Browse a URL a search actually returned, never one you assembled from a guess at how a ' +
+      "site's paths are laid out.\n\n" +
+      'Never state a live figure you did not get from a tool this turn. If a tool fails, report what ' +
+      'failed and answer with what you do have, rather than filling the hole from memory and presenting ' +
+      'it as current.',
   },
 };

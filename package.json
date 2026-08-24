@@ -1,6 +1,6 @@
 {
   "name": "@chat-monorepo/source",
-  "version": "1.18.0",
+  "version": "1.19.0",
   "license": "MIT",
   "private": true,
   "scripts": {
@@ -38,6 +38,7 @@
     "google-auth-library": "^9.11.0",
     "helmet": "^8.3.0",
     "isolated-vm": "^7.0.1",
+    "jsdom": "^27.1.0",
     "jsonwebtoken": "^9.0.3",
     "marked": "^18.0.9",
     "multer": "^2.2.0",
@@ -86,7 +87,6 @@
     "autoprefixer": "^10.4.20",
     "eslint": "^9.8.0",
     "eslint-config-prettier": "^10.0.0",
-    "jsdom": "^27.1.0",
     "nx": "23.1.1",
     "postcss": "^8.4.41",
     "prettier": "~3.6.2",
