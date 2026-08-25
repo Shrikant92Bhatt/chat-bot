@@ -184,9 +184,11 @@ export const PROMPT_TEMPLATES: Record<string, PromptTemplate> = {
     id: 'ui_orchestrator',
     version: 'v2',
     description:
-      'v1 plus one rule: the app already renders WEATHER_CARD/STOCK_CARD live from get_weather/get_stock_quote ' +
+      'v1 plus two rules: (1) the app already renders WEATHER_CARD/STOCK_CARD live from get_weather/get_stock_quote ' +
       'the instant those tools resolve (see orchestration/ui-tool-adapter.ts), so telling the model to skip ' +
-      're-emitting the same card in its ```ui block avoids a visible duplicate.',
+      're-emitting the same card in its ```ui block avoids a visible duplicate; (2) an explicit rule against ' +
+      'echoing a tool\'s raw JSON into the prose answer (fenced or not) - closes a gap where v1 only described ' +
+      'the ```ui format and never said raw tool output must stay out of the prose entirely.',
     variables: [],
     template:
       '## Structured UI components\n' +
@@ -209,9 +211,14 @@ export const PROMPT_TEMPLATES: Record<string, PromptTemplate> = {
       '- The app already shows a WEATHER_CARD/STOCK_CARD automatically the instant get_weather/get_stock_quote ' +
       'resolves — do NOT also emit a WEATHER_CARD or STOCK_CARD for that same data in this block, it would ' +
       'render twice. Only add other component types here (TABLE, CHART, etc.) if genuinely useful in addition.\n' +
+      '- That mapping happens ONLY inside the ```ui block\'s `data` object. Never copy, paste, or restate a ' +
+      'tool\'s raw JSON or object structure — field names, braces, key/value pairs — anywhere in the Markdown ' +
+      'prose above it, fenced in a different code block or not. Describe the same information there in your ' +
+      'own words (e.g. "It\'s 30°C and clear in Pune") instead of showing the object that produced it.\n' +
       '- If a tool call failed, use ERROR_CARD (title, message, toolName?) to report it instead of guessing.\n' +
       '- WEATHER_CARD: {location, current:{temperature, condition, humidity, windSpeed}, forecast?:[{date, ' +
-      'temperatureHigh, temperatureLow, condition, precipitationProbability}], hourly?:[{time, temperature}]}.\n' +
+      'temperatureHigh, temperatureLow, condition, precipitationProbability}], hourly?:[{time, temperature}]}. ' +
+      'get_weather returns forecast and hourly already populated - include both in full, do not drop them.\n' +
       '- STOCK_CARD: {symbol, name, price, change, changePercent, currency}.\n' +
       '- STOCK_CHART: {symbol, name?, currency?, interval?, points:[{timestamp, price}]}.\n' +
       '- TABLE: {columns:[string], rows:[[string|number|null]]}.\n' +
@@ -336,5 +343,38 @@ export const PROMPT_TEMPLATES: Record<string, PromptTemplate> = {
       'Never state a live figure you did not get from a tool this turn. If a tool fails, report what ' +
       'failed and answer with what you do have, rather than filling the hole from memory and presenting ' +
       'it as current.',
+  },
+
+  'tool_selection:v2': {
+    id: 'tool_selection',
+    version: 'v2',
+    description:
+      'Appended when MCP tools are bound, to steer when tools should be called. v2 adds an explicit rule ' +
+      'that a tool result is internal data, never text to output verbatim - v1 said nothing about not ' +
+      'echoing raw tool JSON into prose, only ui_orchestrator described the fenced-block format.',
+    variables: [],
+    template:
+      '## Tools\n' +
+      'You have tools available. Call one only when it genuinely improves the answer — for live ' +
+      'information, exact computation, or generating an image. Answer directly when you already know ' +
+      'the answer. Never fabricate a tool result, and if a tool reports it is unavailable, say so.\n\n' +
+      'For a weather question, call get_weather rather than web_search — it returns exact structured ' +
+      'data (temperature, humidity, wind, forecast) instead of a prose summary you would have to ' +
+      'reconstruct numbers from. Same for a stock price question: call get_stock_quote rather than ' +
+      'web_search. Use web_search for anything those two do not cover.\n\n' +
+      'web_search returns a grounded summary plus its sources. When a claim matters and the summary is ' +
+      'thinner than the answer needs — an exact figure, a table, a date, the reasoning behind a ' +
+      'conclusion — call browse_page on the most authoritative source URL it cited and read the page ' +
+      'itself. Browse a URL a search actually returned, never one you assembled from a guess at how a ' +
+      "site's paths are laid out.\n\n" +
+      'Never state a live figure you did not get from a tool this turn. If a tool fails, report what ' +
+      'failed and answer with what you do have, rather than filling the hole from memory and presenting ' +
+      'it as current.\n\n' +
+      'A tool result is internal data for you to read, never text to output as-is. For every tool result, ' +
+      'either (a) describe what it contains in your own words as part of the Markdown answer, or (b) map ' +
+      'its values into the approved ```ui component shapes (see the structured UI rules above). Never ' +
+      'paste, echo, or dump a tool\'s raw JSON object or key/value structure into your prose answer under ' +
+      'any circumstances — fenced in an unrelated code block or not. If you find yourself about to write ' +
+      '`{"location":` or `{"symbol":` outside the one ```ui block, stop and rephrase it as prose instead.',
   },
 };

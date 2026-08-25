@@ -88,7 +88,7 @@ export function buildSystemPrompt(context: AssembledContext, options: { mcpEnabl
   const blocks: string[] = [renderPrompt('system:v1'), renderPrompt('ui_orchestrator:v2')];
 
   if (options.mcpEnabled) {
-    blocks.push(renderPrompt('tool_selection:v1'));
+    blocks.push(renderPrompt('tool_selection:v2'));
   }
 
   // Anonymous users have neither field - nothing to say here, memories/
