@@ -142,7 +142,7 @@
                   [components]="msg.ui || []"
                   [pending]="msg.pendingUi || []"
                   [actions]="msg.actions || []"
-                  (actionSelected)="chatService.sendMessage($event.label)"
+                  (actionSelected)="actionDispatcher.dispatch($event)"
                   class="block mb-3"
                 ></app-ui-block>
 
@@ -296,7 +296,7 @@
               >
                 <button
                   *ngFor="let suggestion of msg.suggestions"
-                  (click)="chatService.sendMessage(suggestion)"
+                  (click)="actionDispatcher.dispatchLabel(suggestion)"
                   class="px-3 py-1.5 rounded-full text-xs bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition-all"
                 >
                   {{ suggestion }}
