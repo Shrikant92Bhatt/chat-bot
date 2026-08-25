@@ -78,23 +78,10 @@
       </div>
     </div>
 
-    <!-- Everything the answer rests on -->
-    <div *ngIf="trace.sources.length > 0" class="space-y-1.5">
-      <div class="text-[10px] uppercase tracking-wide text-slate-500">
-        Sources ({{ trace.sources.length }})
-      </div>
-      <div class="flex flex-wrap gap-1.5">
-        <a
-          *ngFor="let source of trace.sources"
-          [href]="source.url"
-          target="_blank"
-          rel="noopener noreferrer"
-          [title]="source.url"
-          class="inline-flex items-center max-w-[15rem] text-[11px] px-2 py-0.5 rounded-full bg-white/5 text-slate-400 hover:text-slate-100 hover:bg-white/10 transition-colors"
-        >
-          <span class="truncate">{{ hostLabel(source.url, source.title) }}</span>
-        </a>
-      </div>
-    </div>
+    <!-- Sources are deliberately NOT repeated here - chat-window.component.html
+         renders the canonical, numbered Sources list below the answer
+         (msg.sources, which already merges these same citations with any
+         the model declared itself). Showing trace.sources here too would put
+         the same URLs on screen twice for one message. -->
   </div>
 </div>

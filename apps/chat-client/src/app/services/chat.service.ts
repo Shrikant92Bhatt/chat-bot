@@ -21,6 +21,36 @@ import { AuthService } from './auth.service';
 import { getApiBaseUrl } from '../core/runtime-config';
 import { SseEventParser } from './sse-event-parser';
 
+/**
+ * Whether a finished research trace is worth pinning onto the message (and
+ * therefore showing the "Thinking" panel forever after, on every reload).
+ *
+ * The research node (see orchestration/research.ts) always reports at least
+ * one `research_status` event, so a trace exists for every single turn -
+ * including ones that never needed research at all ("what is closure in
+ * JavaScript?"). Persisting that trace unconditionally is the bug: a plain
+ * answer would carry a permanent "Answered without research" panel.
+ *
+ * `trace.ran` already distinguishes "the planner said yes and search results
+ * came back" (research_sources sets it true) from "gated out before a
+ * search ever ran" (mcp/search disabled, no research signal, planner call
+ * failed, or the planner itself said no - research.ts's various skipWith()
+ * paths, all of which report phase:'skipped' and never set ran). None of
+ * those are worth a persisted panel.
+ *
+ * The one deliberate exception: every planned query failing (research.ts's
+ * "findings.length === 0" branch) also reports phase:'skipped' - so
+ * `ran` ends up false even though real queries were planned and attempted.
+ * That is different from never trying: the panel still has something
+ * genuine to show (which queries were attempted and that they failed), so
+ * it counts as worth persisting whenever at least one query reached a
+ * settled 'ok'/'failed' state.
+ */
+export function isResearchTraceWorthPersisting(trace: ResearchTrace): boolean {
+  if (trace.ran) return true;
+  return trace.queries.some((q) => q.status === 'ok' || q.status === 'failed');
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -1026,10 +1056,17 @@ export class ChatService {
       this.activityStatus.set(null);
       // Pin the trace onto the message before clearing the live one, so the
       // panel stays expandable after the turn (including on reload, since
-      // the thread is persisted below).
+      // the thread is persisted below) - but only when it represents
+      // something genuinely worth showing after the fact. A trivial
+      // "thought about it, skipped" trace (the common case - most turns
+      // never need research) would otherwise leave a permanent "Answered
+      // without research" panel on every single reply. See
+      // isResearchTraceWorthPersisting() above.
       const trace = this.activeResearchTrace();
       if (trace) {
-        this.setMessageResearch(threadId, assistantMessageId, trace);
+        if (isResearchTraceWorthPersisting(trace)) {
+          this.setMessageResearch(threadId, assistantMessageId, trace);
+        }
         this.activeResearchTrace.set(null);
       }
       // Covers Stop Generation and a dropped connection alike: either can
