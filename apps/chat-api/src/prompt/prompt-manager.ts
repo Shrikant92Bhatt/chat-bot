@@ -61,6 +61,12 @@ export interface AssembledContext {
    * true as of a few seconds ago and has no bearing on any later turn.
    */
   researchFindings?: string | null;
+  /**
+   * Set when this turn's question is about markets/instruments, so a
+   * researched answer gets the finance structure and its disclaimer. Only
+   * meaningful alongside researchFindings.
+   */
+  financeQuestion?: boolean;
 }
 
 export const EMPTY_CONTEXT: AssembledContext = {};
@@ -128,6 +134,12 @@ export function buildSystemPrompt(context: AssembledContext, options: { mcpEnabl
   // for this answer rather than as a standing instruction.
   if (context.researchFindings && context.researchFindings.trim()) {
     blocks.push(renderPrompt('research_findings:v1', { findings: context.researchFindings.trim() }));
+    // Only alongside real findings: the structure below asks for levels and
+    // drivers, which without evidence would invite exactly the invention
+    // the findings block spends its length forbidding.
+    if (context.financeQuestion) {
+      blocks.push(renderPrompt('finance_answer:v1'));
+    }
   }
 
   const joined = blocks.filter(Boolean).join('\n\n');

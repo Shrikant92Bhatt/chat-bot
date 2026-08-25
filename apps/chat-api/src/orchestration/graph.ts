@@ -2,7 +2,13 @@ import { Response } from 'express';
 import { StateGraph, START, END } from '@langchain/langgraph';
 import { AIMessage, BaseMessage, HumanMessage, SystemMessage } from '@langchain/core/messages';
 // @ts-ignore: Assume type exists in shared workspace
-import { ChatAttachment, ChatStreamRequest, AIModelType } from '@chat-monorepo/shared';
+import {
+  ChatAttachment,
+  ChatStreamRequest,
+  AIModelType,
+  ResearchStreamEvent,
+  RESEARCH_EVENT_NAME,
+} from '@chat-monorepo/shared';
 import { AgentState, AgentStateAnnotation } from './state';
 import { agentNode, toolsNode, shouldContinue } from './nodes';
 import { researchNode } from './research';
@@ -30,6 +36,21 @@ const workflow = new StateGraph(AgentStateAnnotation)
   .addEdge('tools', 'agent');
 
 const compiledGraph = workflow.compile();
+
+/**
+ * Human-readable activity labels for the tools the agent can call, used for
+ * the live status line during a turn. A tool with no entry here falls back
+ * to its raw name, which is still more informative than silence.
+ */
+const TOOL_ACTIVITY_LABELS: Record<string, string> = {
+  web_search: 'Searching the web',
+  browse_page: 'Reading a page',
+  get_weather: 'Checking the weather',
+  get_stock_quote: 'Checking the market',
+  system_calculator: 'Calculating',
+  code_interpreter: 'Running code',
+  generate_image: 'Generating an image',
+};
 
 /**
  * Builds a HumanMessage's content, adding one OpenAI-style `image_url` part
@@ -193,9 +214,23 @@ export async function streamGraphResponse(
   let outputTokens: number | null = null;
   let sawUsageMetadata = false;
 
+  /**
+   * Forwards a research-trace event to the client.
+   *
+   * Research and tool round-trips happen entirely ahead of the first
+   * token, so without these the user stares at an idle spinner for several
+   * seconds with no idea whether anything is happening. They are progress
+   * reporting only and never become part of the reply.
+   */
+  const emitResearch = (event: ResearchStreamEvent) => {
+    res.write(`data: ${JSON.stringify({ research: event, done: false, model })}\n\n`);
+  };
+
   try {
     for await (const event of eventStream) {
-      if (event.event === 'on_chat_model_stream') {
+      if (event.event === 'on_custom_event' && event.name === RESEARCH_EVENT_NAME) {
+        emitResearch(event.data as ResearchStreamEvent);
+      } else if (event.event === 'on_chat_model_stream') {
         const content = event.data?.chunk?.content;
         if (typeof content === 'string' && content.length > 0) {
           const visible = uiFilter.push(content);
@@ -216,6 +251,29 @@ export async function streamGraphResponse(
         const output = event.data?.output as Partial<AgentState> | undefined;
         if (output?.researchSources?.length) {
           researchSources = output.researchSources;
+        }
+      } else if (event.event === 'on_chain_end' && event.name === 'agent') {
+        // The agent has decided; the tools node runs next. Reporting from
+        // here (rather than inside the tools node) is what makes the wait
+        // legible while those tools actually execute.
+        const output = event.data?.output as { messages?: BaseMessage[] } | undefined;
+        const last = output?.messages?.[output.messages.length - 1] as AIMessage | undefined;
+        const toolCalls = last?.tool_calls ?? [];
+
+        for (const call of toolCalls) {
+          if (call.name === 'browse_page') {
+            const url = (call.args as { url?: string })?.url;
+            if (url) emitResearch({ type: 'research_browse_start', url });
+          }
+        }
+
+        if (toolCalls.length > 0) {
+          const labels = toolCalls.map((call) => TOOL_ACTIVITY_LABELS[call.name] ?? call.name);
+          emitResearch({
+            type: 'research_status',
+            phase: toolCalls.some((c) => c.name === 'browse_page') ? 'browsing' : 'searching',
+            message: labels.join(' · '),
+          });
         }
       } else if (event.event === 'on_chain_end' && event.name === 'tools') {
         const output = event.data?.output as Partial<AgentState> | undefined;

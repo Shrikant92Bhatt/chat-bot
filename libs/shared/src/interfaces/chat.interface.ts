@@ -1,4 +1,5 @@
 import { UIComponent, OrchestratorSource, OrchestratorAction } from './orchestrator.interface';
+import { ResearchTrace } from './research.interface';
 
 export type AIModelType = string;
 
@@ -118,6 +119,13 @@ export interface ChatMessage {
   sources?: OrchestratorSource[];
   /** Suggested follow-up actions tied to this reply's `ui` payload, if any. */
   actions?: OrchestratorAction[];
+  /**
+   * How this reply was researched — the planner's reasoning, the queries it
+   * ran and what they returned. Present only on turns where the research
+   * node engaged (or explained why it didn't); rendered as the collapsible
+   * "Thinking" panel above the answer.
+   */
+  research?: ResearchTrace;
 }
 
 export interface ChatThread {
