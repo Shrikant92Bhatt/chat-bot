@@ -5,6 +5,7 @@ export default defineConfig({
     projects: [
       'vite.config.ts',
       'libs/frontend/admin-analytics/vite.config.mts',
+      'apps/chat-client/vite.config.mts',
     ],
   },
 });
