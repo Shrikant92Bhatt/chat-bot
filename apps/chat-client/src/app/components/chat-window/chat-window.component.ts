@@ -1,15 +1,17 @@
-import { Component, ElementRef, ViewChild, AfterViewChecked, effect, signal, SecurityContext, ChangeDetectionStrategy } from '@angular/core';
+import { Component, ElementRef, ViewChild, AfterViewChecked, effect, signal, ChangeDetectionStrategy, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { DomSanitizer } from '@angular/platform-browser';
 import { marked } from 'marked';
-import DOMPurify from 'dompurify';
 import { ChatService } from '../../services/chat.service';
 import { AuthService } from '../../services/auth.service';
 import { UiBlockComponent } from '../ui-block/ui-block.component';
 import { ResearchPanelComponent } from '../research-panel/research-panel.component';
 import { ChatMessage, ResearchTrace } from '@chat-monorepo/shared';
+import { configureMarkedForCodeBlocks } from '../../shared/markdown/code-block-renderer';
+import { handleCodeBlockClick } from '../../shared/markdown/code-block-interactions';
+import { sanitizeGeneratedHtml } from '../../shared/markdown/sanitize-html';
 
-marked.setOptions({ gfm: true, breaks: true });
+configureMarkedForCodeBlocks();
 
 /** One empty-state capability chip: a label plus the starter prompt it drops into the composer. */
 interface CapabilityChip {
@@ -262,8 +264,21 @@ export class ChatWindowComponent implements AfterViewChecked {
   public renderMarkdown(content: string): string {
     if (!content) return '';
     const rawHtml = marked.parse(content, { async: false }) as string;
-    const cleanHtml = DOMPurify.sanitize(rawHtml);
-    return this.sanitizer.sanitize(SecurityContext.HTML, cleanHtml) ?? '';
+    return sanitizeGeneratedHtml(rawHtml, this.sanitizer);
+  }
+
+  /**
+   * Delegated click handler for the Copy/Wrap/line-number buttons that
+   * `configureMarkedForCodeBlocks()` injects into fenced code blocks inside
+   * `renderMarkdown()`'s output. Those buttons live inside `[innerHTML]`
+   * content and can't carry Angular `(click)` bindings of their own - see
+   * `handleCodeBlockClick`'s doc comment. Bound on the container that wraps
+   * every message's rendered Markdown (see chat-window.component.html), so
+   * one listener covers every code block in the thread.
+   */
+  @HostListener('click', ['$event'])
+  public onMessagesClick(event: Event): void {
+    handleCodeBlockClick(event);
   }
 
   public getUserDisplayName(): string {

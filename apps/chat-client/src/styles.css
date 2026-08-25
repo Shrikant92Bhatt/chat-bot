@@ -160,11 +160,154 @@
   .markdown-body code {
     @apply px-1.5 py-0.5 rounded bg-black/50 border border-white/10 text-accentCyan text-xs font-mono break-words;
   }
-  .markdown-body pre {
-    @apply bg-obsidian/90 border border-glassBorder rounded-xl p-3 my-2 overflow-x-auto;
+  /* `marked`'s fenced-code renderer (code-block-renderer.ts) no longer emits
+     a bare <pre><code>; it emits the `.code-block-*` structure styled below,
+     shared with the standalone CODE_BLOCK UIComponent. Reset the inline-code
+     look for the <code> inside it (the `.markdown-body code` rule above
+     would otherwise apply there too - `.markdown-body .code-block-code` wins
+     on specificity). */
+  .markdown-body .code-block-code {
+    @apply bg-transparent border-0 p-0 text-inherit;
   }
-  .markdown-body pre code {
-    @apply bg-transparent border-0 p-0 text-emerald-300 text-xs leading-relaxed break-normal;
+}
+
+/* Code blocks: highlighted, copyable, with per-block wrap and line-number
+   toggles. Built by `code-block-renderer.ts` and shared verbatim by every
+   surface that shows code - fenced blocks inside `[innerHTML]`-rendered
+   Markdown (chat-window, the MARKDOWN UIComponent) and the standalone
+   CODE_BLOCK UIComponent - so one set of rules styles every code block in
+   the app, regardless of which path rendered it. */
+@layer components {
+  .code-block-wrap {
+    @apply my-2 max-w-full overflow-hidden rounded-xl border border-glassBorder bg-obsidian/90;
+  }
+  .code-block-header {
+    @apply flex items-center gap-2 border-b border-glassBorder px-3 py-1.5;
+  }
+  .code-block-title {
+    @apply flex-1 truncate font-mono text-[11px] text-slate-400;
+  }
+  .code-block-lang-badge {
+    @apply shrink-0 text-[10px] text-slate-500;
+  }
+  .code-block-actions {
+    @apply flex shrink-0 items-center gap-1;
+  }
+  .code-block-btn {
+    @apply cursor-pointer select-none rounded-md px-2 py-1 text-[10px] text-slate-400 transition-colors;
+  }
+  .code-block-btn:hover {
+    @apply bg-white/10 text-slate-100;
+  }
+  .code-block-btn.active {
+    @apply bg-accentCyan/10 text-accentCyan;
+  }
+  .code-block-btn.copied {
+    @apply text-emerald-300;
+  }
+
+  .code-block-pre {
+    @apply m-0 max-w-full overflow-x-auto p-3 text-xs leading-relaxed;
+    white-space: pre;
+  }
+  /* Wrap toggle: default is horizontal scroll (matches the app's previous
+     behavior); toggling `.wrap-enabled` switches to no-scroll, wrapped
+     lines instead. Scroll always stays contained to this element, never the
+     page - `max-w-full` plus `overflow-x-auto` keep a long unwrapped line
+     from ever widening the message bubble or the page itself, on mobile
+     included. */
+  .code-block-pre.wrap-enabled {
+    overflow-x: hidden;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .code-block-code {
+    @apply block font-mono text-xs text-slate-200;
+    counter-reset: code-line;
+  }
+  .code-line {
+    display: block;
+    min-height: 1.4em;
+  }
+  /* Line numbers are CSS-generated (counter-reset/counter-increment), not
+     DOM-injected number spans, so they're never part of what a manual
+     text-selection copy would pick up - not that it matters for the Copy
+     button, which always reads the untouched original text out of the
+     snippet store instead of the rendered DOM either way. */
+  .code-block-wrap.show-line-numbers .code-line {
+    position: relative;
+    padding-left: 2.75em;
+  }
+  .code-block-wrap.show-line-numbers .code-line::before {
+    counter-increment: code-line;
+    content: counter(code-line);
+    position: absolute;
+    left: 0;
+    width: 2.25em;
+    text-align: right;
+    color: rgba(148, 163, 184, 0.45);
+    user-select: none;
+  }
+
+  /* highlight.js token colors - a small custom palette (not an imported
+     hljs theme stylesheet) tuned to this app's obsidian/glass dark theme
+     rather than pulling in a separate, unthemed CSS file. */
+  .hljs-comment,
+  .hljs-quote {
+    @apply text-slate-500 italic;
+  }
+  .hljs-keyword,
+  .hljs-selector-tag,
+  .hljs-literal,
+  .hljs-subst {
+    @apply text-accentViolet;
+  }
+  .hljs-string,
+  .hljs-doctag,
+  .hljs-addition {
+    @apply text-emerald-300;
+  }
+  .hljs-number {
+    @apply text-amber-300;
+  }
+  .hljs-title,
+  .hljs-section,
+  .hljs-selector-id,
+  .hljs-name {
+    @apply text-accentCyan;
+  }
+  .hljs-type,
+  .hljs-class .hljs-title {
+    @apply text-sky-300;
+  }
+  .hljs-attribute,
+  .hljs-attr,
+  .hljs-symbol,
+  .hljs-bullet,
+  .hljs-link {
+    @apply text-rose-300;
+  }
+  .hljs-built_in,
+  .hljs-builtin-name {
+    @apply text-blue-300;
+  }
+  .hljs-variable,
+  .hljs-template-variable,
+  .hljs-regexp {
+    @apply text-orange-200;
+  }
+  .hljs-deletion {
+    @apply text-red-400;
+  }
+  .hljs-meta {
+    @apply text-slate-400;
+  }
+  .hljs-emphasis {
+    @apply italic;
+  }
+  .hljs-strong {
+    @apply font-bold;
   }
   .markdown-body table {
     @apply w-full my-2 text-xs border-collapse;
