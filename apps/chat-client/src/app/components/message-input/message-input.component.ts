@@ -1,4 +1,4 @@
-import { Component, HostListener, ChangeDetectionStrategy, OnDestroy, computed } from '@angular/core';
+import { Component, HostListener, ChangeDetectionStrategy, OnDestroy, computed, effect, ElementRef, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AIModelType, SelectableModel } from '@chat-monorepo/shared';
@@ -25,6 +25,8 @@ function getSpeechRecognitionCtor(): any {
   host: { style: 'display:block; flex-shrink:0' },
 })
 export class MessageInputComponent implements OnDestroy {
+  @ViewChild('messageTextarea') private messageTextarea?: ElementRef<HTMLTextAreaElement>;
+
   public messageText = '';
   public isModelDropdownOpen = false;
 
@@ -50,7 +52,24 @@ export class MessageInputComponent implements OnDestroy {
     this.projectService.getProjectName(this.chatService.activeProjectId())
   );
 
-  constructor(public chatService: ChatService, private projectService: ProjectService) {}
+  constructor(public chatService: ChatService, private projectService: ProjectService) {
+    // Consumes a starter prompt set by the empty-state capability chips
+    // (chat-window.component, via ChatService.prefillComposer) - populates
+    // the box and focuses it for review/edit, same as anything the user
+    // types themselves; never auto-sent. allowSignalWrites is required
+    // because the effect clears the very signal it reads, to make this
+    // one-shot rather than re-firing on every future change.
+    effect(
+      () => {
+        const draft = this.chatService.composerDraft();
+        if (draft === null) return;
+        this.messageText = draft;
+        this.chatService.composerDraft.set(null);
+        queueMicrotask(() => this.messageTextarea?.nativeElement.focus());
+      },
+      { allowSignalWrites: true }
+    );
+  }
 
   onKeydown(event: KeyboardEvent) {
     if (event.key === 'Enter' && !event.shiftKey) {

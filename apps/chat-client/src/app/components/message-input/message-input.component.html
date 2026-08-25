@@ -116,6 +116,7 @@
         />
 
         <textarea
+          #messageTextarea
           [(ngModel)]="messageText"
           name="messageText"
           (keydown.enter)="onKeydown($event)"
