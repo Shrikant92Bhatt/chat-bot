@@ -114,6 +114,12 @@ Do not re-add inline prompt strings to `nodes.ts` / `graph.ts` — add a templat
 - `GET /api/chat/usage` (Bearer) returns the current user's most recent records, newest first (`?limit=` param, capped at 200). Query is `where('userId','==',uid).orderBy('timestamp','desc')`, which needs a Firestore composite index on the `usage` collection (`userId` ASC + `timestamp` DESC) - Firestore returns a console link to auto-create it on first use if it doesn't exist yet; there's no `firestore.indexes.json` checked into this repo to provision it ahead of time.
 - The legacy `AIRouterService` fallback path (direct Gemini/OpenAI SDKs, only reached if the LangGraph gateway call fails before any token is streamed) does NOT log usage yet.
 
+### Message Feedback (`services/message-feedback.service.ts`)
+- Firestore-backed (`messageFeedback` collection), doc id `${uid}_${threadId}_${messageId}` - overwrites in place on a re-rate/clear rather than accumulating duplicate records.
+- Deliberately NOT correlated to `usage.service.ts`'s `requestId` - that id is generated server-side per LLM call and is never sent back to the client in the SSE stream (`orchestration/graph.ts`'s final `res.write` carries `chunk/done/model/suggestions/ui/sources/modelSwitch`, no id), so there's nothing on the client to correlate it with. Keyed instead on `{ userId (verified session, never client-supplied), threadId, messageId }` - everything the caller already has.
+- `POST /api/chat/feedback` verifies the caller owns `threadId` via `ThreadService.getThread` (same ownership pattern as everywhere else - 404, not 403) before writing. `rating: null` clears an existing rating; the client re-POSTs the same rating as `null` to implement "click the selected thumb again to un-rate".
+- `GET /api/chat/threads/:threadId/feedback` returns every rated message in that thread, keyed by messageId, so `chat-client` can restore thumbs-up/down state on reload instead of resetting to neutral. Same ownership check, but resolves to an empty map rather than a 404 for a thread that doesn't exist yet (a read - "nothing rated" is correct either way, and both causes get the identical response).
+
 ### Admin Analytics (`middleware/admin.middleware.ts`, `routes/admin.routes.ts`, `services/analytics.service.ts`)
 - **Bootstrapping the first admin**: `scripts/migrate-add-user-roles.ts` — a one-time, idempotent backfill that adds `role: 'user'` to every `users/{uid}` doc missing one, and promotes a hardcoded email allowlist to `role: 'admin'`. Run once via `node dist/apps/chat-api/.../scripts/migrate-add-user-roles.js` after building. Ongoing promotion/demotion goes through the admin API instead (below), which requires an existing admin to already be signed in — this script is only for getting that first one.
 - **Authorization**: `requireAdmin` runs AFTER `authenticateToken` and does a **fresh Firestore read** of `users/{uid}.role` on every request. The role is deliberately NOT a JWT claim — the session token lives 7 days, so a baked-in claim would keep a demoted admin privileged for up to a week. It **fails closed**: a Firestore error denies rather than degrades (the opposite of the fail-soft context-assembly paths, on purpose). Non-admins get `403 {error:'Forbidden', message:'Admin access required.'}`.
@@ -206,6 +212,8 @@ A plain Nx Angular library **consumed directly into chat-client's own build** (`
 | POST | /api/chat/generate-image | Bearer | Image generation + GCS upload |
 | POST | /api/chat/documents | Bearer | Upload a file into the personal RAG knowledge base |
 | GET | /api/chat/usage | Bearer | Current user's recent usage/cost records (see Usage & Cost Tracking) |
+| POST | /api/chat/feedback | Bearer | Thumbs up/down on one assistant message; `rating: null` clears it (see Message Feedback) |
+| GET | /api/chat/threads/:threadId/feedback | Bearer | Ratings the caller has left in one thread, keyed by messageId (see Message Feedback) |
 | GET | /api/chat/memories | Bearer | Long-term memories saved about the user |
 | DELETE | /api/chat/memories/:id | Bearer | Forget one memory |
 | GET | /api/chat/prompts | Bearer | Prompt registry (keys + descriptions, not bodies) |
@@ -281,6 +289,7 @@ A plain Nx Angular library **consumed directly into chat-client's own build** (`
 | Prompt management | ✅ versioned registry; all prompt text centralised |
 | Rate limiting (anon trial + per-user daily) | ✅ Firestore-backed, consistent across Cloud Run instances |
 | Usage/cost tracking | ✅ real token counts when the gateway returns them, estimated $ cost |
+| Message feedback (thumbs up/down) | ✅ Firestore-backed, per-message, restored on thread reload |
 | Session persistence (JWT) | ✅ |
 | Docker deployment | ✅ |
 

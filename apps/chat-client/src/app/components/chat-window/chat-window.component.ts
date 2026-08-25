@@ -7,7 +7,7 @@ import { AuthService } from '../../services/auth.service';
 import { ActionDispatcherService } from '../../services/action-dispatcher.service';
 import { UiBlockComponent } from '../ui-block/ui-block.component';
 import { ResearchPanelComponent } from '../research-panel/research-panel.component';
-import { ChatMessage, ResearchTrace } from '@chat-monorepo/shared';
+import { ChatMessage, MessageFeedbackRating, ResearchTrace } from '@chat-monorepo/shared';
 import { configureMarkedForCodeBlocks } from '../../shared/markdown/code-block-renderer';
 import { handleCodeBlockClick } from '../../shared/markdown/code-block-interactions';
 import { sanitizeGeneratedHtml } from '../../shared/markdown/sanitize-html';
@@ -255,6 +255,23 @@ export class ChatWindowComponent implements AfterViewChecked {
     if (this.shareFeedbackTimeout) clearTimeout(this.shareFeedbackTimeout);
     this.shareFeedback.set({ id, message });
     this.shareFeedbackTimeout = setTimeout(() => this.shareFeedback.set(null), 2000);
+  }
+
+  /** This message's current thumbs up/down rating, or null if unrated. */
+  public ratingFor(msg: ChatMessage): MessageFeedbackRating | null {
+    return this.chatService.messageFeedback()[msg.id] ?? null;
+  }
+
+  /**
+   * Rates (or, clicked again, un-rates) a response. No-ops without an
+   * active thread id, which shouldn't happen for a rendered assistant
+   * message in practice, but keeps this safe against that edge case rather
+   * than sending a malformed request.
+   */
+  public rateMessage(msg: ChatMessage, rating: MessageFeedbackRating): void {
+    const threadId = this.chatService.activeThreadId();
+    if (!threadId) return;
+    void this.chatService.rateMessage(threadId, msg.id, rating);
   }
 
   /**

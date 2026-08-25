@@ -195,6 +195,24 @@ export interface UsageRecordDto {
   timestamp: number;
 }
 
+/** Thumbs up/down on one assistant message. See
+ *  apps/chat-api/src/services/message-feedback.service.ts for the backend
+ *  design (keyed on userId/threadId/messageId, deliberately NOT correlated
+ *  to usage.service.ts's requestId). */
+export type MessageFeedbackRating = 'up' | 'down';
+
+/** Body for POST /api/chat/feedback - rating: null clears an existing rating
+ *  (re-clicking the currently-selected thumb toggles it off). */
+export interface MessageFeedbackRequest {
+  threadId: string;
+  messageId: string;
+  rating: MessageFeedbackRating | null;
+}
+
+/** Response shape for GET /api/chat/threads/:threadId/feedback - every
+ *  message in that thread the caller has rated, keyed by messageId. */
+export type ThreadFeedbackMap = Record<string, MessageFeedbackRating>;
+
 /** A user workspace: custom instructions + its own scoped file/knowledge set. */
 export interface Project {
   id: string;
