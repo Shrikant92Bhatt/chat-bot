@@ -7,8 +7,10 @@ import {
   ChartData,
   OrchestratorAction,
   OrchestratorSource,
+  PendingUIBlock,
   StockChartData,
   UIComponent,
+  UIComponentType,
   WeatherHourlyPoint,
 } from '@chat-monorepo/shared';
 
@@ -33,11 +35,33 @@ import {
 })
 export class UiBlockComponent {
   @Input() components: UIComponent[] = [];
+  /**
+   * Tool-backed components still loading or that failed mid-turn (see
+   * ui-stream.interface.ts) - rendered as a lightweight skeleton/error card
+   * ahead of `components`, since a loading id is by definition not in that
+   * array yet. Always empty once a turn has fully completed and reloaded.
+   */
+  @Input() pending: PendingUIBlock[] = [];
   @Input() sources: OrchestratorSource[] = [];
   @Input() actions: OrchestratorAction[] = [];
   @Output() actionSelected = new EventEmitter<OrchestratorAction>();
 
   private readonly seriesPalette = ['#06b6d4', '#8b5cf6', '#10b981', '#f59e0b', '#f43f5e', '#38bdf8'];
+
+  private readonly componentLabels: Partial<Record<UIComponentType, string>> = {
+    WEATHER_CARD: 'weather',
+    STOCK_CARD: 'stock quote',
+    STOCK_CHART: 'stock chart',
+    NEWS_CARD: 'news',
+    MAP: 'map',
+    TABLE: 'table',
+    CHART: 'chart',
+  };
+
+  /** Human-readable noun for a component type, for loading/error copy. */
+  public componentLabel(type: UIComponentType): string {
+    return this.componentLabels[type] ?? 'data';
+  }
 
   constructor(private sanitizer: DomSanitizer) {}
 

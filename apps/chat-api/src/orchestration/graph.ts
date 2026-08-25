@@ -8,6 +8,8 @@ import {
   AIModelType,
   ResearchStreamEvent,
   RESEARCH_EVENT_NAME,
+  UIComponent,
+  UIStreamEvent,
 } from '@chat-monorepo/shared';
 import { AgentState, AgentStateAnnotation } from './state';
 import { agentNode, toolsNode, shouldContinue } from './nodes';
@@ -17,6 +19,7 @@ import { generateFollowUpSuggestions } from '../services/suggestions.service';
 import { UsageService } from '../services/usage.service';
 import { UiBlockStreamFilter } from './ui-stream-filter';
 import { extractOrchestratorUiBlock } from './ui-schema';
+import { TOOL_UI_COMPONENT_MAP } from './ui-tool-adapter';
 import { ModelConfigService } from '../services/model-config.service';
 import { SystemLimitsService } from '../services/system-limits.service';
 import { AnonUsageService } from '../services/anon-usage.service';
@@ -136,7 +139,11 @@ async function checkModelQuota(
  * optional {ui?, sources?, actions?} on the final `done: true` event - see
  * ui-schema.ts/ui-stream-filter.ts - so chat.service.ts's SSE parser renders
  * either path's plain text identically and additively picks up the
- * structured extras when present.
+ * structured extras when present. A tool-backed component (weather/stock)
+ * additionally streams live as {uiEvent, done: false} events before that
+ * final event - see ui-tool-adapter.ts and ui-stream.interface.ts - and is
+ * folded into the final `ui` array too, so the persisted message is
+ * identical whether or not the client happened to render the live version.
  *
  * Writes nothing to `res` until the first real output chunk is available;
  * if the workflow fails before that point, the error is rethrown so the
@@ -226,6 +233,23 @@ export async function streamGraphResponse(
     res.write(`data: ${JSON.stringify({ research: event, done: false, model })}\n\n`);
   };
 
+  /**
+   * Forwards a tool-backed UI component's lifecycle to the client (see
+   * ui-stream.interface.ts) - loading the instant the model calls
+   * get_weather/get_stock_quote, then its data or an error the instant the
+   * tool resolves. Same purpose as emitResearch above: make the wait
+   * legible and get the card on screen before the rest of the reply has
+   * even finished streaming, instead of only after the trailing ```ui
+   * block is parsed at the very end.
+   */
+  const emitUi = (event: UIStreamEvent) => {
+    res.write(`data: ${JSON.stringify({ uiEvent: event, done: false, model })}\n\n`);
+  };
+  // Successfully resolved tool-backed components, folded into the final
+  // `ui` payload below so they persist on the message (thread reload,
+  // regenerate) exactly like a model-authored ```ui component would.
+  const toolUiComponents: UIComponent[] = [];
+
   try {
     for await (const event of eventStream) {
       if (event.event === 'on_custom_event' && event.name === RESEARCH_EVENT_NAME) {
@@ -265,6 +289,12 @@ export async function streamGraphResponse(
             const url = (call.args as { url?: string })?.url;
             if (url) emitResearch({ type: 'research_browse_start', url });
           }
+          const componentType = TOOL_UI_COMPONENT_MAP[call.name];
+          if (componentType) {
+            // Same id fallback as toolsNode/nodes.ts uses for this same
+            // call once it resolves - see the comment there.
+            emitUi({ type: 'ui_start', id: call.id ?? call.name, componentType });
+          }
         }
 
         if (toolCalls.length > 0) {
@@ -281,6 +311,12 @@ export async function streamGraphResponse(
           generatedImageUrl = output.generatedImageUrl;
           wroteAnyOutput = true;
           res.write(`data: ${JSON.stringify({ imageUrl: generatedImageUrl, done: false, model })}\n\n`);
+        }
+        for (const uiEvent of output?.pendingUiEvents ?? []) {
+          emitUi(uiEvent);
+          if (uiEvent.type === 'ui_update') {
+            toolUiComponents.push({ type: uiEvent.componentType, id: uiEvent.id, data: uiEvent.data } as UIComponent);
+          }
         }
       }
     }
@@ -307,6 +343,13 @@ export async function streamGraphResponse(
   }
   const uiPayload = rawUiBlock ? extractOrchestratorUiBlock(rawUiBlock) : null;
 
+  // Tool-backed components (already streamed live via emitUi above) are the
+  // authoritative source for their id; the model's own ```ui block is only
+  // consulted for ids it didn't already produce, so a model that echoes the
+  // same weather/stock card back doesn't render it twice.
+  const toolUiIds = new Set(toolUiComponents.map((c) => c.id));
+  const mergedUi = [...toolUiComponents, ...(uiPayload?.ui ?? []).filter((c) => !toolUiIds.has(c.id))];
+
   // Long-term memory write-back: deliberately AFTER the stream, and not
   // awaited, so the extraction gate/LLM call never adds latency to a turn.
   recordTurnMemories({ uid: ownerId, threadId: request.threadId, messages: request.messages || [] });
@@ -328,7 +371,8 @@ export async function streamGraphResponse(
       done: true,
       model,
       suggestions,
-      ...(uiPayload ? { ui: uiPayload.ui, actions: uiPayload.actions } : {}),
+      ...(mergedUi.length > 0 ? { ui: mergedUi } : {}),
+      ...(uiPayload?.actions?.length ? { actions: uiPayload.actions } : {}),
       ...(mergedSources.length > 0 ? { sources: mergedSources } : {}),
       ...(switchNotice ? { modelSwitch: switchNotice } : {}),
     })}\n\n`

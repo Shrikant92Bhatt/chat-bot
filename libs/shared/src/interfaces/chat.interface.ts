@@ -1,5 +1,6 @@
 import { UIComponent, OrchestratorSource, OrchestratorAction } from './orchestrator.interface';
 import { ResearchTrace } from './research.interface';
+import { PendingUIBlock } from './ui-stream.interface';
 
 export type AIModelType = string;
 
@@ -115,6 +116,13 @@ export interface ChatMessage {
    * text/Markdown.
    */
   ui?: UIComponent[];
+  /**
+   * Tool-backed components still loading or that failed mid-turn (see
+   * ui-stream.interface.ts). Purely transient progress state - always
+   * cleared once the turn's final `ui` payload above is attached, and
+   * never round-tripped through thread persistence.
+   */
+  pendingUi?: PendingUIBlock[];
   /** Sources cited for this reply's `ui` payload, if any. */
   sources?: OrchestratorSource[];
   /** Suggested follow-up actions tied to this reply's `ui` payload, if any. */

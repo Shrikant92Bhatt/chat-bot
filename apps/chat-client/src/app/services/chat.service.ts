@@ -14,6 +14,8 @@ import {
   OrchestratorAction,
   ResearchStreamEvent,
   ResearchTrace,
+  UIStreamEvent,
+  PendingUIBlock,
 } from '@chat-monorepo/shared';
 import { AuthService } from './auth.service';
 import { getApiBaseUrl } from '../core/runtime-config';
@@ -743,6 +745,7 @@ export class ChatService {
                       error: false,
                       imageUrl: undefined,
                       ui: undefined,
+                      pendingUi: undefined,
                       sources: undefined,
                       actions: undefined,
                       suggestions: undefined,
@@ -868,6 +871,10 @@ export class ChatService {
                 this.applyResearchEvent(data.research as ResearchStreamEvent);
               }
 
+              if (data.uiEvent) {
+                this.applyUiStreamEvent(threadId, assistantMessageId, data.uiEvent as UIStreamEvent);
+              }
+
               if (data.chunk) {
                 // Real content supersedes the live status line - once the
                 // model is writing, "searching" is stale. The trace itself
@@ -934,6 +941,10 @@ export class ChatService {
         this.setMessageResearch(threadId, assistantMessageId, trace);
         this.activeResearchTrace.set(null);
       }
+      // Covers Stop Generation and a dropped connection alike: either can
+      // end the turn between a tool's ui_start and its ui_update/ui_error,
+      // which would otherwise leave that card spinning forever.
+      this.clearStaleLoadingUi(threadId, assistantMessageId);
       this.abortController = null;
       if (isAuthenticated) {
         this.persistUserThreadHistory();
@@ -1130,10 +1141,84 @@ export class ChatService {
   }
 
   /**
+   * Folds one tool-backed UI lifecycle event (ui_start/ui_update/ui_error)
+   * into a message's transient `pendingUi` list, so a WEATHER_CARD/
+   * STOCK_CARD shows a loading state the instant the model calls the tool
+   * and its real data the instant the tool resolves - instead of only
+   * appearing once the entire reply (and its trailing ```ui block) has
+   * finished streaming. See ui-stream.interface.ts.
+   *
+   * ui_update additionally appends the completed component straight onto
+   * `ui` (the same array the final `done` payload writes) so it renders via
+   * the normal app-ui-block path immediately, not just as a placeholder -
+   * setMessageUi's later, authoritative write is idempotent over this.
+   */
+  private applyUiStreamEvent(threadId: string, messageId: string, event: UIStreamEvent): void {
+    this.threads.update((threadsList) =>
+      threadsList.map((t) => {
+        if (t.id !== threadId) return t;
+        return {
+          ...t,
+          messages: t.messages.map((m) => {
+            if (m.id !== messageId) return m;
+
+            if (event.type === 'ui_start') {
+              const pending: PendingUIBlock[] = [
+                ...(m.pendingUi ?? []).filter((p) => p.id !== event.id),
+                { id: event.id, componentType: event.componentType, status: 'loading' },
+              ];
+              return { ...m, pendingUi: pending };
+            }
+
+            if (event.type === 'ui_error') {
+              const pending: PendingUIBlock[] = (m.pendingUi ?? []).map((p) =>
+                p.id === event.id ? { ...p, status: 'error', errorMessage: event.message } : p
+              );
+              return { ...m, pendingUi: pending };
+            }
+
+            // ui_update: promote from pendingUi into the real, rendered `ui` list.
+            const pending = (m.pendingUi ?? []).filter((p) => p.id !== event.id);
+            const ui = [...(m.ui ?? []).filter((c) => c.id !== event.id), { type: event.componentType, id: event.id, data: event.data } as UIComponent];
+            return { ...m, pendingUi: pending, ui };
+          }),
+        };
+      })
+    );
+  }
+
+  /**
+   * Drops any pendingUi entry still stuck in 'loading' once a turn has
+   * ended (normally, via Stop Generation, or a dropped connection) - the
+   * only way one can still be there is a tool call whose ui_update/ui_error
+   * never arrived, and an indefinite spinner is worse than no card at all.
+   */
+  private clearStaleLoadingUi(threadId: string, messageId: string): void {
+    this.threads.update((threadsList) =>
+      threadsList.map((t) => {
+        if (t.id !== threadId) return t;
+        return {
+          ...t,
+          messages: t.messages.map((m) =>
+            m.id === messageId && m.pendingUi?.some((p) => p.status === 'loading')
+              ? { ...m, pendingUi: m.pendingUi.filter((p) => p.status !== 'loading') }
+              : m
+          ),
+        };
+      })
+    );
+  }
+
+  /**
    * Attaches the orchestrator's structured UI payload to a message, once,
    * on the final `done: true` SSE event - mirrors setMessageSuggestions.
    * `data.ui`/`sources`/`actions` are already validated server-side (see
    * apps/chat-api/src/orchestration/ui-schema.ts) so this just stores them.
+   * Also prunes `pendingUi` down to just its error entries: by `done` every
+   * tool-backed component has either landed in `ui` above (dropped from
+   * pendingUi already by applyUiStreamEvent) or failed (kept, so the error
+   * card explaining the missing component stays visible) - nothing
+   * legitimate is still genuinely "loading" at this point.
    */
   private setMessageUi(
     threadId: string,
@@ -1145,7 +1230,11 @@ export class ChatService {
     this.threads.update((threadsList) =>
       threadsList.map((t) => {
         if (t.id === threadId) {
-          const updatedMessages = t.messages.map((m) => (m.id === messageId ? { ...m, ui, sources, actions } : m));
+          const updatedMessages = t.messages.map((m) =>
+            m.id === messageId
+              ? { ...m, ui, sources, actions, pendingUi: (m.pendingUi ?? []).filter((p) => p.status === 'error') }
+              : m
+          );
           return { ...t, messages: updatedMessages };
         }
         return t;

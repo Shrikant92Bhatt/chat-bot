@@ -85,7 +85,7 @@ export const EMPTY_CONTEXT: AssembledContext = {};
  * since system:v1 is unconditional, but keeps callers honest).
  */
 export function buildSystemPrompt(context: AssembledContext, options: { mcpEnabled?: boolean } = {}): string | null {
-  const blocks: string[] = [renderPrompt('system:v1'), renderPrompt('ui_orchestrator:v1')];
+  const blocks: string[] = [renderPrompt('system:v1'), renderPrompt('ui_orchestrator:v2')];
 
   if (options.mcpEnabled) {
     blocks.push(renderPrompt('tool_selection:v1'));

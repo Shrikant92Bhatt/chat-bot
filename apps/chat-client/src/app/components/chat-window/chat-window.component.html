@@ -100,8 +100,9 @@
                      first, above the text: the card carries the at-a-glance answer, the Markdown
                      below is supporting detail, not the other way around. -->
                 <app-ui-block
-                  *ngIf="msg.ui && msg.ui.length > 0"
-                  [components]="msg.ui"
+                  *ngIf="(msg.ui && msg.ui.length > 0) || (msg.pendingUi && msg.pendingUi.length > 0)"
+                  [components]="msg.ui || []"
+                  [pending]="msg.pendingUi || []"
                   [actions]="msg.actions || []"
                   (actionSelected)="chatService.sendMessage($event.label)"
                   class="block mb-3"

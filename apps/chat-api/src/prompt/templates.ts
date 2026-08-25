@@ -180,6 +180,50 @@ export const PROMPT_TEMPLATES: Record<string, PromptTemplate> = {
       'yes/no decision the user needs to make before you proceed.',
   },
 
+  'ui_orchestrator:v2': {
+    id: 'ui_orchestrator',
+    version: 'v2',
+    description:
+      'v1 plus one rule: the app already renders WEATHER_CARD/STOCK_CARD live from get_weather/get_stock_quote ' +
+      'the instant those tools resolve (see orchestration/ui-tool-adapter.ts), so telling the model to skip ' +
+      're-emitting the same card in its ```ui block avoids a visible duplicate.',
+    variables: [],
+    template:
+      '## Structured UI components\n' +
+      'Write your normal Markdown answer first, exactly as you always would. Only when a pre-approved ' +
+      'interactive component would genuinely help THIS answer (not for decoration), end your reply with ' +
+      'one fenced block, and nothing after it:\n\n' +
+      '```ui\n' +
+      '{"ui": [{"type": "<TYPE>", "id": "<unique-id>", "data": { ... }}], "sources": [], "actions": []}\n' +
+      '```\n\n' +
+      'Approved types: TEXT, MARKDOWN, TABLE, CHART, WEATHER_CARD, STOCK_CARD, STOCK_CHART, NEWS_CARD, ' +
+      'MAP, PRODUCT_CARD, PRODUCT_CAROUSEL, FILE_CARD, DOCUMENT_PREVIEW, CODE_BLOCK, ERROR_CARD, ' +
+      'CONFIRMATION_CARD. Never invent a different type and never emit raw HTML, JavaScript, Angular, ' +
+      'or React inside `data` — the frontend owns rendering and only knows these fixed shapes.\n\n' +
+      'Rules:\n' +
+      '- `ui` is an array; omit the whole ```ui block when plain text/Markdown is sufficient (most replies).\n' +
+      '- Every `id` must be unique within the block.\n' +
+      '- `data` holds only the fields that component needs — see the fixed shapes below.\n' +
+      '- Never invent data. Every field must come from a tool result, retrieved context, or something ' +
+      'already established in this conversation. If you lack real data for a field, do not emit that component.\n' +
+      '- The app already shows a WEATHER_CARD/STOCK_CARD automatically the instant get_weather/get_stock_quote ' +
+      'resolves — do NOT also emit a WEATHER_CARD or STOCK_CARD for that same data in this block, it would ' +
+      'render twice. Only add other component types here (TABLE, CHART, etc.) if genuinely useful in addition.\n' +
+      '- If a tool call failed, use ERROR_CARD (title, message, toolName?) to report it instead of guessing.\n' +
+      '- WEATHER_CARD: {location, current:{temperature, condition, humidity, windSpeed}, forecast?:[{date, ' +
+      'temperatureHigh, temperatureLow, condition, precipitationProbability}], hourly?:[{time, temperature}]}.\n' +
+      '- STOCK_CARD: {symbol, name, price, change, changePercent, currency}.\n' +
+      '- STOCK_CHART: {symbol, name?, currency?, interval?, points:[{timestamp, price}]}.\n' +
+      '- TABLE: {columns:[string], rows:[[string|number|null]]}.\n' +
+      '- CHART: {chartType: "line"|"bar"|"pie"|"area"|"scatter", title?, xAxis:[string|number], ' +
+      'series:[{name, data:[number]}]}.\n' +
+      '- NEWS_CARD: {articles:[{title, source?, url?, publishedAt?, summary?, imageUrl?}]}.\n' +
+      '- CODE_BLOCK: {language, code, fileName?} — only when code needs its own component separate from a ' +
+      'fenced code block in the Markdown answer (e.g. a downloadable snippet).\n' +
+      '- CONFIRMATION_CARD: {title, description?, confirmLabel?, cancelLabel?, actionId?} — for a ' +
+      'yes/no decision the user needs to make before you proceed.',
+  },
+
   'account_identity:v1': {
     id: 'account_identity',
     version: 'v1',
