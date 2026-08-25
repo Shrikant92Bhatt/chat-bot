@@ -1,0 +1,21 @@
+<div class="rounded-2xl border border-white/10 bg-white/[0.03] p-2 flex flex-col gap-2">
+  <a
+    *ngFor="let article of data.articles"
+    [href]="article.url || null"
+    target="_blank"
+    rel="noopener"
+    class="flex gap-3 rounded-xl p-2 hover:bg-white/[0.04] transition-colors"
+    [class.cursor-default]="!article.url"
+  >
+    <img *ngIf="article.imageUrl" [src]="article.imageUrl" alt="" class="w-14 h-14 rounded-lg object-cover shrink-0" />
+    <div class="min-w-0">
+      <div class="text-sm text-slate-100 font-medium line-clamp-2">{{ article.title }}</div>
+      <div *ngIf="article.summary" class="text-xs text-slate-400 line-clamp-2 mt-0.5">{{ article.summary }}</div>
+      <div class="text-[10px] text-slate-500 mt-1">
+        <span *ngIf="article.source">{{ article.source }}</span>
+        <span *ngIf="article.source && article.publishedAt"> · </span>
+        <span *ngIf="article.publishedAt">{{ article.publishedAt }}</span>
+      </div>
+    </div>
+  </a>
+</div>

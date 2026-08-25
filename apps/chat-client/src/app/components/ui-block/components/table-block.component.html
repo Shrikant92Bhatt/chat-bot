@@ -1,0 +1,18 @@
+<div class="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden">
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm text-left">
+      <thead>
+        <tr class="border-b border-white/10">
+          <th *ngFor="let col of data.columns" class="px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-slate-400">
+            {{ col }}
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let row of data.rows" class="border-b border-white/5 last:border-0">
+          <td *ngFor="let cell of row" class="px-3 py-2 text-slate-200">{{ cell ?? '—' }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
