@@ -1,0 +1,66 @@
+/**
+ * Out-of-band raw-text registry for rendered code blocks.
+ *
+ * The Copy button injected into `marked`-generated HTML (see
+ * `code-block-renderer.ts`) cannot carry the original source text as a
+ * DOM/HTML round-trip - re-extracting it from `textContent` after
+ * highlighting would mangle whitespace (highlighted markup wraps tokens in
+ * `<span>`s, and per-line wrapping for line numbers splits the text into
+ * block elements) and, more importantly, would mean the "trusted" copy
+ * button reads back through the exact same untrusted-content path we just
+ * sanitized. Instead, the raw string is kept here, in memory, keyed by a
+ * short id that's embedded into the rendered HTML as a `code-id-<id>` CSS
+ * class (see the module comment in `code-block-renderer.ts` for why a class
+ * and not a `data-*` attribute). The click handler looks the id up here to
+ * get back the exact original text.
+ *
+ * A single module-level `Map` is intentional: `marked`'s renderer is a
+ * process-wide singleton (importing `marked` anywhere returns the same
+ * instance), and this store needs to be reachable both from that renderer
+ * hook (render time) and from the click delegation handler (click time)
+ * without threading an instance through Angular DI into plain-TS code that
+ * isn't part of the injector tree. The id is a hash of the snippet's own
+ * content (see `hashCodeSnippet`), so re-rendering the same code (e.g. on
+ * every change-detection pass while a message streams in) reuses the same
+ * map entry instead of growing one entry per render - the map only grows
+ * with the number of *distinct* code snippets seen, not the number of
+ * renders.
+ */
+
+const snippets = new Map<string, string>();
+
+/**
+ * FNV-1a, 32-bit. Not cryptographic - this only needs to be fast, stable
+ * across calls with the same input, and collision-unlikely for the size of
+ * a chat session's worth of distinct code snippets, not collision-proof
+ * against an adversary. A collision's worst case is a wrong (but still
+ * real, still safe) snippet getting copied, not an XSS or data leak.
+ */
+export function hashCodeSnippet(language: string, code: string): string {
+  const input = `${language}\0${code}`;
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  // >>> 0 forces an unsigned 32-bit value before base36 so the id is always
+  // a plain alphanumeric string, safe to embed directly in a class name.
+  return (hash >>> 0).toString(36);
+}
+
+/** Registers a snippet's raw text, returning the id to embed in rendered HTML. */
+export function registerCodeSnippet(language: string, code: string): string {
+  const id = hashCodeSnippet(language, code);
+  snippets.set(id, code);
+  return id;
+}
+
+/** Looks up a snippet's exact original text by id, or undefined if unknown. */
+export function getCodeSnippet(id: string): string | undefined {
+  return snippets.get(id);
+}
+
+/** Test-only: clears the store between spec runs so ids can't leak across tests. */
+export function __resetCodeSnippetStoreForTests(): void {
+  snippets.clear();
+}
