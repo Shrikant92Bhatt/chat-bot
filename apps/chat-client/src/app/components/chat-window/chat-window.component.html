@@ -248,6 +248,45 @@
                   <span *ngIf="shareFeedback()?.id !== msg.id">Share</span>
                   <span *ngIf="shareFeedback()?.id === msg.id">{{ shareFeedback()?.message }}</span>
                 </button>
+
+                <!-- Feedback: thumbs up/down on this response. Re-clicking the
+                     already-selected thumb clears the rating (toggle off) -
+                     see ChatService.rateMessage / message-feedback.util.ts. -->
+                <button
+                  type="button"
+                  (click)="rateMessage(msg, 'up')"
+                  [attr.aria-pressed]="ratingFor(msg) === 'up'"
+                  [attr.aria-label]="ratingFor(msg) === 'up' ? 'Remove helpful rating' : 'Mark this response as helpful'"
+                  [class.text-accentCyan]="ratingFor(msg) === 'up'"
+                  class="flex items-center space-x-1 text-[11px] text-slate-400 hover:text-slate-300 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accentCyan focus-visible:ring-offset-2 focus-visible:ring-offset-obsidian rounded-md"
+                >
+                  <svg class="w-3.5 h-3.5" [attr.fill]="ratingFor(msg) === 'up' ? 'currentColor' : 'none'" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"
+                    />
+                  </svg>
+                </button>
+
+                <button
+                  type="button"
+                  (click)="rateMessage(msg, 'down')"
+                  [attr.aria-pressed]="ratingFor(msg) === 'down'"
+                  [attr.aria-label]="ratingFor(msg) === 'down' ? 'Remove not-helpful rating' : 'Mark this response as not helpful'"
+                  [class.text-accentCyan]="ratingFor(msg) === 'down'"
+                  class="flex items-center space-x-1 text-[11px] text-slate-400 hover:text-slate-300 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accentCyan focus-visible:ring-offset-2 focus-visible:ring-offset-obsidian rounded-md"
+                >
+                  <svg class="w-3.5 h-3.5" [attr.fill]="ratingFor(msg) === 'down' ? 'currentColor' : 'none'" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3"
+                    />
+                  </svg>
+                </button>
               </div>
 
               <!-- Suggested Follow-up Questions -->

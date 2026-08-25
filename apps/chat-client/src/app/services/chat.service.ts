@@ -5,10 +5,12 @@ import {
   ChatAttachment,
   ChatMessage,
   ChatThread,
+  MessageFeedbackRating,
   MessageRole,
   SelectableModel,
   SELECTABLE_MODELS,
   DEFAULT_MODEL_ID,
+  ThreadFeedbackMap,
   UIComponent,
   OrchestratorSource,
   OrchestratorAction,
@@ -17,6 +19,7 @@ import {
 } from '@chat-monorepo/shared';
 import { AuthService } from './auth.service';
 import { getApiBaseUrl } from '../core/runtime-config';
+import { applyRating, nextRatingOnClick } from './message-feedback.util';
 
 @Injectable({
   providedIn: 'root',
@@ -84,6 +87,20 @@ export class ChatService {
   private readonly ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'];
   private readonly ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
 
+  /**
+   * Thumbs up/down state for the ACTIVE thread's messages only, keyed by
+   * messageId - refetched (see loadFeedbackForThread below) whenever
+   * activeThreadId changes, so reopening a saved conversation shows prior
+   * ratings instead of resetting to neutral. Not a cache of every thread's
+   * feedback: a per-thread GET on selection keeps this simple and avoids
+   * fetching/storing feedback for conversations the user never reopens.
+   */
+  public messageFeedback = signal<ThreadFeedbackMap>({});
+  // Guards against a slow GET for a thread the user has since switched away
+  // from overwriting the feedback map for whichever thread is active by the
+  // time it resolves.
+  private feedbackRequestToken = 0;
+
   public activeThread = computed(() => {
     const id = this.activeThreadId();
     return this.threads().find((t) => t.id === id) || null;
@@ -124,6 +141,24 @@ export class ChatService {
       const id = this.activeThreadId();
       if (id) this.location.replaceState(`/chat/${id}`);
     });
+
+    // Restores this thread's thumbs-up/down state whenever the active
+    // thread changes (switching threads, or resuming one on reload) - see
+    // messageFeedback above. Cleared immediately (not left showing the
+    // previous thread's ratings) while the fetch for the new thread is in
+    // flight; anonymous users have nothing to fetch (the endpoint requires
+    // a session), so their feedback map just stays empty.
+    effect(
+      () => {
+        const threadId = this.activeThreadId();
+        const uid = this.authService.userSignal()?.uid;
+        this.messageFeedback.set({});
+        if (threadId && uid) {
+          void this.loadFeedbackForThread(threadId);
+        }
+      },
+      { allowSignalWrites: true }
+    );
 
     // Effect: Reacts to User Login/Logout state changes
     effect(
@@ -415,6 +450,66 @@ export class ChatService {
 
   /** Project the active conversation is scoped to, if any. */
   public activeProjectId = computed(() => this.activeThread()?.projectId ?? null);
+
+  /**
+   * Fetches the caller's ratings for every message in `threadId` (see
+   * GET /api/chat/threads/:id/feedback) and, unless the user has since
+   * switched to a different thread, replaces messageFeedback with the
+   * result. Silent on failure - a missed feedback fetch degrades to "shows
+   * as unrated", never an error toast, since this is a nicety on top of the
+   * conversation, not something a failure here should interrupt.
+   */
+  private async loadFeedbackForThread(threadId: string): Promise<void> {
+    const requestToken = ++this.feedbackRequestToken;
+    try {
+      const res = await fetch(`${this.apiUrl}/threads/${encodeURIComponent(threadId)}/feedback`, {
+        headers: { Authorization: `Bearer ${this.authService.getIdToken()}` },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (requestToken !== this.feedbackRequestToken || this.activeThreadId() !== threadId) return;
+      this.messageFeedback.set((data?.feedback as ThreadFeedbackMap) ?? {});
+    } catch (e) {
+      console.warn('[ChatService] Could not fetch message feedback:', e);
+    }
+  }
+
+  /**
+   * Rates (or, clicking the already-selected thumb again, un-rates - see
+   * nextRatingOnClick) one assistant message. Applies the change to
+   * messageFeedback optimistically so the button reflects the click
+   * immediately, then persists it; a failed request reverts the optimistic
+   * change (unless a newer click has already moved the rating on again),
+   * so a network hiccup never leaves the button showing a state that
+   * silently didn't save.
+   */
+  public async rateMessage(threadId: string, messageId: string, clicked: MessageFeedbackRating): Promise<void> {
+    const previousForMessage = this.messageFeedback()[messageId] ?? null;
+    const nextForMessage = nextRatingOnClick(previousForMessage, clicked);
+
+    this.messageFeedback.update((current) => applyRating(current, messageId, nextForMessage));
+
+    try {
+      const res = await fetch(`${this.apiUrl}/feedback`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.authService.getIdToken()}`,
+        },
+        body: JSON.stringify({ threadId, messageId, rating: nextForMessage }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (e) {
+      console.warn('[ChatService] Failed to save message feedback, reverting:', e);
+      this.messageFeedback.update((current) => {
+        // Only revert if this message's rating is still what we optimistically
+        // set - a rapid second click may have already moved it on again, and
+        // that newer (still in-flight) state must win, not this stale rollback.
+        if ((current[messageId] ?? null) !== nextForMessage) return current;
+        return applyRating(current, messageId, previousForMessage);
+      });
+    }
+  }
 
   // Dedicated image-generation mode (separate from normal chat, like
   // ChatGPT/Gemini's image tool) - switches the composer's placeholder and
