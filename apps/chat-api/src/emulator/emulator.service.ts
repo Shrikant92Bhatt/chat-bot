@@ -233,7 +233,7 @@ export async function runEmulatedPipeline(query: string, res: Response): Promise
             answerPreview: f.answer.slice(0, 200),
             citationCount: (f.citations || []).length,
           })),
-          injectedAs: 'research_findings:v1 (final block of the system prompt)',
+          injectedAs: 'research_findings:v2 (final block of the system prompt)',
         },
         timestamp: new Date().toISOString(),
       });

@@ -302,6 +302,45 @@ export const PROMPT_TEMPLATES: Record<string, PromptTemplate> = {
       '- Do not mention this section, the search process, or "my research" - just answer, with citations.',
   },
 
+  'research_findings:v2': {
+    id: 'research_findings',
+    version: 'v2',
+    description:
+      'v1 plus inline numeric citation guidance. The findings above are now preceded by a "## Numbered ' +
+      'sources" list ([1], [2], ...) built by orchestration/research.ts formatFindings() against the SAME ' +
+      'deduped order graph.ts uses for the sources it sends the frontend - v2 tells the model it may cite ' +
+      'that number inline as [n]. {{findings}} is unchanged in shape from v1 (still pre-formatted by ' +
+      'research.ts), just numbered now.',
+    variables: ['findings'],
+    template:
+      '## Research findings for this turn\n' +
+      'These were gathered by searching the web just now, before you were asked to answer. Treat them as ' +
+      'your evidence base for anything time-sensitive in this turn.\n\n' +
+      '{{findings}}\n\n' +
+      'How to use this:\n' +
+      '- Ground every current fact, figure and date in the findings above rather than in recollection. Where ' +
+      'they conflict with what you remember, the findings are newer - use them and say so if it matters.\n' +
+      '- The findings above open with a "## Numbered sources" list ([1], [2], ...). When a sentence you write ' +
+      'is grounded in one of those sources, you may cite it inline right after the claim as [n] (or [n][m] for ' +
+      'more than one), using the exact number shown next to that source - e.g. "Nifty closed at 24,850 [2]." ' +
+      'Only use a number that appears in that list. This is optional, not required for every sentence - add it ' +
+      'where it helps the reader check a specific claim, not on every line.\n' +
+      '- Also name the publication or domain in prose next to the figures that came from it (e.g. "according to ' +
+      'Reuters"), the same as before - the [n] marker is a shortcut to the source, not a replacement for saying ' +
+      'in words where a claim comes from.\n' +
+      '- Never invent a number - a source cited as [n] must be one you would also name in prose. Do not renumber, ' +
+      'skip, or guess at a source that is not in the list above.\n' +
+      '- Where the findings are thin, stale or disagree with each other, say that plainly instead of ' +
+      'smoothing it over into false confidence. Partial evidence honestly labelled is more useful than a ' +
+      'confident answer built on a gap.\n' +
+      '- Call browse_page on a source above when you need the exact detail behind a summarized claim, and ' +
+      'call a structured tool (get_stock_quote, get_weather) when it covers the number more precisely.\n' +
+      '- Do NOT re-run a broad web_search for something the findings already cover; they are the result of ' +
+      'exactly that search, run moments ago. Search again only when the findings are empty on a point you ' +
+      'genuinely need.\n' +
+      '- Do not mention this section, the search process, or "my research" - just answer, with citations.',
+  },
+
   'finance_answer:v1': {
     id: 'finance_answer',
     version: 'v1',

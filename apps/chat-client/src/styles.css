@@ -324,6 +324,36 @@
   .markdown-body tbody tr:nth-child(even) {
     background: rgba(255, 255, 255, 0.02);
   }
+
+  /* Inline citation marker chips - built by citation-markers.ts from an
+     in-range [n] in the model's prose, wired up to scroll-and-highlight the
+     matching Sources chip below by citation-marker-interactions.ts. Sized
+     and positioned like a footnote/superscript so it reads as an annotation
+     on the word before it, not as part of the sentence's own text. */
+  .citation-marker {
+    @apply inline-flex items-center justify-center cursor-pointer select-none rounded-full bg-white/10 text-accentCyan align-super transition-colors;
+    font-size: 0.65em;
+    line-height: 1;
+    min-width: 1.35em;
+    height: 1.35em;
+    margin: 0 0.05em;
+    padding: 0 0.35em;
+  }
+  .citation-marker:hover {
+    @apply bg-accentCyan/20 text-cyan-200;
+  }
+
+  /* Brief highlight on the Sources chip a citation marker jumps to, so the
+     reader can find it even when it's already in view and scrollIntoView()
+     produces no visible motion on its own. Timed by
+     citation-marker-interactions.ts's flashHighlight() rather than a CSS
+     animation, so a rapid second click restarts the same window instead of
+     the highlight cutting off mid-transition. */
+  .citation-source-highlight {
+    @apply bg-accentCyan/25 text-slate-100;
+    box-shadow: 0 0 0 1px rgba(6, 182, 212, 0.5);
+    transition: background-color 0.2s ease, box-shadow 0.2s ease;
+  }
 }
 
 /* Custom Scrollbar for Glassmorphism UI */

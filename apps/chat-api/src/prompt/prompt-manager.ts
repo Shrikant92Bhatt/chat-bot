@@ -133,7 +133,7 @@ export function buildSystemPrompt(context: AssembledContext, options: { mcpEnabl
   // rather than for the whole conversation, and it should read as evidence
   // for this answer rather than as a standing instruction.
   if (context.researchFindings && context.researchFindings.trim()) {
-    blocks.push(renderPrompt('research_findings:v1', { findings: context.researchFindings.trim() }));
+    blocks.push(renderPrompt('research_findings:v2', { findings: context.researchFindings.trim() }));
     // Only alongside real findings: the structure below asks for levels and
     // drivers, which without evidence would invite exactly the invention
     // the findings block spends its length forbidding.

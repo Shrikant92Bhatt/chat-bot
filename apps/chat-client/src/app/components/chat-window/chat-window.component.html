@@ -109,7 +109,11 @@
         </div>
 
         <!-- Assistant Message -->
-        <div *ngIf="msg.role === 'assistant'" class="flex flex-col py-2 group hover:bg-white/[0.02] transition-colors rounded-2xl -mx-4 px-4">
+        <div
+          *ngIf="msg.role === 'assistant'"
+          [attr.data-message-id]="msg.id"
+          class="flex flex-col py-2 group hover:bg-white/[0.02] transition-colors rounded-2xl -mx-4 px-4"
+        >
           <!-- Header: icon + name sit on their own row so the reply body below
                isn't permanently indented by an avatar column - the response
                gets the full container width instead of losing ~40px/line to
@@ -146,8 +150,12 @@
                   class="block mb-3"
                 ></app-ui-block>
 
-                <!-- Markdown HTML Output -->
-                <div class="markdown-body" [innerHTML]="renderMarkdown(msg.content)"></div>
+                <!-- Markdown HTML Output. sourceCount lets renderMarkdown() turn an
+                     in-range inline [n] citation marker into a clickable chip that
+                     jumps to the matching numbered entry in the Sources block below -
+                     see citation-markers.ts. A message with no sources renders exactly
+                     as before (sourceCount 0 -> renderCitationMarkers is a no-op). -->
+                <div class="markdown-body" [innerHTML]="renderMarkdown(msg.content, msg.sources?.length || 0)"></div>
 
                 <!-- Sources. Deliberately outside the card block above: a
                      researched answer is usually plain prose with no card,
@@ -163,6 +171,7 @@
                       target="_blank"
                       rel="noopener noreferrer"
                       [title]="source.url || ''"
+                      [attr.data-source-index]="i + 1"
                       class="inline-flex items-center gap-1.5 max-w-[16rem] text-[11px] px-2.5 py-1 rounded-full bg-white/5 text-slate-400 hover:text-slate-100 hover:bg-white/10 transition-colors"
                     >
                       <span class="text-slate-500 shrink-0">{{ i + 1 }}</span>
