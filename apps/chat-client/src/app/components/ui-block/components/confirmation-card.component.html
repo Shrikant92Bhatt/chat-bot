@@ -1,0 +1,18 @@
+<div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+  <div class="text-sm text-slate-100 font-medium">{{ data.title }}</div>
+  <div *ngIf="data.description" class="text-xs text-slate-400 mt-1">{{ data.description }}</div>
+  <div class="flex gap-2 mt-3">
+    <button
+      (click)="actionSelected.emit({ id: (data.actionId || id) + ':confirm', label: data.confirmLabel || 'Confirm' })"
+      class="px-3 py-1.5 rounded-full text-xs font-medium bg-accentCyan/20 text-accentCyan hover:bg-accentCyan/30 transition-colors"
+    >
+      {{ data.confirmLabel || 'Confirm' }}
+    </button>
+    <button
+      (click)="actionSelected.emit({ id: (data.actionId || id) + ':cancel', label: data.cancelLabel || 'Cancel' })"
+      class="px-3 py-1.5 rounded-full text-xs font-medium bg-white/5 text-slate-300 hover:bg-white/10 transition-colors"
+    >
+      {{ data.cancelLabel || 'Cancel' }}
+    </button>
+  </div>
+</div>
