@@ -276,14 +276,18 @@ Full env var reference with defaults: [`.env.example`](.env.example).
   self-hosted OmniRoute gateway (falls back to explicit `null`, never fabricated, when absent).
 - Admin usage aggregation is in-process and capped (see §6) — not a design that scales past a
   moderate request volume without a BigQuery export.
-- No thumbs-up/down feedback on assistant messages — no backend endpoint or storage for it yet.
-- Citations are a flat chip list below the answer, not inline `[n]` markers tied to specific claims.
 - `ToolResultLeakStreamFilter` (orchestration/tool-leak-stream-filter.ts) is a narrow, best-effort
   backstop against a tool result leaking into visible prose without the `` ```ui `` fence — it only
   catches 2+ curated weather/stock field names within a lookahead window, and its fenced-code-block
   exemption is a heuristic `` ``` ``-toggle, not real Markdown parsing. Not a guarantee.
 - Thread rename/delete has no backend support — the sidebar's search is a client-side filter over
   already-loaded titles only.
+- Inline `[n]` citation markers are self-consistent only when the model doesn't also populate its
+  own `` ```ui `` `sources` array for the same researched turn — nothing in the current prompts asks
+  it to, so this holds in practice, but it's an assumption, not an enforced invariant.
+- Message feedback (thumbs up/down) has a narrow theoretical race for a brand-new thread: the
+  ownership check only sees a thread once its first `PUT /threads` write lands (on first message
+  send, not thread creation) — normally well before a rateable reply exists, but a real window.
 
 ## 10. How this codebase verifies changes
 
