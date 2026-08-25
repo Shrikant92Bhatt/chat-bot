@@ -276,13 +276,29 @@ Full env var reference with defaults: [`.env.example`](.env.example).
   self-hosted OmniRoute gateway (falls back to explicit `null`, never fabricated, when absent).
 - Admin usage aggregation is in-process and capped (see §6) — not a design that scales past a
   moderate request volume without a BigQuery export.
+- No thumbs-up/down feedback on assistant messages — no backend endpoint or storage for it yet.
+- Citations are a flat chip list below the answer, not inline `[n]` markers tied to specific claims.
+- `ToolResultLeakStreamFilter` (orchestration/tool-leak-stream-filter.ts) is a narrow, best-effort
+  backstop against a tool result leaking into visible prose without the `` ```ui `` fence — it only
+  catches 2+ curated weather/stock field names within a lookahead window, and its fenced-code-block
+  exemption is a heuristic `` ``` ``-toggle, not real Markdown parsing. Not a guarantee.
+- Thread rename/delete has no backend support — the sidebar's search is a client-side filter over
+  already-loaded titles only.
 
 ## 10. How this codebase verifies changes
 
-Not a formal test suite (there isn't one yet) — the working practice has been: real builds from a
-clean cache (`rm -rf dist .nx/cache`, `nx run-many -t build`) rather than trusting incremental
-build/cache state, and for anything security- or behavior-sensitive (the admin authorization
-boundary, the chat auto-scroll logic, RAG reranking quality), a live check against the running
-system — real HTTP requests with real tokens against real data, or a real browser session — rather
-than reasoning about the code in the abstract. Claims in this document and in
-`.agents/PROJECT_CONTEXT.md` reflect that: verified behavior, not just what the code appears to do.
+Both apps now have a real unit test suite — `apps/chat-api` via `npx vitest run --config
+vite.config.ts` (backend orchestration, prompt manager, RAG reranking, research heuristics, the
+UI-tool adapter, both streaming safety filters), `apps/chat-client` via `npx nx test chat-client`
+(the SSE frame parser, the action dispatcher, table CSV/TSV logic, chart geometry, the
+code-highlighting/copy pipeline — chat-client had no test target at all until this was added). Run
+both before treating a change as verified.
+
+Beyond that, the working practice has been: real builds from a clean cache (`rm -rf dist
+.nx/cache`, `nx run-many -t build`) rather than trusting incremental build/cache state, and for
+anything security- or behavior-sensitive (the admin authorization boundary, the chat auto-scroll
+logic, RAG reranking quality, the sanitizer pipeline any `[innerHTML]`-bound surface goes through),
+a live check against the running system — real HTTP requests with real tokens against real data, or
+a real browser session — rather than reasoning about the code in the abstract. Claims in this
+document and in `.agents/PROJECT_CONTEXT.md` reflect that: verified behavior, not just what the code
+appears to do.
