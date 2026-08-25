@@ -115,16 +115,48 @@ describe('Research: assembling findings', () => {
   });
 
   it('renders each query, its answer and its sources', () => {
-    const text = formatFindings([
+    const findings = [
       { query: 'nifty level', answer: 'Nifty closed at 24,850.', citations: [{ url: 'https://x.test', title: 'X' }] },
-    ]);
+    ];
+    const text = formatFindings(findings, collectSources(findings));
     expect(text).toContain('nifty level');
     expect(text).toContain('24,850');
     expect(text).toContain('https://x.test');
   });
 
   it('says so explicitly when a query returned no sources', () => {
-    expect(formatFindings([{ query: 'q', answer: 'a', citations: [] }])).toContain('none returned');
+    const findings = [{ query: 'q', answer: 'a', citations: [] }];
+    expect(formatFindings(findings, collectSources(findings))).toContain('none returned');
+  });
+
+  it('numbers the sources list to match collectSources order, and notes which numbers each finding drew on', () => {
+    const findings = [
+      { query: 'q1', answer: 'a1', citations: [{ url: 'https://a.test', title: 'A' }, { url: 'https://b.test', title: 'B' }] },
+      { query: 'q2', answer: 'a2', citations: [{ url: 'https://b.test', title: 'B' }] },
+    ];
+    const sources = collectSources(findings);
+    const text = formatFindings(findings, sources);
+
+    // Sources list numbered 1..N in collectSources's dedup order.
+    expect(text).toContain('[1] A — https://a.test');
+    expect(text).toContain('[2] B — https://b.test');
+    // Only 2 unique sources despite 3 citations across findings (B dedup'd).
+    expect(sources).toHaveLength(2);
+
+    // First finding cites both; second finding cites only the second source.
+    const q1Section = text.split('### Searched: "q1"')[1].split('### Searched: "q2"')[0];
+    expect(q1Section).toContain('[1]');
+    expect(q1Section).toContain('[2]');
+    const q2Section = text.split('### Searched: "q2"')[1];
+    expect(q2Section).not.toContain('[1]');
+    expect(q2Section).toContain('[2]');
+  });
+
+  it('numbers an empty sources list as "none returned" rather than "[1] none returned"', () => {
+    const findings = [{ query: 'q', answer: 'a', citations: [] }];
+    const text = formatFindings(findings, []);
+    expect(text).toContain('none returned.');
+    expect(text).not.toMatch(/\[1\]\s*none returned/);
   });
 });
 

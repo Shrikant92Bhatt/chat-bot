@@ -25,6 +25,23 @@ import { AgentState, AgentStateUpdate } from './state';
  * planner call. The planner itself is the final gate - it can still answer
  * needsResearch:false, which is the case the heuristic is deliberately too
  * loose to catch on its own.
+ *
+ * Inline citation numbering (best-effort, not a guarantee): `formatFindings`
+ * numbers the sources it shows the model against `collectSources`'s deduped,
+ * first-seen order - the exact array that becomes `researchSources` on the
+ * state update below, which graph.ts's `mergedSources` then exposes to the
+ * frontend as `data.sources` (declared model sources first, these after).
+ * research_findings:v2 tells the model it may cite `[n]` against that same
+ * numbering. This is guaranteed self-consistent ONLY when the model doesn't
+ * ALSO populate its own ```ui `sources` array for the same turn - nothing in
+ * this app's prompts currently instructs it to for a researched turn (the
+ * `sources: []` in ui_orchestrator:v2's example is never filled in
+ * practice), so in the common case declaredSources is empty and this
+ * module's numbering IS the frontend's numbering. If that ever changes, the
+ * model's own sources would shift the frontend's numbers ahead of these and
+ * silently break the mapping - the frontend's marker renderer treats an
+ * out-of-range `[n]` as plain text rather than a broken link specifically
+ * because this guarantee is conditional, not absolute.
  */
 
 /** Planner runs on a cheap fast model - this is extraction, not the answer. */
@@ -254,20 +271,41 @@ export function collectSources(findings: ResearchFinding[]): ResearchSource[] {
   return Array.from(seen.values());
 }
 
-/** Formats findings into the block that research_findings:v1 wraps. */
-export function formatFindings(findings: ResearchFinding[]): string {
-  return findings
-    .map((finding, index) => {
-      const sources = (finding.citations || [])
-        .map((c) => `  - ${c.title ? `${c.title} — ` : ''}${c.url}`)
-        .join('\n');
-      return [
-        `### Finding ${index + 1} — searched: "${finding.query}"`,
-        finding.answer.trim(),
-        sources ? `Sources:\n${sources}` : 'Sources: none returned.',
-      ].join('\n');
+/**
+ * Formats findings into the block that research_findings:v2 wraps.
+ *
+ * `sources` must be `collectSources(findings)` — the SAME deduped,
+ * first-seen-order list that becomes `researchSources` on the state update
+ * below, which graph.ts then merges (model's own declared sources first,
+ * these after) into the final `data.sources` array the frontend numbers as
+ * its "Sources" chips. Numbering every citation here against that exact
+ * list, rather than restarting per-finding, is what lets the model's own
+ * `[n]` inline citations (see research_findings:v2) point at the same
+ * source the reader lands on when they click chip `n` - see this module's
+ * top-of-file doc comment for the numbering-consistency caveat (it holds
+ * only when the model doesn't ALSO declare its own ```ui `sources`, which
+ * nothing in this app's prompts currently asks it to do for a researched
+ * turn).
+ */
+export function formatFindings(findings: ResearchFinding[], sources: ResearchSource[]): string {
+  const numberByUrl = new Map<string, number>();
+  sources.forEach((source, index) => numberByUrl.set(source.url, index + 1));
+
+  const sourceList = sources.length
+    ? sources.map((source, index) => `[${index + 1}] ${source.title ? `${source.title} — ` : ''}${source.url}`).join('\n')
+    : 'none returned.';
+
+  const findingsBlock = findings
+    .map((finding) => {
+      const citedNumbers = (finding.citations || [])
+        .map((c) => numberByUrl.get(c.url))
+        .filter((n): n is number => n !== undefined);
+      const citedNote = citedNumbers.length > 0 ? ` — draws on source${citedNumbers.length > 1 ? 's' : ''} ${citedNumbers.map((n) => `[${n}]`).join(', ')}` : '';
+      return [`### Searched: "${finding.query}"${citedNote}`, finding.answer.trim()].join('\n');
     })
     .join('\n\n');
+
+  return `## Numbered sources\n${sourceList}\n\n${findingsBlock}`;
 }
 
 /** Text of the most recent human turn, which is what gets researched. */
@@ -369,7 +407,10 @@ export async function researchNode(state: AgentState): Promise<AgentStateUpdate>
     researchSources: sources,
     assembledContext: {
       ...(state.assembledContext ?? {}),
-      researchFindings: formatFindings(findings),
+      // formatFindings numbers citations against this SAME `sources` array
+      // (see its doc comment) so the model's inline [n] markers line up
+      // with the chip numbering graph.ts's mergedSources produces from it.
+      researchFindings: formatFindings(findings, sources),
       financeQuestion: looksFinancial(question),
     },
   };

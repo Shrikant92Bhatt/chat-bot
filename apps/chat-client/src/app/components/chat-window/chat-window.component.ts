@@ -11,6 +11,8 @@ import { ChatMessage, ResearchTrace } from '@chat-monorepo/shared';
 import { configureMarkedForCodeBlocks } from '../../shared/markdown/code-block-renderer';
 import { handleCodeBlockClick } from '../../shared/markdown/code-block-interactions';
 import { sanitizeGeneratedHtml } from '../../shared/markdown/sanitize-html';
+import { renderCitationMarkers } from '../../shared/markdown/citation-markers';
+import { handleCitationMarkerClick } from '../../shared/markdown/citation-marker-interactions';
 
 configureMarkedForCodeBlocks();
 
@@ -262,25 +264,38 @@ export class ChatWindowComponent implements AfterViewChecked {
    * executable before it ever reaches [innerHTML] - Angular's own
    * built-in sanitizer still runs on top of that as a second layer,
    * since this returns a plain string rather than a bypassed SafeHtml.
+   *
+   * `sourceCount` (defaults to 0 - plain-text messages and every UI
+   * component/image-only reply that never calls this with a real count
+   * behave exactly as before) is `msg.sources.length` for the message being
+   * rendered; `renderCitationMarkers()` runs last, after sanitization, and
+   * turns an in-range `[n]` into a clickable chip - see that module's doc
+   * comment for exactly what is and isn't guaranteed about it.
    */
-  public renderMarkdown(content: string): string {
+  public renderMarkdown(content: string, sourceCount = 0): string {
     if (!content) return '';
     const rawHtml = marked.parse(content, { async: false }) as string;
-    return sanitizeGeneratedHtml(rawHtml, this.sanitizer);
+    const safeHtml = sanitizeGeneratedHtml(rawHtml, this.sanitizer);
+    return renderCitationMarkers(safeHtml, { sourceCount });
   }
 
   /**
    * Delegated click handler for the Copy/Wrap/line-number buttons that
    * `configureMarkedForCodeBlocks()` injects into fenced code blocks inside
-   * `renderMarkdown()`'s output. Those buttons live inside `[innerHTML]`
-   * content and can't carry Angular `(click)` bindings of their own - see
-   * `handleCodeBlockClick`'s doc comment. Bound on the container that wraps
-   * every message's rendered Markdown (see chat-window.component.html), so
-   * one listener covers every code block in the thread.
+   * `renderMarkdown()`'s output, and for the inline citation marker chips
+   * `renderCitationMarkers()` injects into that same output. Both live
+   * inside `[innerHTML]` content and can't carry Angular `(click)` bindings
+   * of their own - see `handleCodeBlockClick`'s and
+   * `handleCitationMarkerClick`'s doc comments. Bound on the container that
+   * wraps every message's rendered Markdown (see
+   * chat-window.component.html), so one listener covers every code block
+   * and citation marker in the thread; each handler is a no-op when the
+   * click wasn't inside its own kind of target, so the two can't interfere.
    */
   @HostListener('click', ['$event'])
   public onMessagesClick(event: Event): void {
     handleCodeBlockClick(event);
+    handleCitationMarkerClick(event);
   }
 
   public getUserDisplayName(): string {
