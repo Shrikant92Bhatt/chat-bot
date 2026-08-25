@@ -18,6 +18,7 @@ import { buildContext, recordTurnMemories } from '../context/context-builder';
 import { generateFollowUpSuggestions } from '../services/suggestions.service';
 import { UsageService } from '../services/usage.service';
 import { UiBlockStreamFilter } from './ui-stream-filter';
+import { ToolResultLeakStreamFilter } from './tool-leak-stream-filter';
 import { extractOrchestratorUiBlock } from './ui-schema';
 import { TOOL_UI_COMPONENT_MAP } from './ui-tool-adapter';
 import { ModelConfigService } from '../services/model-config.service';
@@ -206,7 +207,14 @@ export async function streamGraphResponse(
   // block from the live token stream so its raw JSON never flashes on
   // screen; visibleText accumulates only what actually gets shown to the
   // user, which is also what follow-up suggestions are generated from.
+  //
+  // leakFilter is a second, independent pass over whatever uiFilter judged
+  // safe to show - a best-effort backstop for the case the fenced-block
+  // filter above can't cover: the model narrating a tool's raw JSON in
+  // prose WITHOUT the ```ui fence (see tool-leak-stream-filter.ts for what
+  // it does and does not guarantee).
   const uiFilter = new UiBlockStreamFilter();
+  const leakFilter = new ToolResultLeakStreamFilter();
   let visibleText = '';
 
   // Summed across every model invocation in this turn (the agent<->tools
@@ -257,7 +265,7 @@ export async function streamGraphResponse(
       } else if (event.event === 'on_chat_model_stream') {
         const content = event.data?.chunk?.content;
         if (typeof content === 'string' && content.length > 0) {
-          const visible = uiFilter.push(content);
+          const visible = leakFilter.push(uiFilter.push(content));
           if (visible.length > 0) {
             wroteAnyOutput = true;
             visibleText += visible;
@@ -336,10 +344,11 @@ export async function streamGraphResponse(
   // text that turned out not to be a ```ui fence, or - if a fence was
   // opened - nothing, since that's the captured block below instead).
   const { trailingVisible, rawUiBlock } = uiFilter.finish();
-  if (trailingVisible.length > 0) {
+  const trailingSafe = (trailingVisible.length > 0 ? leakFilter.push(trailingVisible) : '') + leakFilter.finish();
+  if (trailingSafe.length > 0) {
     wroteAnyOutput = true;
-    visibleText += trailingVisible;
-    res.write(`data: ${JSON.stringify({ chunk: trailingVisible, done: false, model })}\n\n`);
+    visibleText += trailingSafe;
+    res.write(`data: ${JSON.stringify({ chunk: trailingSafe, done: false, model })}\n\n`);
   }
   const uiPayload = rawUiBlock ? extractOrchestratorUiBlock(rawUiBlock) : null;
 
