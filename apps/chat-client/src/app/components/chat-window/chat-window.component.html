@@ -175,8 +175,14 @@
                      happen before the first token exists, so when the backend
                      says what it's doing, show that instead of a bare dot -
                      a named wait reads as progress, an anonymous one reads as
-                     a hang. -->
-                <div *ngIf="chatService.isStreaming() && !msg.content" class="flex items-center gap-2 py-2">
+                     a hang. Only shown when app-research-panel above ISN'T
+                     already rendered for this message - the panel's own
+                     header carries the identical status text plus its own
+                     pulsing indicator, so showing both duplicates the same
+                     line. This stays visible only for the brief window
+                     before the very first research_status event arrives, if
+                     that window exists at all. -->
+                <div *ngIf="chatService.isStreaming() && !msg.content && !researchTraceFor(msg)" class="flex items-center gap-2 py-2">
                   <span class="w-2 h-2 rounded-full bg-slate-500 animate-ping shrink-0"></span>
                   <span
                     *ngIf="chatService.activityStatus() as status"
