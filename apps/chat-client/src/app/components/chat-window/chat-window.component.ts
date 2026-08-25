@@ -6,13 +6,15 @@ import DOMPurify from 'dompurify';
 import { ChatService } from '../../services/chat.service';
 import { AuthService } from '../../services/auth.service';
 import { UiBlockComponent } from '../ui-block/ui-block.component';
+import { ResearchPanelComponent } from '../research-panel/research-panel.component';
+import { ChatMessage, ResearchTrace } from '@chat-monorepo/shared';
 
 marked.setOptions({ gfm: true, breaks: true });
 
 @Component({
   selector: 'app-chat-window',
   standalone: true,
-  imports: [CommonModule, UiBlockComponent],
+  imports: [CommonModule, UiBlockComponent, ResearchPanelComponent],
   changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './chat-window.component.html',
   // The host element sits inside a flex-col (<main>) alongside
@@ -149,6 +151,42 @@ export class ChatWindowComponent implements AfterViewChecked {
       this.copiedMessageId.set(null);
       this.copiedResetTimeout = null;
     }, 2000);
+  }
+
+  /**
+   * The research trace to show for a message: the live one while this
+   * message is the one being streamed, otherwise whatever was pinned to it
+   * when its turn finished. Returns null when there is nothing to show, so
+   * the panel stays out of the way on ordinary turns.
+   */
+  public researchTraceFor(msg: ChatMessage): ResearchTrace | null {
+    if (msg.role !== 'assistant') return null;
+    if (this.chatService.isStreaming() && this.isLastMessage(msg)) {
+      return this.chatService.activeResearchTrace() ?? msg.research ?? null;
+    }
+    return msg.research ?? null;
+  }
+
+  /** True for the final message of the active thread. */
+  public isLastMessage(msg: ChatMessage): boolean {
+    const messages = this.chatService.activeThread()?.messages ?? [];
+    return messages.length > 0 && messages[messages.length - 1].id === msg.id;
+  }
+
+  /**
+   * Label for a source chip. Prefers the publisher's own title; falls back
+   * to the bare hostname, which is far more scannable than a full URL when
+   * an answer cites half a dozen pages.
+   */
+  public sourceLabel(source: { title?: string; url?: string }): string {
+    const title = source.title?.trim();
+    if (title) return title;
+    if (!source.url) return 'Source';
+    try {
+      return new URL(source.url).hostname.replace(/^www\./, '');
+    } catch {
+      return source.url;
+    }
   }
 
   /** Shares a single response via the device's native share sheet, falling back to clipboard. */

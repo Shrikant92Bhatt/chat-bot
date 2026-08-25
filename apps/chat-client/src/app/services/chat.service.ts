@@ -12,6 +12,8 @@ import {
   UIComponent,
   OrchestratorSource,
   OrchestratorAction,
+  ResearchStreamEvent,
+  ResearchTrace,
 } from '@chat-monorepo/shared';
 import { AuthService } from './auth.service';
 import { getApiBaseUrl } from '../core/runtime-config';
@@ -33,6 +35,21 @@ export class ChatService {
   // misleadingly-empty list during this window.
   public isLoadingThreads = signal<boolean>(false);
   public isStreaming = signal<boolean>(false);
+  /**
+   * What the backend is doing right now ("Searching the web", "Read 6
+   * sources across 4 searches"). Research and tool round-trips all happen
+   * before the first token exists, so without this the user watches an
+   * idle spinner. Transient by design - cleared when the turn ends, and
+   * never written into the message itself.
+   */
+  public activityStatus = signal<string | null>(null);
+  /**
+   * The in-flight research trace for the turn being streamed, rebuilt from
+   * the events the backend emits (see libs/shared research.interface.ts).
+   * Mirrored onto the assistant message when the turn ends, so the panel
+   * can still be reopened later.
+   */
+  public activeResearchTrace = signal<ResearchTrace | null>(null);
   // On by default so tool calls (image generation, calculator) work out of
   // the box - users can still switch it off in Settings.
   public mcpEnabled = signal<boolean>(true);
@@ -610,6 +627,7 @@ export class ChatService {
       this.updateAssistantMessage(currentThreadId, assistantMessageId, `⚠️ Failed to generate image: ${error.message}`);
     } finally {
       this.isStreaming.set(false);
+      this.activityStatus.set(null);
       if (isAuthenticated) {
         this.persistUserThreadHistory();
       }
@@ -752,6 +770,10 @@ export class ChatService {
   ): Promise<void> {
     const isAuthenticated = !!this.authService.userSignal();
     this.isStreaming.set(true);
+    // Each turn researches independently - carrying the previous turn's
+    // trace forward would attribute its queries to this answer.
+    this.activeResearchTrace.set(null);
+    this.activityStatus.set(null);
     this.abortController = new AbortController();
 
     try {
@@ -842,7 +864,15 @@ export class ChatService {
                 accumulatedContent += `\n\n> 🔧 Using **${data.toolCall.name}**...\n\n`;
               }
 
+              if (data.research) {
+                this.applyResearchEvent(data.research as ResearchStreamEvent);
+              }
+
               if (data.chunk) {
+                // Real content supersedes the live status line - once the
+                // model is writing, "searching" is stale. The trace itself
+                // stays, so the panel can still be expanded.
+                this.activityStatus.set(null);
                 accumulatedContent += data.chunk;
               }
 
@@ -856,8 +886,12 @@ export class ChatService {
                 this.setMessageSuggestions(threadId, assistantMessageId, data.suggestions);
               }
 
-              if (data.done && Array.isArray(data.ui) && data.ui.length > 0) {
-                this.setMessageUi(threadId, assistantMessageId, data.ui, data.sources, data.actions);
+              // Sources/actions are NOT conditional on `ui`: a researched
+              // answer is usually plain prose with no card attached, and
+              // gating on `ui` here silently threw away every citation the
+              // research node gathered.
+              if (data.done && ((Array.isArray(data.ui) && data.ui.length > 0) || data.sources?.length || data.actions?.length)) {
+                this.setMessageUi(threadId, assistantMessageId, data.ui ?? [], data.sources, data.actions);
               }
 
               if (data.done && data.modelSwitch) {
@@ -891,6 +925,15 @@ export class ChatService {
       }
     } finally {
       this.isStreaming.set(false);
+      this.activityStatus.set(null);
+      // Pin the trace onto the message before clearing the live one, so the
+      // panel stays expandable after the turn (including on reload, since
+      // the thread is persisted below).
+      const trace = this.activeResearchTrace();
+      if (trace) {
+        this.setMessageResearch(threadId, assistantMessageId, trace);
+        this.activeResearchTrace.set(null);
+      }
       this.abortController = null;
       if (isAuthenticated) {
         this.persistUserThreadHistory();
@@ -958,6 +1001,7 @@ export class ChatService {
     if (this.abortController) {
       this.abortController.abort();
       this.isStreaming.set(false);
+      this.activityStatus.set(null);
     }
   }
 
@@ -991,6 +1035,96 @@ export class ChatService {
           return { ...t, messages: updatedMessages };
         }
         return t;
+      })
+    );
+  }
+
+  /**
+   * Folds one research event into the live trace.
+   *
+   * The backend reports progress as discrete events rather than a rendered
+   * string so the panel can show structure - which query is running, which
+   * finished, what the planner's reasoning was - instead of a single line
+   * that overwrites itself.
+   */
+  private applyResearchEvent(event: ResearchStreamEvent): void {
+    const current: ResearchTrace = this.activeResearchTrace() ?? {
+      phase: 'thinking',
+      queries: [],
+      sources: [],
+      browsed: [],
+      ran: false,
+    };
+
+    switch (event.type) {
+      case 'research_status':
+        this.activityStatus.set(event.message ?? null);
+        this.activeResearchTrace.set({
+          ...current,
+          phase: event.phase,
+          message: event.message,
+          // 'skipped' is a real outcome worth showing (it says why the app
+          // did not search), but it never counts as research having run.
+          ran: event.phase === 'skipped' ? false : current.ran,
+        });
+        break;
+
+      case 'research_plan':
+        this.activeResearchTrace.set({
+          ...current,
+          reasoning: event.reasoning || current.reasoning,
+          queries: event.searchQueries.map((query) => ({ query, status: 'pending' as const })),
+          ran: event.needsResearch,
+        });
+        break;
+
+      case 'research_query_start':
+        this.activeResearchTrace.set({
+          ...current,
+          queries: current.queries.map((q, i) => (i === event.index ? { ...q, status: 'running' } : q)),
+        });
+        break;
+
+      case 'research_query_done':
+        this.activeResearchTrace.set({
+          ...current,
+          queries: current.queries.map((q, i) =>
+            i === event.index
+              ? { ...q, status: event.ok ? 'ok' : 'failed', preview: event.preview, citationCount: event.citationCount }
+              : q
+          ),
+        });
+        break;
+
+      case 'research_sources':
+        this.activeResearchTrace.set({ ...current, sources: event.sources, ran: true });
+        break;
+
+      case 'research_browse_start':
+        this.activeResearchTrace.set({
+          ...current,
+          phase: 'browsing',
+          browsed: [...current.browsed, { url: event.url, ok: false }],
+        });
+        break;
+
+      case 'research_browse_done':
+        this.activeResearchTrace.set({
+          ...current,
+          browsed: current.browsed.map((b) =>
+            b.url === event.url ? { url: event.url, title: event.title, ok: event.ok } : b
+          ),
+        });
+        break;
+    }
+  }
+
+  /** Pins the finished trace onto the message, so it survives the turn. */
+  private setMessageResearch(threadId: string, messageId: string, trace: ResearchTrace): void {
+    this.threads.update((threads) =>
+      threads.map((t) => {
+        if (t.id !== threadId) return t;
+        return { ...t, messages: t.messages.map((m) => (m.id === messageId ? { ...m, research: trace } : m)) };
       })
     );
   }

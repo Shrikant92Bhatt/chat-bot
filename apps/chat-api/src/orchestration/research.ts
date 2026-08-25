@@ -1,4 +1,6 @@
 import { HumanMessage } from '@langchain/core/messages';
+import { dispatchCustomEvent } from '@langchain/core/callbacks/dispatch';
+import { RESEARCH_EVENT_NAME, ResearchStreamEvent } from '@chat-monorepo/shared';
 import { createOmniRouteChatModel, isUsingOpenRouter } from '../llm/client';
 import { performWebSearch } from '../llm/web-search';
 import { renderPrompt } from '../prompt/prompt-manager';
@@ -60,10 +62,44 @@ const RESEARCH_SIGNALS = [
   /\b(search|look ?up|find out|check online|latest info|google)\b/i,
 ];
 
+/**
+ * Reports progress to the client.
+ *
+ * Uses LangChain's custom-event channel rather than taking a writer as an
+ * argument: this node runs inside the compiled graph, which has no handle
+ * on the HTTP response. graph.ts picks these up as `on_custom_event` while
+ * consuming the same stream it already reads tokens from, so nothing about
+ * the response plumbing has to reach in here.
+ *
+ * Never throws. Progress reporting failing is not a reason to fail a turn,
+ * and outside a graph run (unit tests calling the node directly) there is
+ * no dispatcher listening at all.
+ */
+async function report(event: ResearchStreamEvent): Promise<void> {
+  try {
+    await dispatchCustomEvent(RESEARCH_EVENT_NAME, event);
+  } catch {
+    // No callback manager in scope - nothing is listening, carry on.
+  }
+}
+
 /** Cheap pre-filter, ahead of any model call. */
 export function looksResearchy(text: string): boolean {
   if (!text || text.trim().length < 3) return false;
   return RESEARCH_SIGNALS.some((pattern) => pattern.test(text));
+}
+
+/**
+ * Whether this turn is about markets/instruments, which decides only
+ * whether the answer gets the finance structure and its risk disclaimer
+ * (see finance_answer:v1). Narrower than looksResearchy on purpose - a
+ * weather question is researchable but is not investment advice.
+ */
+const FINANCE_SIGNALS =
+  /\b(stock|shares?|share price|ticker|etf|index|indices|nifty|sensex|nasdaq|dow|s&p|ftse|sector|market|markets|crypto|bitcoin|ethereum|portfolio|invest(ing|ment)?|trading|swing trade|intraday|mutual fund|bond|commodit(y|ies)|earnings|ipo|dividend|valuation)\b/i;
+
+export function looksFinancial(text: string): boolean {
+  return !!text && FINANCE_SIGNALS.test(text);
 }
 
 export interface ResearchFinding {
@@ -170,13 +206,27 @@ export async function planResearch(question: string, maxQueries: number): Promis
  */
 export async function executeResearch(queries: string[]): Promise<ResearchFinding[]> {
   const settled = await Promise.allSettled(
-    queries.map(async (query) => {
-      const { answer, citations } = await withTimeout(
-        performWebSearch(query),
-        SEARCH_TIMEOUT_MS,
-        `Search "${query}"`
-      );
-      return { query, answer, citations } satisfies ResearchFinding;
+    queries.map(async (query, index) => {
+      await report({ type: 'research_query_start', query, index, total: queries.length });
+      try {
+        const { answer, citations } = await withTimeout(
+          performWebSearch(query),
+          SEARCH_TIMEOUT_MS,
+          `Search "${query}"`
+        );
+        await report({
+          type: 'research_query_done',
+          query,
+          index,
+          ok: true,
+          preview: answer.slice(0, 160),
+          citationCount: citations.length,
+        });
+        return { query, answer, citations } satisfies ResearchFinding;
+      } catch (error) {
+        await report({ type: 'research_query_done', query, index, ok: false });
+        throw error;
+      }
     })
   );
 
@@ -253,35 +303,74 @@ function latestUserQuestion(state: AgentState): string {
 export async function researchNode(state: AgentState): Promise<AgentStateUpdate> {
   const skip: AgentStateUpdate = { researchRan: false };
 
+  const skipWith = async (message: string): Promise<AgentStateUpdate> => {
+    await report({ type: 'research_status', phase: 'skipped', message });
+    return skip;
+  };
+
+  await report({ type: 'research_status', phase: 'thinking', message: 'Checking whether this needs live data' });
+
   // Tools off means the user has opted out of this entire class of
   // behavior, and without OpenRouter there is no search backend to fan out
   // to (see web-search.ts) - planning would just buy a wasted LLM call.
-  if (!state.mcpEnabled || !isUsingOpenRouter()) return skip;
+  if (!state.mcpEnabled || !isUsingOpenRouter()) {
+    return skipWith('Live research is unavailable — tools or web search are not configured.');
+  }
 
   const question = latestUserQuestion(state);
   if (!question.trim()) return skip;
 
   const deep = state.deepResearch === true;
-  if (!deep && !looksResearchy(question)) return skip;
+  if (!deep && !looksResearchy(question)) {
+    return skipWith('No live-data signal in this question — answering directly.');
+  }
 
+  await report({ type: 'research_status', phase: 'planning', message: 'Planning searches' });
   const plan = await planResearch(question, deep ? MAX_QUERIES_DEEP : MAX_QUERIES_DEFAULT);
-  if (!plan || !plan.needsResearch) return skip;
+
+  if (!plan) {
+    return skipWith('Could not plan research — answering directly.');
+  }
+
+  await report({
+    type: 'research_plan',
+    needsResearch: plan.needsResearch,
+    reasoning: plan.reasoning ?? '',
+    searchQueries: plan.searchQueries,
+  });
+
+  if (!plan.needsResearch) {
+    return skipWith(plan.reasoning || 'No external research needed for this question.');
+  }
+
+  await report({
+    type: 'research_status',
+    phase: 'searching',
+    message: `Searching ${plan.searchQueries.length} ${plan.searchQueries.length === 1 ? 'query' : 'queries'} in parallel`,
+  });
 
   const findings = await executeResearch(plan.searchQueries);
+
   if (findings.length === 0) {
     // Every query failed. The agent still has web_search bound and can
     // retry on its own terms; saying nothing here is better than handing
     // it an empty "findings" block that reads like an absence of evidence.
+    await report({ type: 'research_status', phase: 'skipped', message: 'Every search failed — answering without research.' });
     return { researchRan: false, researchQueries: plan.searchQueries };
   }
+
+  const sources = collectSources(findings);
+  await report({ type: 'research_sources', sources });
+  await report({ type: 'research_status', phase: 'synthesizing', message: 'Writing the answer from these sources' });
 
   return {
     researchRan: true,
     researchQueries: plan.searchQueries,
-    researchSources: collectSources(findings),
+    researchSources: sources,
     assembledContext: {
       ...(state.assembledContext ?? {}),
       researchFindings: formatFindings(findings),
+      financeQuestion: looksFinancial(question),
     },
   };
 }

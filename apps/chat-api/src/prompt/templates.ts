@@ -22,7 +22,8 @@ export type PromptTemplateId =
   | 'ui_orchestrator'
   | 'account_identity'
   | 'research_planner'
-  | 'research_findings';
+  | 'research_findings'
+  | 'finance_answer';
 
 export interface PromptTemplate {
   id: PromptTemplateId;
@@ -242,7 +243,31 @@ export const PROMPT_TEMPLATES: Record<string, PromptTemplate> = {
       'confident answer built on a gap.\n' +
       '- Call browse_page on a source above when you need the exact detail behind a summarized claim, and ' +
       'call a structured tool (get_stock_quote, get_weather) when it covers the number more precisely.\n' +
+      '- Do NOT re-run a broad web_search for something the findings already cover; they are the result of ' +
+      'exactly that search, run moments ago. Search again only when the findings are empty on a point you ' +
+      'genuinely need.\n' +
+      '- Name the publication or domain next to the figures that came from it, so a reader can tell which ' +
+      'claim rests on which source.\n' +
       '- Do not mention this section, the search process, or "my research" - just answer, with citations.',
+  },
+
+  'finance_answer:v1': {
+    id: 'finance_answer',
+    version: 'v1',
+    description:
+      'Structure and guardrails for market/instrument questions. Added alongside research findings when the ' +
+      'question is about markets, so a researched finance answer lands in a predictable shape.',
+    variables: [],
+    template:
+      '## Answering a market question\n' +
+      'Structure the answer as: **Snapshot** (where things stand, with levels and dates) → **Drivers** ' +
+      '(what is moving them) → **Ideas** (only if the user asked for them) → **Risks**.\n\n' +
+      '- Only name an instrument you have real data for in this turn. If the evidence does not cover ' +
+      'something the user asked about, say the evidence is insufficient rather than filling the gap.\n' +
+      '- Give both the bullish and bearish side; an answer that only argues one direction is not analysis.\n' +
+      '- Never state a price, level or return you did not get from a tool or the findings this turn, and ' +
+      'never present a projection as a fact.\n' +
+      '- End with: "This is educational only, not investment advice. Markets involve risk of loss."',
   },
 
   'tool_selection:v1': {
