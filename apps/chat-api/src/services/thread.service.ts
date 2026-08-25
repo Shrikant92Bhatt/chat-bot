@@ -25,6 +25,24 @@ export class ThreadService {
   }
 
   /**
+   * Returns the thread if it exists AND belongs to `uid` - null for both
+   * "doesn't exist" and "belongs to someone else", same as
+   * ProjectService.getProject. Unlike projects (a top-level collection
+   * filtered by an `ownerId` field), threads live under
+   * `users/{uid}/threads`, so existence under the CALLER's own subcollection
+   * path already IS the ownership check - there's no separate owner field
+   * to compare. Used by routes that touch a single thread by id (feedback,
+   * below) so a thread id belonging to another user 404s rather than 403s
+   * (see AGENTS.md §2b) - it's indistinguishable from a nonexistent id.
+   */
+  public static async getThread(uid: string, threadId: string): Promise<ChatThread | null> {
+    if (!threadId) return null;
+    const snapshot = await this.threadsCollection(uid).doc(threadId).get();
+    if (!snapshot.exists) return null;
+    return snapshot.data() as ChatThread;
+  }
+
+  /**
    * Upserts each thread the client sends. Deliberately NOT a delete-then-
    * write replace: a client that sends an incomplete array (e.g. after a
    * failed history load) must never be able to erase threads it doesn't
