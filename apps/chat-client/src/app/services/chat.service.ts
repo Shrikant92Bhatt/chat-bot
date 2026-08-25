@@ -54,6 +54,21 @@ export class ChatService {
   // the box - users can still switch it off in Settings.
   public mcpEnabled = signal<boolean>(true);
 
+  /**
+   * One-shot text to drop into the composer, set by the empty-state
+   * capability chips (chat-window.component) and consumed by
+   * MessageInputComponent - the two are siblings under app.component with
+   * no other shared channel, so this signal is the handoff. Never sent
+   * automatically: the user still reviews/edits/submits it like anything
+   * else they type. null when there's nothing pending.
+   */
+  public composerDraft = signal<string | null>(null);
+
+  /** Prefills the composer with a starter prompt - see composerDraft above. */
+  public prefillComposer(text: string): void {
+    this.composerDraft.set(text);
+  }
+
   // Tracks unauthenticated user message limit (Max 1 message allowed without sign-in)
   public unauthUserMessageCount = signal<number>(0);
 

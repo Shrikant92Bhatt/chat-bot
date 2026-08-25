@@ -11,6 +11,13 @@ import { ChatMessage, ResearchTrace } from '@chat-monorepo/shared';
 
 marked.setOptions({ gfm: true, breaks: true });
 
+/** One empty-state capability chip: a label plus the starter prompt it drops into the composer. */
+interface CapabilityChip {
+  label: string;
+  icon: string;
+  prompt: string;
+}
+
 @Component({
   selector: 'app-chat-window',
   standalone: true,
@@ -29,6 +36,43 @@ marked.setOptions({ gfm: true, breaks: true });
 })
 export class ChatWindowComponent implements AfterViewChecked {
   @ViewChild('scrollContainer') private scrollContainer!: ElementRef<HTMLElement>;
+
+  /**
+   * Empty-state starter chips. Deliberately a short, fixed list naming only
+   * capabilities the backend actually implements (see
+   * .agents/PROJECT_CONTEXT.md - RAG document upload, web_search,
+   * get_stock_quote, code_interpreter) - not a dashboard, just a few
+   * clickable examples. Clicking one fills the composer via
+   * ChatService.prefillComposer() so the user can still review/edit before
+   * sending, same as typing.
+   */
+  public readonly capabilityChips: CapabilityChip[] = [
+    {
+      label: 'Analyze a document',
+      icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
+      prompt: "I'm about to attach a document — once it's uploaded, please summarize the key points and flag anything that looks important.",
+    },
+    {
+      label: 'Search the web',
+      icon: 'M21 21l-4.35-4.35M17 10.5a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z',
+      prompt: 'Search the web for the latest news on ',
+    },
+    {
+      label: 'Check a stock price',
+      icon: 'M3 3v18h18M7 15l4-4 3 3 5-6',
+      prompt: "What's the current stock price and today's change for ",
+    },
+    {
+      label: 'Write code',
+      icon: 'M8 9l-3 3 3 3m8-6l3 3-3 3M13 6l-2 12',
+      prompt: 'Write a function that ',
+    },
+  ];
+
+  /** Fills the composer with a chip's starter prompt without sending it. */
+  public useCapabilityChip(chip: CapabilityChip): void {
+    this.chatService.prefillComposer(chip.prompt);
+  }
 
   // Only auto-scroll while the user is already at (or very near) the
   // bottom, so scrolling up to read earlier messages during a stream
