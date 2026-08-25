@@ -38,6 +38,16 @@ export class ChatService {
   public isLoadingThreads = signal<boolean>(false);
   public isStreaming = signal<boolean>(false);
   /**
+   * The id of the user message currently being edited via the composer, or
+   * null when no edit is in progress. Only ever set on the LAST user
+   * message in the active thread (see isLastUserMessage()/
+   * startEditingMessage() below) - editing an earlier one is out of scope,
+   * for the same reason regenerating an earlier assistant reply is: it
+   * would invalidate summarizedThroughIndex, which assumes stable
+   * message-array indices (see PROJECT_CONTEXT.md's Known gaps).
+   */
+  public editingMessageId = signal<string | null>(null);
+  /**
    * What the backend is doing right now ("Searching the web", "Read 6
    * sources across 4 searches"). Research and tool round-trips all happen
    * before the first token exists, so without this the user watches an
@@ -163,6 +173,18 @@ export class ChatService {
       // clearUnauthenticatedHistory/createInitialThread write signals (threads,
       // unauthUserMessageCount) owned by this same service, which Angular
       // disallows from inside an effect by default (NG0600) unless opted in.
+      { allowSignalWrites: true }
+    );
+
+    // Editing the last user message only makes sense within the thread it
+    // belongs to - clear any in-progress edit the moment the active thread
+    // changes (thread switch, new thread, history load) so a stale edit
+    // session can't leak its draft into a different conversation.
+    effect(
+      () => {
+        this.activeThreadId();
+        this.editingMessageId.set(null);
+      },
       { allowSignalWrites: true }
     );
   }
@@ -771,6 +793,112 @@ export class ChatService {
           : t
       )
     );
+
+    await this.streamAssistantReply(currentThreadId, assistantMessageId, contextMessages, thread.projectId ?? null);
+  }
+
+  /**
+   * True when `msg` is the LAST user message in the active thread - not
+   * necessarily the last message overall, since that user turn's assistant
+   * reply (or placeholder) normally follows it. Edit is only ever offered
+   * here (see chat-window.component.html), mirroring why Regenerate is only
+   * offered on the last assistant message: summarizedThroughIndex assumes
+   * stable message-array indices, and editing an earlier turn would shift/
+   * invalidate it (see PROJECT_CONTEXT.md's Known gaps).
+   */
+  public isLastUserMessage(msg: ChatMessage): boolean {
+    if (msg.role !== 'user') return false;
+    const messages = this.activeThread()?.messages ?? [];
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') return messages[i].id === msg.id;
+    }
+    return false;
+  }
+
+  /** Enters edit mode for `msg` - see isLastUserMessage() for the restriction. */
+  public startEditingMessage(msg: ChatMessage): void {
+    if (this.isStreaming() || !this.isLastUserMessage(msg)) return;
+    this.editingMessageId.set(msg.id);
+  }
+
+  /** Leaves edit mode without sending anything. */
+  public cancelEditingMessage(): void {
+    this.editingMessageId.set(null);
+  }
+
+  /**
+   * Replaces the LAST user message's content in place and re-runs its
+   * assistant reply, exactly like regenerateLastResponse() above (reset the
+   * trailing assistant message in place, resend the trailing context) except
+   * the edited turn's own content changes too. Because sendMessage() (and
+   * this method, on a prior edit) always append a user message and its
+   * assistant placeholder together, the last user message - the only one
+   * Edit ever targets, see isLastUserMessage() - is always immediately
+   * followed by that turn's assistant reply as the very last message in the
+   * thread, the same shape regenerateLastResponse() relies on.
+   */
+  public async editLastUserMessage(newContent: string): Promise<void> {
+    const currentThreadId = this.activeThreadId();
+    const trimmed = newContent.trim();
+    if (!currentThreadId || !trimmed || this.isStreaming()) return;
+
+    const thread = this.activeThread();
+    const userMessageId = this.editingMessageId();
+    if (!thread || !userMessageId || thread.messages.length < 2) return;
+
+    const lastMessage = thread.messages[thread.messages.length - 1];
+    const secondLastMessage = thread.messages[thread.messages.length - 2];
+    if (lastMessage.role !== 'assistant' || secondLastMessage.role !== 'user' || secondLastMessage.id !== userMessageId) {
+      // Shape doesn't match what editLastUserMessage() expects (e.g. the
+      // thread changed out from under an open edit) - the thread-change
+      // effect above already clears editingMessageId in that case, but bail
+      // out defensively rather than mutate the wrong message.
+      return;
+    }
+
+    const assistantMessageId = lastMessage.id;
+
+    this.threads.update((threadsList) =>
+      threadsList.map((t) =>
+        t.id === currentThreadId
+          ? {
+              ...t,
+              updatedAt: Date.now(),
+              messages: t.messages.map((m) => {
+                if (m.id === userMessageId) return { ...m, content: trimmed };
+                if (m.id === assistantMessageId) {
+                  // Reset the trailing assistant reply in place, keeping its
+                  // id/position, and drop everything the previous run
+                  // attached (image, UI cards, suggestions) so stale extras
+                  // from the old answer don't linger - same as
+                  // regenerateLastResponse() above.
+                  return {
+                    ...m,
+                    content: '',
+                    error: false,
+                    imageUrl: undefined,
+                    ui: undefined,
+                    sources: undefined,
+                    actions: undefined,
+                    suggestions: undefined,
+                  };
+                }
+                return m;
+              }),
+            }
+          : t
+      )
+    );
+
+    this.editingMessageId.set(null);
+
+    const contextMessages = thread.messages
+      .filter((m) => m.id !== assistantMessageId)
+      .map((m) => ({
+        role: m.role,
+        content: m.id === userMessageId ? trimmed : m.content,
+        attachments: m.attachments,
+      }));
 
     await this.streamAssistantReply(currentThreadId, assistantMessageId, contextMessages, thread.projectId ?? null);
   }

@@ -52,6 +52,13 @@ export class MessageInputComponent implements OnDestroy {
     this.projectService.getProjectName(this.chatService.activeProjectId())
   );
 
+  // The message id the composer's current draft was last seeded from, so
+  // the edit-seeding effect below only overwrites messageText on the edge
+  // transition into (or between) edit sessions - not on every unrelated
+  // activeMessages() change while an edit is already open, which would
+  // clobber whatever the user has typed since.
+  private lastSeededEditId: string | null = null;
+
   constructor(public chatService: ChatService, private projectService: ProjectService) {
     // Consumes a starter prompt set by the empty-state capability chips
     // (chat-window.component, via ChatService.prefillComposer) - populates
@@ -69,6 +76,23 @@ export class MessageInputComponent implements OnDestroy {
       },
       { allowSignalWrites: true }
     );
+
+    // Seeds the composer when an edit session starts (or switches to a
+    // different message), and clears it if an edit session ends from
+    // outside the composer (e.g. the active thread changed under it) -
+    // send()/cancelEdit() already clear messageText themselves for the
+    // in-composer paths, so the else-branch only fires for that external case.
+    effect(() => {
+      const editingId = this.chatService.editingMessageId();
+      if (editingId && editingId !== this.lastSeededEditId) {
+        const msg = this.chatService.activeMessages().find((m) => m.id === editingId);
+        this.messageText = msg?.content ?? this.messageText;
+        this.lastSeededEditId = editingId;
+      } else if (!editingId && this.lastSeededEditId) {
+        this.messageText = '';
+        this.lastSeededEditId = null;
+      }
+    });
   }
 
   onKeydown(event: KeyboardEvent) {
@@ -76,6 +100,20 @@ export class MessageInputComponent implements OnDestroy {
       event.preventDefault();
       this.send();
     }
+  }
+
+  /** Escape cancels an in-progress edit without sending it. */
+  onEscapeKey(): void {
+    if (this.chatService.editingMessageId()) {
+      this.cancelEdit();
+    }
+  }
+
+  /** Leaves edit mode and clears whatever draft was in the composer. */
+  cancelEdit(): void {
+    this.chatService.cancelEditingMessage();
+    this.messageText = '';
+    this.lastSeededEditId = null;
   }
 
   get placeholder(): string {
@@ -89,6 +127,12 @@ export class MessageInputComponent implements OnDestroy {
     this.stopDictation();
     const text = this.messageText;
     this.messageText = '';
+    this.lastSeededEditId = null;
+
+    if (this.chatService.editingMessageId()) {
+      this.chatService.editLastUserMessage(text);
+      return;
+    }
 
     if (this.chatService.chatMode() === 'image') {
       this.chatService.generateImage(text);
