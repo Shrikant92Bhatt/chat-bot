@@ -1,0 +1,15 @@
+<div class="flex gap-3 overflow-x-auto pb-1">
+  <div *ngFor="let product of data.products" class="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden shrink-0 w-40">
+    <img *ngIf="product.imageUrl" [src]="product.imageUrl" alt="" class="w-full h-24 object-cover" />
+    <div class="p-2.5">
+      <div class="text-xs text-slate-100 font-medium line-clamp-2">{{ product.name }}</div>
+      <div class="flex items-center justify-between mt-1.5">
+        <span *ngIf="product.price != null" class="text-xs font-semibold text-white">{{ product.price | number: '1.0-2' }} {{ product.currency }}</span>
+        <span *ngIf="product.rating != null" class="text-[10px] text-accentAmber">★ {{ product.rating }}</span>
+      </div>
+      <a *ngIf="product.url" [href]="product.url" target="_blank" rel="noopener" class="inline-block text-[10px] text-accentCyan hover:underline mt-1.5">
+        View ↗
+      </a>
+    </div>
+  </div>
+</div>

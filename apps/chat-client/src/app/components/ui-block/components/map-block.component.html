@@ -1,0 +1,17 @@
+<div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+  <div class="text-xs text-slate-400">Location</div>
+  <div class="text-sm text-slate-100 mt-0.5">{{ data.center.lat | number: '1.4-4' }}, {{ data.center.lng | number: '1.4-4' }}</div>
+  <div *ngIf="data.markers && data.markers.length > 0" class="flex flex-wrap gap-1.5 mt-2">
+    <span *ngFor="let marker of data.markers" class="text-[11px] px-2 py-1 rounded-full bg-white/[0.06] text-slate-300">
+      {{ marker.label || (marker.lat | number: '1.2-2') + ', ' + (marker.lng | number: '1.2-2') }}
+    </span>
+  </div>
+  <a
+    [href]="osmLink(data.center.lat, data.center.lng, data.zoom || 12)"
+    target="_blank"
+    rel="noopener"
+    class="inline-block text-[11px] text-accentCyan hover:underline mt-3"
+  >
+    Open map ↗
+  </a>
+</div>
