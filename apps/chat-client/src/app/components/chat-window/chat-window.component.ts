@@ -5,6 +5,7 @@ import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { ChatService } from '../../services/chat.service';
 import { AuthService } from '../../services/auth.service';
+import { ActionDispatcherService } from '../../services/action-dispatcher.service';
 import { UiBlockComponent } from '../ui-block/ui-block.component';
 import { ResearchPanelComponent } from '../research-panel/research-panel.component';
 import { ChatMessage, ResearchTrace } from '@chat-monorepo/shared';
@@ -116,6 +117,7 @@ export class ChatWindowComponent implements AfterViewChecked {
   constructor(
     public chatService: ChatService,
     public authService: AuthService,
+    public actionDispatcher: ActionDispatcherService,
     private sanitizer: DomSanitizer
   ) {
     effect(() => {
