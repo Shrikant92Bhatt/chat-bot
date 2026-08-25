@@ -19,6 +19,7 @@ import {
 } from '@chat-monorepo/shared';
 import { AuthService } from './auth.service';
 import { getApiBaseUrl } from '../core/runtime-config';
+import { SseEventParser } from './sse-event-parser';
 
 @Injectable({
   providedIn: 'root',
@@ -989,80 +990,27 @@ export class ChatService {
       if (!reader) throw new Error('Response body reader is null.');
 
       let accumulatedContent = '';
+      // Buffers raw chunk text across reader.read() calls so a `data: ...`
+      // payload (or the `\n\n` that terminates it) split across two chunks
+      // is still recovered correctly instead of being silently dropped -
+      // see sse-event-parser.ts.
+      const sseParser = new SseEventParser();
 
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
 
         const chunkText = decoder.decode(value, { stream: true });
-        const lines = chunkText.split('\n\n');
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-
-              if (data.error) {
-                accumulatedContent += `\n⚠️ Error: ${data.error}`;
-              }
-
-              if (data.toolCall) {
-                accumulatedContent += `\n\n> 🔧 Using **${data.toolCall.name}**...\n\n`;
-              }
-
-              if (data.research) {
-                this.applyResearchEvent(data.research as ResearchStreamEvent);
-              }
-
-              if (data.uiEvent) {
-                this.applyUiStreamEvent(threadId, assistantMessageId, data.uiEvent as UIStreamEvent);
-              }
-
-              if (data.chunk) {
-                // Real content supersedes the live status line - once the
-                // model is writing, "searching" is stale. The trace itself
-                // stays, so the panel can still be expanded.
-                this.activityStatus.set(null);
-                accumulatedContent += data.chunk;
-              }
-
-              this.updateAssistantMessage(threadId, assistantMessageId, accumulatedContent);
-
-              if (data.imageUrl) {
-                this.setMessageImageUrl(threadId, assistantMessageId, data.imageUrl);
-              }
-
-              if (data.done && Array.isArray(data.suggestions) && data.suggestions.length > 0) {
-                this.setMessageSuggestions(threadId, assistantMessageId, data.suggestions);
-              }
-
-              // Sources/actions are NOT conditional on `ui`: a researched
-              // answer is usually plain prose with no card attached, and
-              // gating on `ui` here silently threw away every citation the
-              // research node gathered.
-              if (data.done && ((Array.isArray(data.ui) && data.ui.length > 0) || data.sources?.length || data.actions?.length)) {
-                this.setMessageUi(threadId, assistantMessageId, data.ui ?? [], data.sources, data.actions);
-              }
-
-              if (data.done && data.modelSwitch) {
-                const { fromModel, toModel, resetAt } = data.modelSwitch;
-                const notice = `> ℹ️ **${this.modelDisplayName(fromModel)}**'s daily limit was reached, so this reply used **${this.modelDisplayName(toModel)}** instead (${this.formatResetLabel(resetAt)}).\n\n`;
-                accumulatedContent = notice + accumulatedContent;
-                this.updateAssistantMessage(threadId, assistantMessageId, accumulatedContent);
-                this.setMessageModel(threadId, assistantMessageId, toModel);
-                // Switch the active selection too, so the next message
-                // doesn't immediately hit the same wall again - the
-                // exhausted model stays visible in the dropdown, just
-                // greyed out (see loadAvailableModels() below), until it
-                // resets or an admin raises the cap.
-                this.selectedModel.set(toModel);
-                void this.loadAvailableModels();
-              }
-            } catch (e) {
-              // Ignore partial chunk parse failures
-            }
-          }
+        for (const payload of sseParser.push(chunkText)) {
+          accumulatedContent = this.handleSsePayload(threadId, assistantMessageId, payload, accumulatedContent);
         }
+      }
+
+      // The stream can end without a final trailing `\n\n` after the last
+      // event - flush() recovers whatever payload was still buffered.
+      const trailingPayload = sseParser.flush();
+      if (trailingPayload !== null) {
+        accumulatedContent = this.handleSsePayload(threadId, assistantMessageId, trailingPayload, accumulatedContent);
       }
     } catch (error: any) {
       if (error.name !== 'AbortError') {
@@ -1093,6 +1041,80 @@ export class ChatService {
         this.persistUserThreadHistory();
       }
     }
+  }
+
+  /**
+   * Applies one fully-recovered SSE event payload (a `data: ...` JSON body,
+   * already extracted from the raw stream by SseEventParser above) to the
+   * in-flight assistant message. Pulled out of streamAssistantReply's
+   * reading loop so the exact same handling also runs for a trailing event
+   * recovered via sseParser.flush() once the stream ends. Returns the
+   * updated accumulatedContent (unchanged on a malformed/partial payload).
+   */
+  private handleSsePayload(threadId: string, assistantMessageId: string, payload: string, accumulatedContent: string): string {
+    try {
+      const data = JSON.parse(payload);
+
+      if (data.error) {
+        accumulatedContent += `\n⚠️ Error: ${data.error}`;
+      }
+
+      if (data.toolCall) {
+        accumulatedContent += `\n\n> 🔧 Using **${data.toolCall.name}**...\n\n`;
+      }
+
+      if (data.research) {
+        this.applyResearchEvent(data.research as ResearchStreamEvent);
+      }
+
+      if (data.uiEvent) {
+        this.applyUiStreamEvent(threadId, assistantMessageId, data.uiEvent as UIStreamEvent);
+      }
+
+      if (data.chunk) {
+        // Real content supersedes the live status line - once the
+        // model is writing, "searching" is stale. The trace itself
+        // stays, so the panel can still be expanded.
+        this.activityStatus.set(null);
+        accumulatedContent += data.chunk;
+      }
+
+      this.updateAssistantMessage(threadId, assistantMessageId, accumulatedContent);
+
+      if (data.imageUrl) {
+        this.setMessageImageUrl(threadId, assistantMessageId, data.imageUrl);
+      }
+
+      if (data.done && Array.isArray(data.suggestions) && data.suggestions.length > 0) {
+        this.setMessageSuggestions(threadId, assistantMessageId, data.suggestions);
+      }
+
+      // Sources/actions are NOT conditional on `ui`: a researched
+      // answer is usually plain prose with no card attached, and
+      // gating on `ui` here silently threw away every citation the
+      // research node gathered.
+      if (data.done && ((Array.isArray(data.ui) && data.ui.length > 0) || data.sources?.length || data.actions?.length)) {
+        this.setMessageUi(threadId, assistantMessageId, data.ui ?? [], data.sources, data.actions);
+      }
+
+      if (data.done && data.modelSwitch) {
+        const { fromModel, toModel, resetAt } = data.modelSwitch;
+        const notice = `> ℹ️ **${this.modelDisplayName(fromModel)}**'s daily limit was reached, so this reply used **${this.modelDisplayName(toModel)}** instead (${this.formatResetLabel(resetAt)}).\n\n`;
+        accumulatedContent = notice + accumulatedContent;
+        this.updateAssistantMessage(threadId, assistantMessageId, accumulatedContent);
+        this.setMessageModel(threadId, assistantMessageId, toModel);
+        // Switch the active selection too, so the next message
+        // doesn't immediately hit the same wall again - the
+        // exhausted model stays visible in the dropdown, just
+        // greyed out (see loadAvailableModels() below), until it
+        // resets or an admin raises the cap.
+        this.selectedModel.set(toModel);
+        void this.loadAvailableModels();
+      }
+    } catch (e) {
+      // Ignore malformed/partial payloads
+    }
+    return accumulatedContent;
   }
 
   /**
