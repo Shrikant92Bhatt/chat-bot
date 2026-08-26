@@ -253,7 +253,7 @@ export class ResponseRendererService {
       case 'TEXT':
       case 'MARKDOWN':
         // TEXT/MARKDOWN accept any object with a 'text' field
-        return typeof component.data === 'object' && component.data !== null && typeof (component.data as Record<string, unknown>).text === 'string';
+        return typeof component.data === 'object' && component.data !== null && typeof (component.data as unknown as Record<string, unknown>).text === 'string';
       default:
         return false;
     }
