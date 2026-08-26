@@ -42,7 +42,8 @@
  * llm/stock.ts) - kept short and specific rather than exhaustive, since a longer
  * list of generic key names (name, price, currency, time, date...) would just
  * raise the false-positive rate without meaningfully raising the catch rate.
- * Extended with: title/link/success (news, search, API responses)
+ * Extended with: title/link/success (news, search, API responses) and
+ * needsResearch/searchQueries (research planner output that should never leak)
  */
 const LEAK_FIELD_NAMES = [
   'location',
@@ -61,6 +62,10 @@ const LEAK_FIELD_NAMES = [
   'link',
   'success',
   'items',
+  // Research planner output - should NEVER appear in visible text
+  'needsResearch',
+  'searchQueries',
+  'reasoning',
 ] as const;
 
 const LEAK_KEY_PATTERN = new RegExp(LEAK_FIELD_NAMES.map((name) => `"${name}"\\s*:`).join('|'), 'g');
