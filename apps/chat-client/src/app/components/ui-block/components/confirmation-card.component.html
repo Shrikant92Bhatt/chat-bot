@@ -1,32 +1,37 @@
-<div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-  <div class="text-sm text-slate-100 font-medium">{{ data.title }}</div>
-  <div *ngIf="data.description" class="text-xs text-slate-400 mt-1">{{ data.description }}</div>
+<div class="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+  <!-- Header -->
+  <h3 class="text-base font-semibold text-white">{{ data.title }}</h3>
+  <p *ngIf="data.description" class="text-sm text-slate-400 mt-2 leading-relaxed">{{ data.description }}</p>
 
   <!-- Unanswered: Confirm/Cancel buttons -->
-  <div *ngIf="!resolved()" class="flex gap-2 mt-3">
+  <div *ngIf="!resolved()" class="flex flex-col sm:flex-row gap-3 mt-5">
     <button
       (click)="onConfirm()"
-      class="px-3 py-1.5 rounded-full text-xs font-medium bg-accentCyan/20 text-accentCyan hover:bg-accentCyan/30 transition-colors"
+      type="button"
+      class="flex-1 px-4 py-2.5 rounded-lg text-sm font-semibold bg-accentCyan text-white hover:bg-cyan-400 active:bg-cyan-500 transition-all duration-200 shadow-md hover:shadow-lg"
     >
-      {{ data.confirmLabel || 'Confirm' }}
+      ✓ {{ data.confirmLabel || 'Confirm' }}
     </button>
     <button
       (click)="onCancel()"
-      class="px-3 py-1.5 rounded-full text-xs font-medium bg-white/5 text-slate-300 hover:bg-white/10 transition-colors"
+      type="button"
+      class="flex-1 px-4 py-2.5 rounded-lg text-sm font-semibold bg-white/10 text-slate-300 hover:bg-white/20 active:bg-white/30 transition-all duration-200"
     >
-      {{ data.cancelLabel || 'Cancel' }}
+      ✕ {{ data.cancelLabel || 'Cancel' }}
     </button>
   </div>
 
-  <!-- Answered: locked-in resolution, buttons replaced so a second click can't re-fire the action -->
-  <div *ngIf="resolved()" class="flex items-center gap-1.5 mt-3 text-xs font-medium" role="status">
-    <ng-container *ngIf="resolved() === 'confirmed'; else cancelledState">
-      <span class="text-accentCyan">✓</span>
+  <!-- Answered: locked-in resolution -->
+  <div *ngIf="resolved()" class="flex items-center gap-2 mt-5 text-sm font-semibold py-3 px-4 rounded-lg" role="status" [ngSwitch]="resolved()">
+    <ng-container *ngSwitchCase="'confirmed'">
+      <span class="text-lg">✓</span>
       <span class="text-accentCyan">{{ data.confirmLabel || 'Confirm' }} — confirmed</span>
+      <div class="ml-auto bg-accentCyan/20 text-accentCyan px-3 py-1 rounded-full text-xs font-medium">Done</div>
     </ng-container>
-    <ng-template #cancelledState>
-      <span class="text-slate-400">✕</span>
+    <ng-container *ngSwitchDefault>
+      <span class="text-lg">✕</span>
       <span class="text-slate-400">{{ data.cancelLabel || 'Cancel' }} — cancelled</span>
-    </ng-template>
+      <div class="ml-auto bg-slate-500/20 text-slate-400 px-3 py-1 rounded-full text-xs font-medium">Done</div>
+    </ng-container>
   </div>
 </div>

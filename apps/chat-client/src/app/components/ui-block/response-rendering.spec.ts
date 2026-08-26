@@ -9,7 +9,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ChatMessage, UIComponent } from '@chat-monorepo/shared';
-import { UiBlockComponent } from '../app/components/ui-block/ui-block.component';
+import { UiBlockComponent } from './ui-block.component';
 
 describe('Response Rendering Tests', () => {
   describe('Text Response Rendering', () => {
