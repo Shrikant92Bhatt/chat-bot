@@ -1,4 +1,5 @@
 import { StockCardData, UIComponentType, WeatherCardData } from '@chat-monorepo/shared';
+import { isWeatherCardData, isStockCardData } from './response-discriminator';
 
 /**
  * Normalizes a raw MCP tool result into an approved UI component shape.
@@ -70,6 +71,10 @@ function normalizeStock(parsed: Record<string, unknown>): StockCardData | null {
  * error message (on `{success:false, error}` or a shape that doesn't match
  * what the tool is supposed to return). Returns null for unmapped tools or
  * unparseable output - the caller treats that as "nothing to stream".
+ *
+ * Enhanced with defensive parsing: if the tool result has a success=false,
+ * or the data doesn't validate, we return a safe error response instead of
+ * letting malformed data reach the UI.
  */
 export function normalizeToolResultForUi(
   toolName: string,
@@ -85,11 +90,28 @@ export function normalizeToolResultForUi(
     return { componentType, error: 'The tool returned a response that could not be read.' };
   }
 
+  // Detect explicit error responses from the tool
   if (parsed.success === false) {
     return { componentType, error: typeof parsed.error === 'string' ? parsed.error : 'The tool call failed.' };
   }
 
-  const data = toolName === 'get_weather' ? normalizeWeather(parsed) : toolName === 'get_stock_quote' ? normalizeStock(parsed) : null;
+  // Normalize and validate the data based on the tool type
+  let data: unknown = null;
+
+  if (toolName === 'get_weather') {
+    data = normalizeWeather(parsed);
+    // Defensive: validate the result matches expected type
+    if (data && !isWeatherCardData(data)) {
+      return { componentType, error: 'The weather data could not be validated.' };
+    }
+  } else if (toolName === 'get_stock_quote') {
+    data = normalizeStock(parsed);
+    // Defensive: validate the result matches expected type
+    if (data && !isStockCardData(data)) {
+      return { componentType, error: 'The stock data could not be validated.' };
+    }
+  }
+
   if (!data) return { componentType, error: 'The tool returned data in an unexpected shape.' };
 
   return { componentType, data };

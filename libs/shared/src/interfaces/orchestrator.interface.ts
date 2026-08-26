@@ -73,6 +73,10 @@ export interface WeatherCardData {
     condition: string;
     humidity: number;
     windSpeed: number;
+    feelsLike?: number;
+    uvIndex?: number;
+    visibility?: number;
+    pressure?: number;
   };
   forecast?: WeatherForecastDay[];
   hourly?: WeatherHourlyPoint[];

@@ -1,11 +1,10 @@
-<div class="flex-1 flex flex-col h-full overflow-hidden relative bg-obsidian">
-  <!-- "New messages" jump button: shown instead of forcing a scroll when the
-       user has scrolled away from the bottom while a reply is still streaming in. -->
+<div class="flex-1 flex flex-col h-full overflow-hidden relative bg-[var(--color-bg-primary)]">
+  <!-- "New messages" jump button -->
   <button
     *ngIf="isScrolledAway() && chatService.isStreaming()"
     type="button"
     (click)="jumpToLatest()"
-    class="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-slate-800 border border-white/10 text-xs font-medium text-slate-200 shadow-lg hover:bg-slate-700 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accentCyan"
+    class="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[var(--color-surface-active)] border border-[var(--color-border-medium)] text-xs font-medium text-[var(--color-text-primary)] shadow-lg hover:bg-[var(--color-surface-hover)] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-primary)]"
   >
     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
@@ -19,11 +18,11 @@
     (scroll)="onScroll()"
     (wheel)="onUserScrollIntent()"
     (touchstart)="onUserScrollIntent()"
-    class="flex-1 overflow-y-auto p-3 pb-20 sm:p-4 md:p-8 md:pb-28 space-y-4 sm:space-y-6 relative z-10"
+    class="flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-3 md:p-4 lg:p-8 pb-16 sm:pb-20 md:pb-28 space-y-3 sm:space-y-4 md:space-y-6 relative z-10"
   >
     <!-- Empty State Hero -->
-    <div *ngIf="chatService.activeMessages().length === 0" class="h-full flex flex-col items-center justify-center text-center p-6 max-w-lg mx-auto">
-      <div class="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center mb-6">
+    <div *ngIf="chatService.activeMessages().length === 0" class="h-full flex flex-col items-center justify-center text-center p-4 sm:p-6 max-w-lg mx-auto">
+      <div class="w-10 sm:w-12 h-10 sm:h-12 rounded-full bg-slate-800 flex items-center justify-center mb-4 sm:mb-6">
         <svg class="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L5.6 15.11a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
         </svg>
@@ -46,18 +45,18 @@
       </div>
     </div>
 
-    <div class="max-w-3xl mx-auto space-y-6">
+    <div class="w-full max-w-3xl mx-auto space-y-4 sm:space-y-6">
       <!-- Chat Messages -->
       <div *ngFor="let msg of chatService.activeMessages(); let last = last">
         <!-- User Message -->
-        <div *ngIf="msg.role === 'user'" class="flex justify-end py-2 group">
-          <div class="flex items-start gap-3 max-w-2xl">
+        <div *ngIf="msg.role === 'user'" class="flex justify-end py-1 sm:py-2 group px-1">
+          <div class="flex items-start gap-2 sm:gap-3 max-w-xs sm:max-w-lg md:max-w-2xl">
             <div class="flex flex-col items-end gap-1 flex-1 min-w-0">
               <div class="text-xs15 text-slate-400 font-medium">{{ getUserDisplayName() }}</div>
 
               <!-- Attached photos/videos -->
-              <div *ngIf="msg.attachments && msg.attachments.length > 0" class="flex flex-wrap justify-end gap-1.5 max-w-xs">
-                <div *ngFor="let att of msg.attachments" class="w-24 h-24 rounded-xl overflow-hidden border border-white/10 bg-black/30 shrink-0">
+              <div *ngIf="msg.attachments && msg.attachments.length > 0" class="flex flex-wrap justify-end gap-1 sm:gap-1.5 max-w-xs">
+                <div *ngFor="let att of msg.attachments" class="w-20 sm:w-24 h-20 sm:h-24 rounded-xl overflow-hidden border border-white/10 bg-black/30 shrink-0">
                   <img
                     *ngIf="att.kind === 'image'"
                     [src]="att.url"

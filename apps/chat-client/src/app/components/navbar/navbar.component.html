@@ -1,39 +1,40 @@
-<header class="h-16 px-3 sm:px-6 flex items-center z-30 bg-obsidian border-b border-white/5">
-  <!-- Left: Sidebar Toggle -->
-  <div class="flex items-center shrink-0">
+<header class="h-14 px-4 sm:px-6 flex items-center justify-between z-30 bg-[var(--color-bg-primary)] border-b border-[var(--color-border-light)]">
+  <!-- Left: Sidebar Toggle + Brand -->
+  <div class="flex items-center gap-3 min-w-0">
     <button
       *ngIf="authService.userSignal()"
       (click)="toggleSidebar.emit()"
-      class="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/5 transition-all duration-200"
+      class="p-1.5 rounded-lg text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)] transition-all duration-150 lg:hidden"
+      aria-label="Toggle sidebar"
     >
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
       </svg>
     </button>
-  </div>
 
-  <!-- Center: Brand - fills the wide gap the hamburger/actions used to leave empty on mobile -->
-  <div class="flex-1 flex items-center justify-center sm:justify-start gap-2.5 min-w-0 px-2">
-    <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-accentCyan to-blue-600 flex items-center justify-center text-white shrink-0">
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-      </svg>
-    </div>
-    <div class="text-lg font-semibold tracking-tight text-slate-200 truncate">
-      NexusAI
+    <!-- Brand Logo + Name -->
+    <div class="flex items-center gap-2 min-w-0">
+      <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-[var(--color-accent-primary)] to-blue-500 flex items-center justify-center text-white shrink-0 font-semibold text-sm">
+        A
+      </div>
+      <div class="hidden sm:block text-base font-semibold tracking-tight text-[var(--color-text-primary)] truncate">
+        NexusAI
+      </div>
     </div>
   </div>
 
-  <!-- Right: Settings & Profile -->
-  <div class="flex items-center space-x-2 sm:space-x-4 shrink-0">
+  <!-- Right: Actions & Profile -->
+  <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+    <!-- Share Button -->
     <div class="relative">
       <button
         *ngIf="hasShareableChat()"
         (click)="shareChat()"
-        class="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/5 transition-all"
+        class="p-1.5 rounded-lg text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)] transition-all duration-150"
         title="Share chat"
+        aria-label="Share chat"
       >
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
             stroke-linecap="round"
             stroke-linejoin="round"
@@ -44,52 +45,64 @@
       </button>
       <span
         *ngIf="shareFeedback()"
-        class="absolute top-full right-0 mt-1.5 whitespace-nowrap text-xs15 px-2 py-1 rounded-lg bg-slate-900 border border-white/10 text-slate-300 shadow-lg"
+        class="absolute top-full right-0 mt-2 whitespace-nowrap text-xs px-2.5 py-1.5 rounded-lg bg-[var(--color-surface-active)] border border-[var(--color-border-light)] text-[var(--color-text-secondary)] shadow-md"
       >
         {{ shareFeedback() }}
       </span>
     </div>
+
+    <!-- Admin Button -->
     <button
       *ngIf="authService.userSignal()?.role === 'admin'"
       (click)="openAdmin.emit()"
-      class="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/5 transition-all"
+      class="p-1.5 rounded-lg text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)] transition-all duration-150"
       title="Admin console"
+      aria-label="Admin console"
     >
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
       </svg>
     </button>
-    <button (click)="openSettings.emit()" class="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/5 transition-all" title="Settings">
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+
+    <!-- Settings Button -->
+    <button
+      (click)="openSettings.emit()"
+      class="p-1.5 rounded-lg text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)] transition-all duration-150"
+      title="Settings"
+      aria-label="Settings"
+    >
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
       </svg>
     </button>
 
+    <!-- Profile Menu -->
     <ng-container *ngIf="authService.userSignal() as user; else loginBtn">
-      <div class="relative pl-2 border-l border-white/5">
+      <div class="relative">
         <button
           (click)="toggleProfileMenu()"
-          class="flex items-center"
+          class="p-0.5 rounded-lg hover:bg-[var(--color-surface-secondary)] transition-all duration-150"
           [attr.aria-expanded]="isProfileMenuOpen"
-          title="Account"
+          title="Account menu"
+          aria-label="Account menu"
         >
-          <img [src]="user.photoURL" [alt]="user.displayName" class="w-7 h-7 rounded-full" />
+          <img [src]="user.photoURL" [alt]="user.displayName" class="w-6 h-6 rounded-md object-cover" />
         </button>
 
         <div *ngIf="isProfileMenuOpen" (click)="isProfileMenuOpen = false" class="fixed inset-0 z-40"></div>
 
         <div
           *ngIf="isProfileMenuOpen"
-          class="absolute right-0 mt-2 w-56 rounded-xl bg-slate-900 border border-white/10 shadow-xl z-50 py-1"
+          class="absolute right-0 mt-2 w-48 rounded-lg bg-[var(--color-surface-primary)] border border-[var(--color-border-light)] shadow-lg z-50 py-1 overflow-hidden"
         >
-          <div class="px-3 py-2 border-b border-white/5">
-            <p class="text-sm text-slate-200 truncate">{{ user.displayName }}</p>
-            <p class="text-xs text-slate-500 truncate">{{ user.email }}</p>
+          <div class="px-3 py-2 border-b border-[var(--color-border-light)]">
+            <p class="text-sm font-medium text-[var(--color-text-primary)] truncate">{{ user.displayName }}</p>
+            <p class="text-xs text-[var(--color-text-tertiary)] truncate">{{ user.email }}</p>
           </div>
           <button
             (click)="signOut()"
-            class="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-white/5 hover:text-white transition-colors"
+            class="w-full text-left px-3 py-2 text-sm text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
           >
             Sign out
           </button>
@@ -100,7 +113,7 @@
     <ng-template #loginBtn>
       <button
         (click)="authService.loginWithGoogle()"
-        class="px-4 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-sm font-medium transition-all"
+        class="px-3 py-1.5 rounded-lg bg-[var(--color-accent-primary)] hover:bg-cyan-500 text-[var(--color-bg-primary)] text-sm font-medium transition-all duration-150"
       >
         Sign In
       </button>

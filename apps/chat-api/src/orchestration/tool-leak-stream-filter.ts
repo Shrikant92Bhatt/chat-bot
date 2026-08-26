@@ -38,14 +38,18 @@
  *    drops content it hasn't matched the specific pattern above.
  */
 
-/** Field names drawn verbatim from WeatherResult/StockQuoteResult (llm/weather.ts,
- * llm/stock.ts) - kept short and specific rather than exhaustive, since a longer
- * list of generic key names (name, price, currency, time, date...) would just
- * raise the false-positive rate without meaningfully raising the catch rate.
- * Extended with: title/link/success (news, search, API responses) and
- * needsResearch/searchQueries (research planner output that should never leak)
+/** Field names drawn from all structured response types this app uses.
+ * Kept curated (not exhaustive) to avoid false positives from generic words
+ * (name, price, currency, time, date) appearing in normal prose.
+ *
+ * Source: response-discriminator.ts's STRUCTURED_RESPONSE_FIELDS, which
+ * documents all fields across weather, stock, chart, table, news, and API responses.
+ *
+ * Requires 2+ co-occurring field names for confirmation (see LEAK_MIN_KEY_HITS below),
+ * which is a deliberate extra margin against false positives.
  */
 const LEAK_FIELD_NAMES = [
+  // Weather tool output (WeatherResult from llm/weather.ts)
   'location',
   'current',
   'humidity',
@@ -55,17 +59,45 @@ const LEAK_FIELD_NAMES = [
   'temperatureHigh',
   'temperatureLow',
   'precipitationProbability',
+  'temperature',
+  'condition',
+
+  // Stock tool output (StockQuoteResult from llm/stock.ts)
   'symbol',
   'changePercent',
-  // Additional fields that appear in tool results (news, search, API responses)
+  'price',
+  'change',
+  'currency',
+
+  // Chart/Table structured responses
+  'chartType',
+  'xAxis',
+  'series',
+  'columns',
+  'rows',
+
+  // News/Search/API responses
   'title',
+  'articles',
+  'source',
+  'url',
+  'publishedAt',
   'link',
-  'success',
   'items',
+  'results',
+
+  // Tool/API response wrapper fields
+  'success',
+  'error',
+  'status',
+  'data',
+
   // Research planner output - should NEVER appear in visible text
   'needsResearch',
   'searchQueries',
   'reasoning',
+  'phase',
+  'message',
 ] as const;
 
 const LEAK_KEY_PATTERN = new RegExp(LEAK_FIELD_NAMES.map((name) => `"${name}"\\s*:`).join('|'), 'g');

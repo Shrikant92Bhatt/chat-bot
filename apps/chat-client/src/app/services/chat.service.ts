@@ -24,6 +24,7 @@ import { getApiBaseUrl } from '../core/runtime-config';
 import { SseEventParser } from './sse-event-parser';
 import { applyRating, nextRatingOnClick } from './message-feedback.util';
 import { getFriendlyErrorMessage } from '../core/error-messages.util';
+import { ResponseRendererService } from './response-renderer.service';
 
 /**
  * Whether a finished research trace is worth pinning onto the message (and
@@ -184,7 +185,8 @@ export class ChatService {
 
   constructor(
     private authService: AuthService,
-    private location: Location
+    private location: Location,
+    private responseRenderer: ResponseRendererService
   ) {
     this.createInitialThread();
     void this.loadAvailableModels();
@@ -1441,6 +1443,11 @@ export class ChatService {
    * appearing once the entire reply (and its trailing ```ui block) has
    * finished streaming. See ui-stream.interface.ts.
    *
+   * Enhanced with defensive validation:
+   * - Validates ui_update data against the declared component type
+   * - Falls back to error state if data doesn't match expected shape
+   * - Prevents malformed component data from reaching the UI
+   *
    * ui_update additionally appends the completed component straight onto
    * `ui` (the same array the final `done` payload writes) so it renders via
    * the normal app-ui-block path immediately, not just as a placeholder -
@@ -1470,9 +1477,33 @@ export class ChatService {
               return { ...m, pendingUi: pending };
             }
 
-            // ui_update: promote from pendingUi into the real, rendered `ui` list.
+            // ui_update: validate data before promoting from pendingUi into the real `ui` list.
+            const component: UIComponent = {
+              type: event.componentType,
+              id: event.id,
+              data: event.data,
+            } as UIComponent;
+
+            // Defensively validate the component
+            if (!this.responseRenderer.validateComponent(component)) {
+              console.warn(
+                `[ChatService] ui_update event has invalid data for type ${event.componentType}, converting to error card`,
+                component
+              );
+              const errorComponent = this.responseRenderer.createErrorCard(
+                event.componentType,
+                'Tool returned data in unexpected format.'
+              );
+              const pending = (m.pendingUi ?? []).filter((p) => p.id !== event.id);
+              const ui = [
+                ...(m.ui ?? []).filter((c) => c.id !== event.id),
+                errorComponent,
+              ];
+              return { ...m, pendingUi: pending, ui };
+            }
+
             const pending = (m.pendingUi ?? []).filter((p) => p.id !== event.id);
-            const ui = [...(m.ui ?? []).filter((c) => c.id !== event.id), { type: event.componentType, id: event.id, data: event.data } as UIComponent];
+            const ui = [...(m.ui ?? []).filter((c) => c.id !== event.id), component];
             return { ...m, pendingUi: pending, ui };
           }),
         };
@@ -1505,13 +1536,19 @@ export class ChatService {
   /**
    * Attaches the orchestrator's structured UI payload to a message, once,
    * on the final `done: true` SSE event - mirrors setMessageSuggestions.
+   *
+   * Enhanced with defensive validation:
+   * - Filters out any components that fail type validation
+   * - Logs warnings for invalid components (never silently drops them without notice)
+   * - Ensures only valid, properly-typed components reach the UI layer
+   *
    * `data.ui`/`sources`/`actions` are already validated server-side (see
-   * apps/chat-api/src/orchestration/ui-schema.ts) so this just stores them.
-   * Also prunes `pendingUi` down to just its error entries: by `done` every
-   * tool-backed component has either landed in `ui` above (dropped from
-   * pendingUi already by applyUiStreamEvent) or failed (kept, so the error
-   * card explaining the missing component stays visible) - nothing
-   * legitimate is still genuinely "loading" at this point.
+   * apps/chat-api/src/orchestration/ui-schema.ts) so this adds a second,
+   * independent validation layer. Also prunes `pendingUi` down to just its
+   * error entries: by `done` every tool-backed component has either landed in
+   * `ui` above (dropped from pendingUi already by applyUiStreamEvent) or
+   * failed (kept, so the error card explaining the missing component stays
+   * visible) - nothing legitimate is still genuinely "loading" at this point.
    */
   private setMessageUi(
     threadId: string,
@@ -1520,12 +1557,28 @@ export class ChatService {
     sources?: OrchestratorSource[],
     actions?: OrchestratorAction[]
   ) {
+    // Defensively validate all components before attaching them
+    const validatedUi = this.responseRenderer.filterValidComponents(ui);
+
+    if (validatedUi.length !== ui.length) {
+      const droppedCount = ui.length - validatedUi.length;
+      console.warn(
+        `[ChatService] Dropped ${droppedCount} invalid component(s) during setMessageUi validation`
+      );
+    }
+
     this.threads.update((threadsList) =>
       threadsList.map((t) => {
         if (t.id === threadId) {
           const updatedMessages = t.messages.map((m) =>
             m.id === messageId
-              ? { ...m, ui, sources, actions, pendingUi: (m.pendingUi ?? []).filter((p) => p.status === 'error') }
+              ? {
+                  ...m,
+                  ui: validatedUi,
+                  sources: sources ?? [],
+                  actions: actions ?? [],
+                  pendingUi: (m.pendingUi ?? []).filter((p) => p.status === 'error'),
+                }
               : m
           );
           return { ...t, messages: updatedMessages };

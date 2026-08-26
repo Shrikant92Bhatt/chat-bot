@@ -1,11 +1,14 @@
-<div class="h-dvh w-screen flex flex-col bg-obsidian text-slate-100 overflow-hidden relative font-sans">
+<div class="h-dvh w-screen flex flex-col bg-[var(--color-bg-primary)] text-[var(--color-text-primary)] overflow-hidden relative font-sans">
+  <!-- Header/Navigation -->
   <app-navbar
     (toggleSidebar)="isSidebarOpen = !isSidebarOpen"
     (openSettings)="openSettings()"
     (openAdmin)="openAdminView()"
   ></app-navbar>
 
+  <!-- Main Content Area -->
   <div class="flex-1 flex overflow-hidden relative z-10">
+    <!-- Sidebar -->
     <app-sidebar
       *ngIf="authService.userSignal()"
       [isOpen]="isSidebarOpen"
@@ -15,24 +18,28 @@
       (projectsClicked)="openProjects()"
     ></app-sidebar>
 
+    <!-- Mobile Sidebar Backdrop -->
     <div
       *ngIf="isSidebarOpen && authService.userSignal()"
       (click)="isSidebarOpen = false"
-      class="fixed inset-0 bg-black/50 z-[15] lg:hidden"
+      class="fixed inset-0 bg-black/40 z-[15] lg:hidden backdrop-blur-sm"
     ></div>
 
-    <main class="flex-1 flex flex-col h-full overflow-hidden bg-obsidian isolate">
+    <!-- Chat Area -->
+    <main class="flex-1 flex flex-col h-full overflow-hidden bg-[var(--color-bg-primary)] isolate">
       <app-chat-window></app-chat-window>
       <app-message-input></app-message-input>
     </main>
   </div>
 
+  <!-- Modals and Overlays -->
   <app-session-expired-modal *ngIf="authService.sessionExpired()"></app-session-expired-modal>
   <app-login-error-toast *ngIf="authService.loginError()"></app-login-error-toast>
   <app-settings-modal *ngIf="isSettingsOpen" (closeModal)="closeSettings()"></app-settings-modal>
   <app-projects-modal *ngIf="isProjectsOpen" (closeModal)="closeProjects()"></app-projects-modal>
 
-  <div *ngIf="isAdminViewOpen" class="fixed inset-0 z-50 bg-obsidian overflow-y-auto">
+  <!-- Admin View Overlay -->
+  <div *ngIf="isAdminViewOpen" class="fixed inset-0 z-50 bg-[var(--color-bg-primary)] overflow-y-auto">
     <lib-admin-dashboard [initialView]="initialAdminView" (closed)="closeAdminView()"></lib-admin-dashboard>
   </div>
 </div>
