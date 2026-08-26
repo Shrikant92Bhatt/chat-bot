@@ -7,7 +7,7 @@
       <span *ngIf="data.price != null" class="text-sm font-semibold text-white">{{ data.price | number: '1.2-2' }} {{ data.currency }}</span>
       <span *ngIf="data.rating != null" class="text-xs text-accentAmber">★ {{ data.rating }}</span>
     </div>
-    <a *ngIf="data.url" [href]="data.url" target="_blank" rel="noopener" class="inline-block text-[11px] text-accentCyan hover:underline mt-2">
+    <a *ngIf="data.url" [href]="data.url" target="_blank" rel="noopener" class="inline-block text-xs15 text-accentCyan hover:underline mt-2">
       View product ↗
     </a>
   </div>

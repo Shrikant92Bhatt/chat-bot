@@ -37,7 +37,7 @@
   <!-- Projects: custom instructions + project-scoped files -->
   <div class="px-2 pb-2">
     <div class="flex items-center justify-between px-3 pb-1">
-      <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Projects</span>
+      <span class="text-xs15 font-semibold uppercase tracking-wide text-slate-500">Projects</span>
       <button
         (click)="projectsClicked.emit()"
         title="Manage projects"
@@ -112,7 +112,7 @@
         class="w-full text-left px-3 py-2.5 rounded-lg hover:bg-white/5 transition-all text-sm text-slate-300 flex flex-col"
       >
         <span class="truncate w-full">{{ thread.title || 'New Chat' }}</span>
-        <span *ngIf="projectNameFor(thread.projectId) as projectName" class="text-[10px] text-slate-500 truncate w-full">
+        <span *ngIf="projectNameFor(thread.projectId) as projectName" class="text-xs2 text-slate-500 truncate w-full">
           {{ projectName }}
         </span>
       </button>
@@ -121,7 +121,7 @@
     <!-- Empty states: no saved chats at all, vs. none matching the search query. -->
     <div *ngIf="chatService.threads().length === 0" class="px-3 py-8 text-center">
       <p class="text-xs text-slate-500">No conversations yet</p>
-      <p class="text-[11px] text-slate-600 mt-1">Start a new chat to see it here.</p>
+      <p class="text-xs15 text-slate-600 mt-1">Start a new chat to see it here.</p>
     </div>
     <div *ngIf="chatService.threads().length > 0 && filteredThreads().length === 0" class="px-3 py-8 text-center text-xs text-slate-500">
       No chats match "{{ searchQuery() }}".

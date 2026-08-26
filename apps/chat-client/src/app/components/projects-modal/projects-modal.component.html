@@ -45,7 +45,7 @@
               Cancel
             </button>
           </div>
-          <div *ngIf="projectService.error()" class="text-[11px] text-red-400 mt-1.5">{{ projectService.error() }}</div>
+          <div *ngIf="projectService.error()" class="text-xs15 text-red-400 mt-1.5">{{ projectService.error() }}</div>
         </div>
 
         <div *ngIf="projectService.isLoading()" class="px-3 py-2 text-xs text-slate-500">Loading…</div>
@@ -64,7 +64,7 @@
           class="w-full text-left px-3 py-2 rounded-lg text-sm transition-colors"
         >
           <div class="truncate">{{ project.name }}</div>
-          <div class="text-[11px] text-slate-500">{{ project.fileCount || 0 }} file(s)</div>
+          <div class="text-xs15 text-slate-500">{{ project.fileCount || 0 }} file(s)</div>
         </button>
       </div>
 
@@ -91,7 +91,7 @@
               placeholder="e.g. Always answer as a senior TypeScript reviewer. Prefer concise code samples."
               class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-slate-100 placeholder-slate-500 resize-y focus:outline-none focus:border-slate-500/50"
             ></textarea>
-            <p class="text-[11px] text-slate-500 mt-1">
+            <p class="text-xs15 text-slate-500 mt-1">
               Injected into every conversation scoped to this project.
             </p>
           </div>
@@ -110,7 +110,7 @@
             >
               Start chat in project
             </button>
-            <span *ngIf="savedAt()" class="text-[11px] text-emerald-400">Saved</span>
+            <span *ngIf="savedAt()" class="text-xs15 text-emerald-400">Saved</span>
             <button (click)="remove()" class="ml-auto text-xs text-red-400 hover:text-red-300 transition-colors">
               Delete
             </button>
@@ -136,7 +136,7 @@
               <input #projectFileInput type="file" hidden accept=".txt,.md,.csv,.json,.pdf" (change)="onFileSelected($event)" />
             </div>
 
-            <div *ngIf="projectService.selectedProjectFiles().length === 0" class="text-[11px] text-slate-500">
+            <div *ngIf="projectService.selectedProjectFiles().length === 0" class="text-xs15 text-slate-500">
               No files yet. Uploaded files are only retrievable inside this project.
             </div>
 
@@ -163,7 +163,7 @@
             </div>
           </div>
 
-          <div *ngIf="projectService.error()" class="text-[11px] text-red-400">{{ projectService.error() }}</div>
+          <div *ngIf="projectService.error()" class="text-xs15 text-red-400">{{ projectService.error() }}</div>
         </div>
       </div>
     </div>

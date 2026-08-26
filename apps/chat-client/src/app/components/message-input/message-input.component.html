@@ -8,7 +8,7 @@
         <span
           *ngIf="activeProjectName() as projectName"
           [title]="'This conversation uses the ' + projectName + ' project instructions and files'"
-          class="flex items-center gap-1 px-2 py-1 rounded-full bg-white/5 border border-white/10 text-[11px] text-slate-300 max-w-[9rem]"
+          class="flex items-center gap-1 px-2 py-1 rounded-full bg-white/5 border border-white/10 text-xs15 text-slate-300 max-w-[9rem]"
         >
           <svg class="w-3 h-3 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
@@ -61,7 +61,7 @@
             class="absolute bottom-full mb-1.5 right-0 w-64 max-h-80 overflow-y-auto bg-slate-900 border border-white/10 rounded-xl shadow-xl z-50 py-1"
           >
             <div *ngFor="let group of groupedModels()">
-              <div class="px-4 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">{{ group.provider }}</div>
+              <div class="px-4 pt-2 pb-1 text-xs2 font-semibold uppercase tracking-wide text-slate-500">{{ group.provider }}</div>
               <button
                 *ngFor="let m of group.models"
                 type="button"
@@ -80,11 +80,11 @@
                   <span
                     *ngIf="tokenTier(m) as tier"
                     [title]="tier + ' relative token cost'"
-                    class="shrink-0 px-1.5 py-0.5 rounded-full text-[9px] font-semibold leading-none"
+                    class="shrink-0 px-1.5 py-0.5 rounded-full text-xs3 font-semibold leading-none"
                     [ngClass]="tokenTierClass(tier)"
                   >{{ tokenTierLabel(tier) }}</span>
                 </span>
-                <span *ngIf="m.usage?.disabled" class="text-[10px] text-slate-600 shrink-0">limit reached</span>
+                <span *ngIf="m.usage?.disabled" class="text-xs2 text-slate-600 shrink-0">limit reached</span>
               </button>
             </div>
           </div>
@@ -95,7 +95,7 @@
            last user message (see chat.service.ts editLastUserMessage()) -->
       <div
         *ngIf="chatService.editingMessageId()"
-        class="flex items-center justify-between px-2 pb-1.5 text-[11px] text-accentCyan"
+        class="flex items-center justify-between px-2 pb-1.5 text-xs15 text-accentCyan"
       >
         <span class="flex items-center gap-1.5">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -220,13 +220,13 @@
             (click)="chatService.removeStagedAttachment(att.id)"
             title="Remove attachment"
             aria-label="Remove attachment"
-            class="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-black/70 text-white flex items-center justify-center text-[10px] leading-none opacity-100 md:opacity-0 md:group-hover/att:opacity-100 md:focus-visible:opacity-100 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accentCyan"
+            class="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-black/70 text-white flex items-center justify-center text-xs2 leading-none opacity-100 md:opacity-0 md:group-hover/att:opacity-100 md:focus-visible:opacity-100 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accentCyan"
           >
             ✕
           </button>
         </div>
       </div>
-      <div *ngIf="chatService.attachmentUploadError()" class="px-1 pt-2 text-[11px] text-red-400">
+      <div *ngIf="chatService.attachmentUploadError()" class="px-1 pt-2 text-xs15 text-red-400">
         {{ chatService.attachmentUploadError() }}
       </div>
 
@@ -234,7 +234,7 @@
       <div *ngIf="chatService.uploadedDocuments().length > 0" class="flex flex-wrap gap-1.5 px-1 pt-2">
         <span
           *ngFor="let doc of chatService.uploadedDocuments()"
-          class="flex items-center gap-1 px-2 py-1 rounded-full bg-white/5 text-[11px] text-slate-300"
+          class="flex items-center gap-1 px-2 py-1 rounded-full bg-white/5 text-xs15 text-slate-300"
         >
           <svg class="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -242,11 +242,11 @@
           {{ doc }}
         </span>
       </div>
-      <div *ngIf="chatService.documentUploadError()" class="px-1 pt-2 text-[11px] text-red-400">
+      <div *ngIf="chatService.documentUploadError()" class="px-1 pt-2 text-xs15 text-red-400">
         {{ chatService.documentUploadError() }}
       </div>
     </form>
-    <div class="text-center text-[10px] text-slate-500 mt-2 px-4">
+    <div class="text-center text-xs2 text-slate-500 mt-2 px-4">
       NexusAI can make mistakes. Check important info.
     </div>
   </div>

@@ -11,7 +11,7 @@
     <div class="min-w-0">
       <div class="text-sm text-slate-100 font-medium line-clamp-2">{{ article.title }}</div>
       <div *ngIf="article.summary" class="text-xs text-slate-400 line-clamp-2 mt-0.5">{{ article.summary }}</div>
-      <div class="text-[10px] text-slate-500 mt-1">
+      <div class="text-xs2 text-slate-500 mt-1">
         <span *ngIf="article.source">{{ article.source }}</span>
         <span *ngIf="article.source && article.publishedAt"> · </span>
         <span *ngIf="article.publishedAt">{{ article.publishedAt }}</span>

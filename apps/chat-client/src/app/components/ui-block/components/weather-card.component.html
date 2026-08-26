@@ -1,5 +1,5 @@
 <div class="rounded-2xl border border-white/10 bg-gradient-to-br from-accentCyan/10 to-white/[0.03] p-4">
-  <div class="text-[11px] font-medium text-slate-400">{{ data.location }}</div>
+  <div class="text-xs15 font-medium text-slate-400">{{ data.location }}</div>
   <div class="flex items-center gap-3 mt-1">
     <span class="text-4xl leading-none" [ngClass]="weatherIcon(data.current.condition).anim">
       {{ weatherIcon(data.current.condition).emoji }}
@@ -19,10 +19,10 @@
       class="flex flex-col items-center shrink-0 text-xs text-slate-300 rounded-xl px-2.5 py-2 min-w-[68px]"
       [ngClass]="i === 0 ? 'bg-white/10 ring-1 ring-white/20' : 'bg-white/[0.03]'"
     >
-      <span class="text-[10px] text-slate-400">{{ i === 0 ? 'Today' : day.date }}</span>
+      <span class="text-xs2 text-slate-400">{{ i === 0 ? 'Today' : day.date }}</span>
       <span class="text-xl mt-1" [ngClass]="weatherIcon(day.condition).anim">{{ weatherIcon(day.condition).emoji }}</span>
       <span class="mt-1"><span class="text-slate-100">{{ day.temperatureHigh }}°</span> / {{ day.temperatureLow }}°</span>
-      <span class="text-[10px] text-accentCyan mt-1">💧 {{ day.precipitationProbability }}%</span>
+      <span class="text-xs2 text-accentCyan mt-1">💧 {{ day.precipitationProbability }}%</span>
     </div>
   </div>
 

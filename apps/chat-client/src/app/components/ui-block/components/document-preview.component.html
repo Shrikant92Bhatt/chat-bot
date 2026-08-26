@@ -1,10 +1,10 @@
 <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4 max-w-md">
   <div class="flex items-center justify-between">
     <div class="text-sm text-slate-100 font-medium truncate">{{ data.fileName }}</div>
-    <span *ngIf="data.pageCount" class="text-[11px] text-slate-400 shrink-0 ml-2">{{ data.pageCount }} pages</span>
+    <span *ngIf="data.pageCount" class="text-xs15 text-slate-400 shrink-0 ml-2">{{ data.pageCount }} pages</span>
   </div>
   <div *ngIf="data.excerpt" class="text-xs text-slate-400 mt-2 line-clamp-4 whitespace-pre-wrap">{{ data.excerpt }}</div>
-  <a *ngIf="data.url" [href]="data.url" target="_blank" rel="noopener" class="inline-block text-[11px] text-accentCyan hover:underline mt-2">
+  <a *ngIf="data.url" [href]="data.url" target="_blank" rel="noopener" class="inline-block text-xs15 text-accentCyan hover:underline mt-2">
     Open document ↗
   </a>
 </div>

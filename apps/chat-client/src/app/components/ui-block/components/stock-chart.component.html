@@ -1,7 +1,7 @@
 <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
   <div class="flex items-center justify-between mb-2">
     <div class="text-sm font-semibold text-white">{{ data.symbol }}<span *ngIf="data.name" class="text-slate-400 font-normal"> · {{ data.name }}</span></div>
-    <div *ngIf="data.interval" class="text-[11px] text-slate-400">{{ data.interval }}</div>
+    <div *ngIf="data.interval" class="text-xs15 text-slate-400">{{ data.interval }}</div>
   </div>
   <svg viewBox="0 0 300 120" class="w-full h-24">
     <polyline [attr.points]="stockSparklinePoints(data)" fill="none" stroke="#06b6d4" stroke-width="2" />

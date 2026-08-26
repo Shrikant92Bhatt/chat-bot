@@ -1,5 +1,5 @@
 <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-  <div *ngIf="data.title" class="text-[11px] font-medium text-slate-400 mb-2">{{ data.title }}</div>
+  <div *ngIf="data.title" class="text-xs15 font-medium text-slate-400 mb-2">{{ data.title }}</div>
 
   <!-- Reusable axis fragment: gridlines + y ticks + x category labels. -->
   <ng-template #axes let-data="data">
@@ -166,7 +166,7 @@
         [style.left.%]="t.xPct"
         role="status"
       >
-        <div class="text-[11px] font-semibold text-white whitespace-nowrap">{{ t.heading }}</div>
+        <div class="text-xs15 font-semibold text-white whitespace-nowrap">{{ t.heading }}</div>
         <div *ngFor="let line of t.lines" class="flex items-center gap-1.5 mt-1 whitespace-nowrap">
           <span class="w-2 h-2 rounded-full shrink-0" [style.background]="line.color"></span>
           <span class="text-[10.5px] text-slate-300">{{ line.label }}: {{ line.value }}</span>
@@ -199,7 +199,7 @@
     </div>
 
     <div *ngIf="data.chartType !== 'pie' && data.series.length > 1" class="flex flex-wrap gap-3 mt-3">
-      <div *ngFor="let series of data.series; let i = index" class="flex items-center gap-1.5 text-[11px] text-slate-400">
+      <div *ngFor="let series of data.series; let i = index" class="flex items-center gap-1.5 text-xs15 text-slate-400">
         <span class="w-2 h-2 rounded-full shrink-0" [style.background]="seriesColor(i)"></span>
         {{ series.name }}
       </div>
