@@ -85,10 +85,10 @@ export const EMPTY_CONTEXT: AssembledContext = {};
  * since system:v1 is unconditional, but keeps callers honest).
  */
 export function buildSystemPrompt(context: AssembledContext, options: { mcpEnabled?: boolean } = {}): string | null {
-  const blocks: string[] = [renderPrompt('system:v1'), renderPrompt('ui_orchestrator:v1')];
+  const blocks: string[] = [renderPrompt('system:v1'), renderPrompt('ui_orchestrator:v2')];
 
   if (options.mcpEnabled) {
-    blocks.push(renderPrompt('tool_selection:v1'));
+    blocks.push(renderPrompt('tool_selection:v2'));
   }
 
   // Anonymous users have neither field - nothing to say here, memories/
@@ -133,7 +133,7 @@ export function buildSystemPrompt(context: AssembledContext, options: { mcpEnabl
   // rather than for the whole conversation, and it should read as evidence
   // for this answer rather than as a standing instruction.
   if (context.researchFindings && context.researchFindings.trim()) {
-    blocks.push(renderPrompt('research_findings:v1', { findings: context.researchFindings.trim() }));
+    blocks.push(renderPrompt('research_findings:v2', { findings: context.researchFindings.trim() }));
     // Only alongside real findings: the structure below asks for levels and
     // drivers, which without evidence would invite exactly the invention
     // the findings block spends its length forbidding.

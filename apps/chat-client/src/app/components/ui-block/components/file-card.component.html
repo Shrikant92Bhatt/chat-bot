@@ -1,0 +1,24 @@
+<a
+  [href]="data.url || null"
+  target="_blank"
+  rel="noopener"
+  class="flex items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 hover:bg-white/[0.05] hover:border-white/20 transition-all duration-200 max-w-sm group"
+  [class.cursor-default]="!data.url"
+>
+  <!-- File icon -->
+  <div class="w-12 h-12 rounded-lg bg-gradient-to-br from-accentCyan/20 to-accentCyan/10 flex items-center justify-center text-accentCyan text-sm font-bold shrink-0 group-hover:from-accentCyan/30 group-hover:to-accentCyan/20 transition-colors">
+    {{ (data.fileType || data.fileName.split('.').pop() || 'FILE').slice(0, 4).toUpperCase() }}
+  </div>
+
+  <!-- File info -->
+  <div class="flex-1 min-w-0">
+    <div class="text-sm font-semibold text-white truncate group-hover:text-slate-100 transition-colors">{{ data.fileName }}</div>
+    <div class="text-xs text-slate-400 mt-1">
+      <span *ngIf="formatBytes(data.sizeBytes)">{{ formatBytes(data.sizeBytes) }}</span>
+      <span *ngIf="!formatBytes(data.sizeBytes) && data.url" class="text-accentCyan">↗ Download</span>
+    </div>
+  </div>
+
+  <!-- Download indicator -->
+  <div *ngIf="data.url" class="text-xl shrink-0 group-hover:translate-x-1 transition-transform">⬇️</div>
+</a>

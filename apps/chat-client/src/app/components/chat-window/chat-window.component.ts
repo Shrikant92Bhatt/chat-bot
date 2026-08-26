@@ -1,15 +1,27 @@
-import { Component, ElementRef, ViewChild, AfterViewChecked, effect, signal, SecurityContext, ChangeDetectionStrategy } from '@angular/core';
+import { Component, ElementRef, ViewChild, AfterViewChecked, effect, signal, ChangeDetectionStrategy, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { DomSanitizer } from '@angular/platform-browser';
 import { marked } from 'marked';
-import DOMPurify from 'dompurify';
 import { ChatService } from '../../services/chat.service';
 import { AuthService } from '../../services/auth.service';
+import { ActionDispatcherService } from '../../services/action-dispatcher.service';
 import { UiBlockComponent } from '../ui-block/ui-block.component';
 import { ResearchPanelComponent } from '../research-panel/research-panel.component';
-import { ChatMessage, ResearchTrace } from '@chat-monorepo/shared';
+import { ChatMessage, MessageFeedbackRating, ResearchTrace } from '@chat-monorepo/shared';
+import { configureMarkedForCodeBlocks } from '../../shared/markdown/code-block-renderer';
+import { handleCodeBlockClick } from '../../shared/markdown/code-block-interactions';
+import { sanitizeGeneratedHtml } from '../../shared/markdown/sanitize-html';
+import { renderCitationMarkers } from '../../shared/markdown/citation-markers';
+import { handleCitationMarkerClick } from '../../shared/markdown/citation-marker-interactions';
 
-marked.setOptions({ gfm: true, breaks: true });
+configureMarkedForCodeBlocks();
+
+/** One empty-state capability chip: a label plus the starter prompt it drops into the composer. */
+interface CapabilityChip {
+  label: string;
+  icon: string;
+  prompt: string;
+}
 
 @Component({
   selector: 'app-chat-window',
@@ -30,6 +42,43 @@ marked.setOptions({ gfm: true, breaks: true });
 export class ChatWindowComponent implements AfterViewChecked {
   @ViewChild('scrollContainer') private scrollContainer!: ElementRef<HTMLElement>;
 
+  /**
+   * Empty-state starter chips. Deliberately a short, fixed list naming only
+   * capabilities the backend actually implements (see
+   * .agents/PROJECT_CONTEXT.md - RAG document upload, web_search,
+   * get_stock_quote, code_interpreter) - not a dashboard, just a few
+   * clickable examples. Clicking one fills the composer via
+   * ChatService.prefillComposer() so the user can still review/edit before
+   * sending, same as typing.
+   */
+  public readonly capabilityChips: CapabilityChip[] = [
+    {
+      label: 'Analyze a document',
+      icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
+      prompt: "I'm about to attach a document — once it's uploaded, please summarize the key points and flag anything that looks important.",
+    },
+    {
+      label: 'Search the web',
+      icon: 'M21 21l-4.35-4.35M17 10.5a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z',
+      prompt: 'Search the web for the latest news on ',
+    },
+    {
+      label: 'Check a stock price',
+      icon: 'M3 3v18h18M7 15l4-4 3 3 5-6',
+      prompt: "What's the current stock price and today's change for ",
+    },
+    {
+      label: 'Write code',
+      icon: 'M8 9l-3 3 3 3m8-6l3 3-3 3M13 6l-2 12',
+      prompt: 'Write a function that ',
+    },
+  ];
+
+  /** Fills the composer with a chip's starter prompt without sending it. */
+  public useCapabilityChip(chip: CapabilityChip): void {
+    this.chatService.prefillComposer(chip.prompt);
+  }
+
   // Only auto-scroll while the user is already at (or very near) the
   // bottom, so scrolling up to read earlier messages during a stream
   // doesn't keep getting yanked back down on every change-detection pass.
@@ -49,6 +98,12 @@ export class ChatWindowComponent implements AfterViewChecked {
   // approaching it - standard behavior for chat UIs.
   private shouldAutoScroll = true;
   private readonly bottomThresholdPx = 8;
+
+  // Mirrors shouldAutoScroll as a signal purely so the template can show a
+  // "New messages" jump button while the user has scrolled away mid-stream -
+  // shouldAutoScroll itself stays a plain field so the imperative
+  // ngAfterViewChecked scroll logic above isn't tied to Angular's reactivity.
+  public isScrolledAway = signal(false);
 
   // activeMessages() gets a new array/object reference on every streamed
   // token (not just when a message is added), so an effect reading it would
@@ -72,6 +127,7 @@ export class ChatWindowComponent implements AfterViewChecked {
   constructor(
     public chatService: ChatService,
     public authService: AuthService,
+    public actionDispatcher: ActionDispatcherService,
     private sanitizer: DomSanitizer
   ) {
     effect(() => {
@@ -80,6 +136,7 @@ export class ChatWindowComponent implements AfterViewChecked {
 
       if (threadId !== this.previousThreadId || count > this.previousMessageCount) {
         this.shouldAutoScroll = true;
+        this.isScrolledAway.set(false);
       }
 
       this.previousThreadId = threadId;
@@ -113,6 +170,7 @@ export class ChatWindowComponent implements AfterViewChecked {
   // scrolls back down to the bottom themselves.
   onUserScrollIntent(): void {
     this.shouldAutoScroll = false;
+    if (this.chatService.isStreaming()) this.isScrolledAway.set(true);
   }
 
   onScroll(): void {
@@ -120,6 +178,7 @@ export class ChatWindowComponent implements AfterViewChecked {
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     if (distanceFromBottom < this.bottomThresholdPx) {
       this.shouldAutoScroll = true;
+      this.isScrolledAway.set(false);
     }
   }
 
@@ -128,6 +187,13 @@ export class ChatWindowComponent implements AfterViewChecked {
     if (!el) return;
     if (el.scrollTop >= el.scrollHeight - el.clientHeight - 1) return;
     el.scrollTop = el.scrollHeight;
+  }
+
+  /** Jumps back to the latest message - the "↓ New messages" button's click handler. */
+  public jumpToLatest(): void {
+    this.shouldAutoScroll = true;
+    this.isScrolledAway.set(false);
+    this.scrollToBottom();
   }
 
   /**
@@ -189,6 +255,17 @@ export class ChatWindowComponent implements AfterViewChecked {
     }
   }
 
+  /** Get favicon URL for a source domain using DuckDuckGo's icon service. */
+  public getFaviconUrl(source: { title?: string; url?: string }): string | null {
+    if (!source.url) return null;
+    try {
+      const hostname = new URL(source.url).hostname;
+      return `https://icons.duckduckgo.com/ip3/${hostname}.ico`;
+    } catch {
+      return null;
+    }
+  }
+
   /** Shares a single response via the device's native share sheet, falling back to clipboard. */
   public async shareMessage(id: string, content: string): Promise<void> {
     const result = await this.chatService.shareMessage(content);
@@ -207,6 +284,23 @@ export class ChatWindowComponent implements AfterViewChecked {
     this.shareFeedbackTimeout = setTimeout(() => this.shareFeedback.set(null), 2000);
   }
 
+  /** This message's current thumbs up/down rating, or null if unrated. */
+  public ratingFor(msg: ChatMessage): MessageFeedbackRating | null {
+    return this.chatService.messageFeedback()[msg.id] ?? null;
+  }
+
+  /**
+   * Rates (or, clicked again, un-rates) a response. No-ops without an
+   * active thread id, which shouldn't happen for a rendered assistant
+   * message in practice, but keeps this safe against that edge case rather
+   * than sending a malformed request.
+   */
+  public rateMessage(msg: ChatMessage, rating: MessageFeedbackRating): void {
+    const threadId = this.chatService.activeThreadId();
+    if (!threadId) return;
+    void this.chatService.rateMessage(threadId, msg.id, rating);
+  }
+
   /**
    * Formats raw Markdown into sanitized, safe HTML for rich visual
    * rendering. Uses `marked` (GFM parser: full heading/table/list/
@@ -214,12 +308,38 @@ export class ChatWindowComponent implements AfterViewChecked {
    * executable before it ever reaches [innerHTML] - Angular's own
    * built-in sanitizer still runs on top of that as a second layer,
    * since this returns a plain string rather than a bypassed SafeHtml.
+   *
+   * `sourceCount` (defaults to 0 - plain-text messages and every UI
+   * component/image-only reply that never calls this with a real count
+   * behave exactly as before) is `msg.sources.length` for the message being
+   * rendered; `renderCitationMarkers()` runs last, after sanitization, and
+   * turns an in-range `[n]` into a clickable chip - see that module's doc
+   * comment for exactly what is and isn't guaranteed about it.
    */
-  public renderMarkdown(content: string): string {
+  public renderMarkdown(content: string, sourceCount = 0): string {
     if (!content) return '';
     const rawHtml = marked.parse(content, { async: false }) as string;
-    const cleanHtml = DOMPurify.sanitize(rawHtml);
-    return this.sanitizer.sanitize(SecurityContext.HTML, cleanHtml) ?? '';
+    const safeHtml = sanitizeGeneratedHtml(rawHtml, this.sanitizer);
+    return renderCitationMarkers(safeHtml, { sourceCount });
+  }
+
+  /**
+   * Delegated click handler for the Copy/Wrap/line-number buttons that
+   * `configureMarkedForCodeBlocks()` injects into fenced code blocks inside
+   * `renderMarkdown()`'s output, and for the inline citation marker chips
+   * `renderCitationMarkers()` injects into that same output. Both live
+   * inside `[innerHTML]` content and can't carry Angular `(click)` bindings
+   * of their own - see `handleCodeBlockClick`'s and
+   * `handleCitationMarkerClick`'s doc comments. Bound on the container that
+   * wraps every message's rendered Markdown (see
+   * chat-window.component.html), so one listener covers every code block
+   * and citation marker in the thread; each handler is a no-op when the
+   * click wasn't inside its own kind of target, so the two can't interfere.
+   */
+  @HostListener('click', ['$event'])
+  public onMessagesClick(event: Event): void {
+    handleCodeBlockClick(event);
+    handleCitationMarkerClick(event);
   }
 
   public getUserDisplayName(): string {

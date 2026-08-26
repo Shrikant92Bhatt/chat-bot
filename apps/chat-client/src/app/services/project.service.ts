@@ -176,4 +176,20 @@ export class ProjectService {
       this.isUploadingFile.set(false);
     }
   }
+
+  public async deleteFile(projectId: string, fileId: string, fileName: string): Promise<void> {
+    this.error.set(null);
+    try {
+      await this.request(`${this.apiUrl}/${projectId}/files/${fileId}`, {
+        method: 'DELETE',
+        headers: this.authHeaders(false),
+      });
+      this.selectedProjectFiles.update((files) => files.filter((f) => f.id !== fileId));
+      this.projects.update((list) =>
+        list.map((p) => (p.id === projectId ? { ...p, fileCount: Math.max(0, (p.fileCount ?? 1) - 1) } : p))
+      );
+    } catch (e: any) {
+      this.error.set(e.message || `Failed to delete "${fileName}".`);
+    }
+  }
 }

@@ -1,34 +1,36 @@
-<div class="p-3 pb-[calc(1.875rem+env(safe-area-inset-bottom))] md:p-4 relative z-20">
-  <div class="max-w-3xl mx-auto">
-    <form (ngSubmit)="send()" class="relative flex flex-col bg-slate-800/50 border border-white/10 rounded-2xl p-2 shadow-lg focus-within:border-slate-500/50 transition-all">
+<div class="px-2 sm:px-3 md:px-4 pb-[calc(0.5rem+env(safe-area-inset-bottom))] relative z-20 bg-[var(--color-bg-primary)]">
+  <div class="max-w-4xl mx-auto">
+    <form (ngSubmit)="send()" class="relative flex flex-col bg-[var(--color-surface-primary)] border border-[var(--color-border-light)] rounded-lg sm:rounded-lg p-2 sm:p-3 shadow-md focus-within:border-[var(--color-accent-primary)] focus-within:shadow-lg transition-all">
       <!-- Top row: Chat/Image mode tabs + model selector, inside the same input box -->
-      <div class="flex items-center justify-between px-1 pb-1.5">
-        <div class="flex items-center gap-2">
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-1 pb-1.5 gap-2">
+        <div class="flex items-center gap-1 sm:gap-2">
         <!-- Scoped-to-project badge: this conversation gets the project's instructions + files -->
+        <!-- Project Badge -->
         <span
           *ngIf="activeProjectName() as projectName"
           [title]="'This conversation uses the ' + projectName + ' project instructions and files'"
-          class="flex items-center gap-1 px-2 py-1 rounded-full bg-white/5 border border-white/10 text-[11px] text-slate-300 max-w-[9rem]"
+          class="flex items-center gap-1 px-2 py-1 rounded-md bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] text-xs text-[var(--color-text-secondary)] max-w-[9rem]"
         >
-          <svg class="w-3 h-3 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-3 h-3 text-[var(--color-text-tertiary)] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
           </svg>
           <span class="truncate">{{ projectName }}</span>
         </span>
-        <div class="flex items-center gap-0.5 bg-black/20 rounded-full p-0.5">
+        <!-- Mode Selector -->
+        <div class="flex items-center gap-1 bg-[var(--color-surface-secondary)] rounded-md p-1">
           <button
             type="button"
             (click)="setMode('chat')"
-            [class]="chatService.chatMode() === 'chat' ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-white'"
-            class="px-3 py-1 rounded-full text-xs font-medium transition-all"
+            [class]="chatService.chatMode() === 'chat' ? 'bg-[var(--color-surface-active)] text-[var(--color-text-primary)]' : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]'"
+            class="px-3 py-1 rounded text-xs font-medium transition-all"
           >
             Chat
           </button>
           <button
             type="button"
             (click)="setMode('image')"
-            [class]="chatService.chatMode() === 'image' ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-white'"
-            class="flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-all"
+            [class]="chatService.chatMode() === 'image' ? 'bg-[var(--color-surface-active)] text-[var(--color-text-primary)]' : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]'"
+            class="flex items-center gap-1 px-3 py-1 rounded text-xs font-medium transition-all"
           >
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M14 8h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -38,59 +40,94 @@
         </div>
         </div>
 
-        <!-- Model Selector: only meaningful in Chat mode - image generation always uses the fixed image model -->
-        <div *ngIf="chatService.chatMode() === 'chat'" class="model-selector relative">
+        <!-- Model Selector -->
+        <div *ngIf="chatService.chatMode() === 'chat'" class="model-selector relative w-full sm:w-auto">
           <button
             type="button"
-            (click)="isModelDropdownOpen = !isModelDropdownOpen"
-            class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/5 hover:bg-white/10 transition-all text-xs font-medium text-slate-300"
+            (click)="toggleModelDropdown()"
+            (keydown)="onModelDropdownKeydown($event)"
+            aria-haspopup="listbox"
+            [attr.aria-expanded]="isModelDropdownOpen"
+            aria-label="Select model"
+            class="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-md bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] hover:bg-[var(--color-surface-hover)] transition-all text-xs font-medium text-[var(--color-text-secondary)] w-full sm:w-auto justify-between sm:justify-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-primary)]"
           >
             <span>{{ getModelDisplayName() }}</span>
-            <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-3.5 h-3.5 text-[var(--color-text-tertiary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
             </svg>
           </button>
           <div
             *ngIf="isModelDropdownOpen"
-            class="absolute bottom-full mb-1.5 right-0 w-64 max-h-80 overflow-y-auto bg-slate-900 border border-white/10 rounded-xl shadow-xl z-50 py-1"
+            role="listbox"
+            (keydown)="onModelDropdownKeydown($event)"
+            class="absolute bottom-full mb-1.5 left-0 sm:right-0 sm:left-auto w-full sm:w-64 max-h-64 sm:max-h-80 overflow-y-auto bg-[var(--color-surface-primary)] border border-[var(--color-border-light)] rounded-lg shadow-lg z-50 py-1"
           >
             <div *ngFor="let group of groupedModels()">
-              <div class="px-4 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">{{ group.provider }}</div>
+              <div class="px-4 pt-2 pb-1 text-xs2 font-semibold uppercase tracking-wide text-slate-500">{{ group.provider }}</div>
               <button
                 *ngFor="let m of group.models"
                 type="button"
                 (click)="selectModel(m.id)"
+                (mouseenter)="highlightedModelId = m.id"
+                (mouseleave)="highlightedModelId = null"
+                role="option"
+                [attr.aria-selected]="chatService.selectedModel() === m.id"
                 [disabled]="m.usage?.disabled"
                 [title]="m.usage?.disabled ? ('Daily limit reached — ' + modelResetLabel(m.usage!.resetAt)) : ''"
                 class="w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between gap-2"
-                [ngClass]="m.usage?.disabled ? 'text-slate-600 cursor-not-allowed' : 'text-slate-300 hover:bg-white/10 hover:text-white'"
+                [ngClass]="(isModelHighlighted(m.id) || chatService.selectedModel() === m.id) ? (m.usage?.disabled ? 'bg-white/5 text-slate-600' : 'bg-white/10 text-white') : (m.usage?.disabled ? 'text-slate-600 cursor-not-allowed' : 'text-slate-300 hover:bg-white/10 hover:text-white')"
               >
                 <span class="flex items-center gap-1.5 min-w-0">
                   <span class="truncate">{{ m.name }}</span>
                   <span
                     *ngIf="tokenTier(m) as tier"
                     [title]="tier + ' relative token cost'"
-                    class="shrink-0 px-1.5 py-0.5 rounded-full text-[9px] font-semibold leading-none"
+                    class="shrink-0 px-1.5 py-0.5 rounded-full text-xs3 font-semibold leading-none"
                     [ngClass]="tokenTierClass(tier)"
                   >{{ tokenTierLabel(tier) }}</span>
                 </span>
-                <span *ngIf="m.usage?.disabled" class="text-[10px] text-slate-600 shrink-0">limit reached</span>
+                <span *ngIf="m.usage?.disabled" class="text-xs2 text-slate-600 shrink-0">limit reached</span>
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Textarea + action buttons -->
-      <div class="flex items-end pr-1">
-        <!-- Attach a knowledge-base document, or a photo/video to this message (Chat mode only) -->
+      <!-- Editing Indicator -->
+      <div
+        *ngIf="chatService.editingMessageId()"
+        class="flex items-center justify-between px-2 pb-1.5 text-xs text-[var(--color-accent-primary)]"
+      >
+        <span class="flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+          Editing message
+        </span>
+        <button
+          type="button"
+          (click)="cancelEdit()"
+          aria-label="Cancel editing"
+          title="Cancel editing"
+          class="p-1.5 rounded-lg text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-primary)]"
+        >
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Textarea + Action Buttons -->
+      <div class="flex items-end pr-1 gap-1 sm:gap-2">
+        <!-- File Attachment Button -->
         <button
           *ngIf="chatService.chatMode() === 'chat'"
           type="button"
           (click)="fileInput.click()"
           [disabled]="chatService.isUploadingDocument() || chatService.isUploadingAttachments()"
           title="Attach a file, photo, or video"
-          class="p-2 ml-1 mb-1 rounded-full text-slate-400 hover:text-white hover:bg-white/5 disabled:opacity-40 transition-all flex items-center justify-center shrink-0"
+          aria-label="Attach a file, photo, or video"
+          class="p-1.5 rounded-lg text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)] disabled:opacity-40 transition-all flex items-center justify-center shrink-0 touch-target focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-primary)]"
         >
           <svg
             *ngIf="!chatService.isUploadingDocument() && !chatService.isUploadingAttachments()"
@@ -115,24 +152,31 @@
           (change)="onFileSelected($event)"
         />
 
+        <!-- Message Textarea -->
         <textarea
+          #messageTextarea
           [(ngModel)]="messageText"
           name="messageText"
           (keydown.enter)="onKeydown($event)"
+          (keydown.escape)="onEscapeKey()"
+          (input)="autoGrow()"
           rows="1"
+          [attr.aria-label]="chatService.editingMessageId() ? 'Edit message' : 'Message'"
           [placeholder]="placeholder"
-          class="flex-1 bg-transparent border-0 focus:ring-0 text-slate-100 placeholder-slate-400 text-sm px-3 py-2 resize-none max-h-36 overflow-y-auto focus:outline-none"
+          class="flex-1 bg-transparent border-0 focus:ring-0 text-[var(--color-text-primary)] placeholder-[var(--color-text-muted)] text-base sm:text-sm px-2 sm:px-3 py-2 resize-none max-h-32 sm:max-h-36 overflow-y-auto focus:outline-none prevent-auto-zoom"
         ></textarea>
-        <div class="flex items-center gap-2 shrink-0 pb-1">
-          <!-- Dictation (speech-to-text) - hidden outright on browsers without the Web Speech API (e.g. Firefox) -->
+        <div class="flex items-center gap-1 sm:gap-2 shrink-0 pb-1">
+          <!-- Dictation Button -->
           <button
             *ngIf="speechSupported"
             type="button"
             (click)="toggleDictation()"
             [disabled]="chatService.isStreaming()"
             [title]="isListening ? 'Stop dictation' : 'Dictate message'"
-            class="p-2 rounded-full disabled:opacity-40 transition-all flex items-center justify-center"
-            [ngClass]="isListening ? 'bg-accentRose/20 text-accentRose animate-pulse' : 'text-slate-400 hover:text-white hover:bg-white/5'"
+            [attr.aria-label]="isListening ? 'Stop dictation' : 'Dictate message'"
+            [attr.aria-pressed]="isListening"
+            class="p-1.5 rounded-lg disabled:opacity-40 transition-all flex items-center justify-center touch-target focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-primary)]"
+            [ngClass]="isListening ? 'bg-[var(--color-accent-danger)]/20 text-[var(--color-accent-danger)] animate-pulse' : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-secondary)]'"
           >
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
@@ -144,8 +188,9 @@
             *ngIf="chatService.isStreaming()"
             type="button"
             (click)="chatService.stopStreaming()"
-            class="p-2 rounded-full bg-slate-700 hover:bg-slate-600 text-slate-200 transition-all flex items-center justify-center"
+            class="p-1.5 rounded-lg bg-[var(--color-surface-active)] hover:bg-[var(--color-surface-hover)] text-[var(--color-text-primary)] transition-all flex items-center justify-center touch-target focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-primary)]"
             title="Stop generating"
+            aria-label="Stop generating"
           >
             <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
               <rect x="6" y="6" width="12" height="12" rx="2" />
@@ -157,7 +202,8 @@
             *ngIf="!chatService.isStreaming()"
             type="submit"
             [disabled]="!messageText.trim() && chatService.stagedAttachments().length === 0"
-            class="p-2 rounded-full bg-white text-slate-900 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-200 transition-all flex items-center justify-center"
+            [attr.aria-label]="chatService.editingMessageId() ? 'Save edit and resend' : 'Send message'"
+            class="p-1.5 rounded-lg bg-[var(--color-accent-primary)] text-[var(--color-bg-primary)] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-cyan-400 transition-all flex items-center justify-center touch-target focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-primary)] font-medium"
           >
             <svg class="w-4 h-4 transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
@@ -167,21 +213,22 @@
       </div>
 
       <!-- Photos/videos staged for this message -->
-      <div *ngIf="chatService.stagedAttachments().length > 0" class="flex flex-wrap gap-2 px-1 pt-2">
-        <div *ngFor="let att of chatService.stagedAttachments()" class="relative w-14 h-14 rounded-lg overflow-hidden bg-black/30 border border-white/10 group/att">
+      <div *ngIf="chatService.stagedAttachments().length > 0" class="flex flex-wrap gap-1.5 sm:gap-2 px-1 pt-2">
+        <div *ngFor="let att of chatService.stagedAttachments()" class="relative w-12 sm:w-14 h-12 sm:h-14 rounded-lg overflow-hidden bg-black/30 border border-white/10 group/att">
           <img *ngIf="att.kind === 'image'" [src]="att.url" [alt]="att.fileName" class="w-full h-full object-cover" />
           <video *ngIf="att.kind === 'video'" [src]="att.url" class="w-full h-full object-cover" muted></video>
           <button
             type="button"
             (click)="chatService.removeStagedAttachment(att.id)"
-            title="Remove"
-            class="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-black/70 text-white flex items-center justify-center text-[10px] leading-none opacity-0 group-hover/att:opacity-100 transition-opacity"
+            title="Remove attachment"
+            aria-label="Remove attachment"
+            class="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-black/70 text-white flex items-center justify-center text-xs2 leading-none opacity-100 md:opacity-0 md:group-hover/att:opacity-100 md:focus-visible:opacity-100 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accentCyan"
           >
             ✕
           </button>
         </div>
       </div>
-      <div *ngIf="chatService.attachmentUploadError()" class="px-1 pt-2 text-[11px] text-red-400">
+      <div *ngIf="chatService.attachmentUploadError()" class="px-1 pt-2 text-xs15 text-red-400">
         {{ chatService.attachmentUploadError() }}
       </div>
 
@@ -189,7 +236,7 @@
       <div *ngIf="chatService.uploadedDocuments().length > 0" class="flex flex-wrap gap-1.5 px-1 pt-2">
         <span
           *ngFor="let doc of chatService.uploadedDocuments()"
-          class="flex items-center gap-1 px-2 py-1 rounded-full bg-white/5 text-[11px] text-slate-300"
+          class="flex items-center gap-1 px-2 py-1 rounded-full bg-white/5 text-xs15 text-slate-300"
         >
           <svg class="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -197,11 +244,11 @@
           {{ doc }}
         </span>
       </div>
-      <div *ngIf="chatService.documentUploadError()" class="px-1 pt-2 text-[11px] text-red-400">
+      <div *ngIf="chatService.documentUploadError()" class="px-1 pt-2 text-xs15 text-red-400">
         {{ chatService.documentUploadError() }}
       </div>
     </form>
-    <div class="text-center text-[10px] text-slate-500 mt-2 px-4">
+    <div class="text-center text-xs2 text-slate-500 mt-2 px-4">
       NexusAI can make mistakes. Check important info.
     </div>
   </div>

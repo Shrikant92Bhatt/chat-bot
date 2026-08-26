@@ -1,4 +1,4 @@
-import { Component, HostListener, ChangeDetectionStrategy, OnDestroy, computed } from '@angular/core';
+import { Component, HostListener, ChangeDetectionStrategy, OnDestroy, computed, effect, ElementRef, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AIModelType, SelectableModel } from '@chat-monorepo/shared';
@@ -25,8 +25,16 @@ function getSpeechRecognitionCtor(): any {
   host: { style: 'display:block; flex-shrink:0' },
 })
 export class MessageInputComponent implements OnDestroy {
+  @ViewChild('messageTextarea') private messageTextarea?: ElementRef<HTMLTextAreaElement>;
+
   public messageText = '';
   public isModelDropdownOpen = false;
+  private highlightedModelId: string | null = null;
+
+  // Matches the textarea's `max-h-36` Tailwind class (9rem = 144px) - the
+  // cap auto-grow stops at before the box scrolls internally instead of
+  // continuing to push the rest of the composer down.
+  private readonly MAX_TEXTAREA_HEIGHT_PX = 144;
 
   // Dictation (speech-to-text). speechSupported is resolved once at
   // construction - the API availability doesn't change during a session, so
@@ -50,13 +58,91 @@ export class MessageInputComponent implements OnDestroy {
     this.projectService.getProjectName(this.chatService.activeProjectId())
   );
 
-  constructor(public chatService: ChatService, private projectService: ProjectService) {}
+  // The message id the composer's current draft was last seeded from, so
+  // the edit-seeding effect below only overwrites messageText on the edge
+  // transition into (or between) edit sessions - not on every unrelated
+  // activeMessages() change while an edit is already open, which would
+  // clobber whatever the user has typed since.
+  private lastSeededEditId: string | null = null;
+
+  constructor(public chatService: ChatService, private projectService: ProjectService) {
+    // Consumes a starter prompt set by the empty-state capability chips
+    // (chat-window.component, via ChatService.prefillComposer) - populates
+    // the box and focuses it for review/edit, same as anything the user
+    // types themselves; never auto-sent. allowSignalWrites is required
+    // because the effect clears the very signal it reads, to make this
+    // one-shot rather than re-firing on every future change.
+    effect(
+      () => {
+        const draft = this.chatService.composerDraft();
+        if (draft === null) return;
+        this.messageText = draft;
+        this.chatService.composerDraft.set(null);
+        queueMicrotask(() => {
+          this.messageTextarea?.nativeElement.focus();
+          this.autoGrow();
+        });
+      },
+      { allowSignalWrites: true }
+    );
+
+    // Seeds the composer when an edit session starts (or switches to a
+    // different message), and clears it if an edit session ends from
+    // outside the composer (e.g. the active thread changed under it) -
+    // send()/cancelEdit() already clear messageText themselves for the
+    // in-composer paths, so the else-branch only fires for that external case.
+    effect(() => {
+      const editingId = this.chatService.editingMessageId();
+      if (editingId && editingId !== this.lastSeededEditId) {
+        const msg = this.chatService.activeMessages().find((m) => m.id === editingId);
+        this.messageText = msg?.content ?? this.messageText;
+        this.lastSeededEditId = editingId;
+      } else if (!editingId && this.lastSeededEditId) {
+        this.messageText = '';
+        this.lastSeededEditId = null;
+      }
+      queueMicrotask(() => this.autoGrow());
+    });
+  }
+
+  /**
+   * Grows the textarea to fit its content (up to MAX_TEXTAREA_HEIGHT_PX,
+   * beyond which it scrolls internally via the template's overflow-y-auto).
+   * Bound to (input) for direct typing/paste; called manually after every
+   * programmatic messageText change (draft prefill, edit seeding, dictation,
+   * send/cancel clearing it) since those don't fire a DOM input event.
+   */
+  autoGrow(): void {
+    const el = this.messageTextarea?.nativeElement;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, this.MAX_TEXTAREA_HEIGHT_PX) + 'px';
+  }
 
   onKeydown(event: KeyboardEvent) {
-    if (event.key === 'Enter' && !event.shiftKey) {
+    // While streaming, send() is a no-op (see below) - previously this still
+    // called preventDefault(), silently swallowing the Enter keystroke
+    // instead of either sending or inserting a newline. Falling through to
+    // the textarea's default newline behavior instead keeps Enter useful.
+    if (event.key === 'Enter' && !event.shiftKey && !this.chatService.isStreaming()) {
       event.preventDefault();
       this.send();
     }
+  }
+
+  /** Escape cancels an in-progress edit without sending it. */
+  onEscapeKey(): void {
+    if (this.chatService.editingMessageId()) {
+      this.cancelEdit();
+    }
+  }
+
+  /** Leaves edit mode and clears whatever draft was in the composer. */
+  cancelEdit(): void {
+    this.chatService.cancelEditingMessage();
+    this.messageText = '';
+    this.lastSeededEditId = null;
+    queueMicrotask(() => this.autoGrow());
   }
 
   get placeholder(): string {
@@ -70,6 +156,13 @@ export class MessageInputComponent implements OnDestroy {
     this.stopDictation();
     const text = this.messageText;
     this.messageText = '';
+    this.lastSeededEditId = null;
+    queueMicrotask(() => this.autoGrow());
+
+    if (this.chatService.editingMessageId()) {
+      this.chatService.editLastUserMessage(text);
+      return;
+    }
 
     if (this.chatService.chatMode() === 'image') {
       this.chatService.generateImage(text);
@@ -142,6 +235,7 @@ export class MessageInputComponent implements OnDestroy {
       }
       const needsSpace = !!this.dictationBaseText && !this.dictationBaseText.endsWith(' ') && !!transcript;
       this.messageText = this.dictationBaseText + (needsSpace ? ' ' : '') + transcript;
+      queueMicrotask(() => this.autoGrow());
     };
 
     recognition.onerror = (event: any) => {
@@ -183,6 +277,55 @@ export class MessageInputComponent implements OnDestroy {
   selectModel(id: string): void {
     this.chatService.setModel(id as AIModelType);
     this.isModelDropdownOpen = false;
+    this.highlightedModelId = null;
+  }
+
+  toggleModelDropdown(): void {
+    if (this.isModelDropdownOpen) {
+      this.isModelDropdownOpen = false;
+      this.highlightedModelId = null;
+    } else {
+      this.isModelDropdownOpen = true;
+      this.highlightedModelId = this.chatService.selectedModel();
+    }
+  }
+
+  onModelDropdownKeydown(event: KeyboardEvent): void {
+    if (!this.isModelDropdownOpen) return;
+
+    const allModels = this.groupedModels().flatMap((g) => g.models);
+    const enabledModels = allModels.filter((m) => !m.usage?.disabled);
+
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (enabledModels.length === 0) return;
+
+      const currentIndex = this.highlightedModelId
+        ? enabledModels.findIndex((m) => m.id === this.highlightedModelId)
+        : -1;
+
+      let nextIndex: number;
+      if (event.key === 'ArrowDown') {
+        nextIndex = currentIndex < enabledModels.length - 1 ? currentIndex + 1 : 0;
+      } else {
+        nextIndex = currentIndex > 0 ? currentIndex - 1 : enabledModels.length - 1;
+      }
+
+      this.highlightedModelId = enabledModels[nextIndex].id;
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      if (this.highlightedModelId) {
+        this.selectModel(this.highlightedModelId);
+      }
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      this.isModelDropdownOpen = false;
+      this.highlightedModelId = null;
+    }
+  }
+
+  isModelHighlighted(modelId: string): boolean {
+    return this.highlightedModelId === modelId;
   }
 
   private groupModelsByProvider(models: SelectableModel[]): Array<{ provider: string; models: SelectableModel[] }> {

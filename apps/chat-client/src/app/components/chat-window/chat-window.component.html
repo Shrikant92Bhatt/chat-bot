@@ -1,34 +1,62 @@
-<div class="flex-1 flex flex-col h-full overflow-hidden relative bg-obsidian">
+<div class="flex-1 flex flex-col h-full overflow-hidden relative bg-[var(--color-bg-primary)]">
+  <!-- "New messages" jump button -->
+  <button
+    *ngIf="isScrolledAway() && chatService.isStreaming()"
+    type="button"
+    (click)="jumpToLatest()"
+    class="absolute bottom-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[var(--color-surface-active)] border border-[var(--color-border-medium)] text-xs font-medium text-[var(--color-text-primary)] shadow-lg hover:bg-[var(--color-surface-hover)] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-primary)]"
+  >
+    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+    </svg>
+    New messages
+  </button>
+
   <!-- Messages Stream Feed -->
   <div
     #scrollContainer
     (scroll)="onScroll()"
     (wheel)="onUserScrollIntent()"
     (touchstart)="onUserScrollIntent()"
-    class="flex-1 overflow-y-auto p-4 pb-24 md:p-8 md:pb-28 space-y-6 relative z-10"
+    class="flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-3 md:p-4 lg:p-8 pb-16 sm:pb-20 md:pb-28 space-y-3 sm:space-y-4 md:space-y-6 relative z-10"
   >
     <!-- Empty State Hero -->
-    <div *ngIf="chatService.activeMessages().length === 0" class="h-full flex flex-col items-center justify-center text-center p-6 max-w-lg mx-auto">
-      <div class="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center mb-6">
-        <svg class="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <div *ngIf="chatService.activeMessages().length === 0" class="h-full flex flex-col items-center justify-center text-center p-4 sm:p-6 max-w-lg mx-auto">
+      <div class="w-10 sm:w-12 h-10 sm:h-12 rounded-lg bg-[var(--color-surface-secondary)] flex items-center justify-center mb-4 sm:mb-6">
+        <svg class="w-6 h-6 text-[var(--color-text-tertiary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L5.6 15.11a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
         </svg>
       </div>
-      <h2 class="text-xl font-medium text-slate-200 mb-2">How can I help you today?</h2>
+      <h2 class="text-lg font-medium text-[var(--color-text-primary)] mb-2">How can I help you today?</h2>
+
+      <!-- Capability Chips -->
+      <div class="flex flex-wrap items-center justify-center gap-2 mt-4" role="group" aria-label="Example prompts">
+        <button
+          *ngFor="let chip of capabilityChips"
+          type="button"
+          (click)="useCapabilityChip(chip)"
+          class="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-medium bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] transition-all"
+        >
+          <svg class="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" [attr.d]="chip.icon" />
+          </svg>
+          <span>{{ chip.label }}</span>
+        </button>
+      </div>
     </div>
 
-    <div class="max-w-3xl mx-auto space-y-6">
+    <div class="w-full max-w-3xl mx-auto space-y-4 sm:space-y-6">
       <!-- Chat Messages -->
       <div *ngFor="let msg of chatService.activeMessages(); let last = last">
         <!-- User Message -->
-        <div *ngIf="msg.role === 'user'" class="flex justify-end py-2 group">
-          <div class="flex items-start gap-3 max-w-2xl">
+        <div *ngIf="msg.role === 'user'" class="flex justify-end py-1 sm:py-2 group px-1">
+          <div class="flex items-start gap-2 sm:gap-3 max-w-xs sm:max-w-lg md:max-w-2xl">
             <div class="flex flex-col items-end gap-1 flex-1 min-w-0">
-              <div class="text-[11px] text-slate-400 font-medium">{{ getUserDisplayName() }}</div>
+              <div class="text-xs15 text-slate-400 font-medium">{{ getUserDisplayName() }}</div>
 
               <!-- Attached photos/videos -->
-              <div *ngIf="msg.attachments && msg.attachments.length > 0" class="flex flex-wrap justify-end gap-1.5 max-w-xs">
-                <div *ngFor="let att of msg.attachments" class="w-24 h-24 rounded-xl overflow-hidden border border-white/10 bg-black/30 shrink-0">
+              <div *ngIf="msg.attachments && msg.attachments.length > 0" class="flex flex-wrap justify-end gap-1 sm:gap-1.5 max-w-xs">
+                <div *ngFor="let att of msg.attachments" class="w-20 sm:w-24 h-20 sm:h-24 rounded-xl overflow-hidden border border-white/10 bg-black/30 shrink-0">
                   <img
                     *ngIf="att.kind === 'image'"
                     [src]="att.url"
@@ -40,27 +68,50 @@
                 </div>
               </div>
 
-              <div *ngIf="msg.content" class="px-4 py-3 rounded-2xl bg-indigo-500/15 text-slate-100 text-sm leading-relaxed">
+              <div *ngIf="msg.content" class="px-3 sm:px-4 py-2 sm:py-3 rounded-2xl bg-indigo-500/15 text-slate-100 text-sm leading-relaxed break-words">
                 {{ msg.content }}
               </div>
-              <button
-                *ngIf="msg.content"
-                (click)="copyMessage(msg.id, msg.content)"
-                class="flex items-center space-x-1 text-[11px] text-slate-400 hover:text-slate-300 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 pr-1 mt-1"
-              >
-                <ng-container *ngIf="copiedMessageId() === msg.id; else userCopyIcon">
+              <div *ngIf="msg.content" class="flex items-center justify-end gap-2 sm:gap-3 pr-1 mt-1 flex-wrap">
+                <button
+                  (click)="copyMessage(msg.id, msg.content)"
+                  class="flex items-center space-x-1 text-xs15 text-slate-400 hover:text-slate-300 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accentCyan focus-visible:ring-offset-2 focus-visible:ring-offset-obsidian rounded-md"
+                >
+                  <ng-container *ngIf="copiedMessageId() === msg.id; else userCopyIcon">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span>Copied</span>
+                  </ng-container>
+                  <ng-template #userCopyIcon>
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    <span>Copy</span>
+                  </ng-template>
+                </button>
+
+                <!-- Edit - only offered on the LAST user message in the
+                     thread, mirroring how Regenerate is only offered on the
+                     last assistant reply: editing an earlier message would
+                     invalidate summarizedThroughIndex (see
+                     PROJECT_CONTEXT.md's Known gaps), which this app isn't
+                     set up to handle yet. -->
+                <button
+                  *ngIf="chatService.isLastUserMessage(msg) && !chatService.isStreaming()"
+                  (click)="chatService.startEditingMessage(msg)"
+                  class="flex items-center space-x-1 text-xs15 text-slate-400 hover:text-slate-300 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accentCyan focus-visible:ring-offset-2 focus-visible:ring-offset-obsidian rounded-md"
+                >
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                    />
                   </svg>
-                  <span>Copied</span>
-                </ng-container>
-                <ng-template #userCopyIcon>
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                  <span>Copy</span>
-                </ng-template>
-              </button>
+                  <span>Edit</span>
+                </button>
+              </div>
             </div>
             <!-- Profile avatar -->
             <div class="w-7 h-7 rounded-full shrink-0 overflow-hidden bg-slate-800 flex items-center justify-center text-xs font-semibold text-slate-300">
@@ -71,7 +122,11 @@
         </div>
 
         <!-- Assistant Message -->
-        <div *ngIf="msg.role === 'assistant'" class="flex flex-col py-2 group hover:bg-white/[0.02] transition-colors rounded-2xl -mx-4 px-4">
+        <div
+          *ngIf="msg.role === 'assistant'"
+          [attr.data-message-id]="msg.id"
+          class="flex flex-col py-1 sm:py-2 group hover:bg-white/[0.02] transition-colors rounded-xl sm:rounded-2xl -mx-2 sm:-mx-4 px-2 sm:px-4"
+        >
           <!-- Header: icon + name sit on their own row so the reply body below
                isn't permanently indented by an avatar column - the response
                gets the full container width instead of losing ~40px/line to
@@ -82,7 +137,7 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
             </div>
-            <div class="text-[11px] text-slate-400 font-medium">NexusAI</div>
+            <div class="text-xs15 text-slate-400 font-medium">NexusAI</div>
           </div>
           <div class="flex flex-col gap-1 w-full min-w-0">
             <div class="text-slate-200 text-sm leading-relaxed">
@@ -100,15 +155,20 @@
                      first, above the text: the card carries the at-a-glance answer, the Markdown
                      below is supporting detail, not the other way around. -->
                 <app-ui-block
-                  *ngIf="msg.ui && msg.ui.length > 0"
-                  [components]="msg.ui"
+                  *ngIf="(msg.ui && msg.ui.length > 0) || (msg.pendingUi && msg.pendingUi.length > 0)"
+                  [components]="msg.ui || []"
+                  [pending]="msg.pendingUi || []"
                   [actions]="msg.actions || []"
-                  (actionSelected)="chatService.sendMessage($event.label)"
+                  (actionSelected)="actionDispatcher.dispatch($event)"
                   class="block mb-3"
                 ></app-ui-block>
 
-                <!-- Markdown HTML Output -->
-                <div class="markdown-body" [innerHTML]="renderMarkdown(msg.content)"></div>
+                <!-- Markdown HTML Output. sourceCount lets renderMarkdown() turn an
+                     in-range inline [n] citation marker into a clickable chip that
+                     jumps to the matching numbered entry in the Sources block below -
+                     see citation-markers.ts. A message with no sources renders exactly
+                     as before (sourceCount 0 -> renderCitationMarkers is a no-op). -->
+                <div class="markdown-body" [innerHTML]="renderMarkdown(msg.content, msg.sources?.length || 0)"></div>
 
                 <!-- Sources. Deliberately outside the card block above: a
                      researched answer is usually plain prose with no card,
@@ -116,7 +176,7 @@
                      on that kind of answer. Below the text, since they
                      support the answer rather than lead it. -->
                 <div *ngIf="msg.sources && msg.sources.length > 0" class="mt-3 pt-3 border-t border-white/5">
-                  <div class="text-[10px] uppercase tracking-wide text-slate-500 mb-1.5">Sources</div>
+                  <div class="text-xs2 uppercase tracking-wide text-slate-500 mb-1.5">Sources</div>
                   <div class="flex flex-wrap gap-1.5">
                     <a
                       *ngFor="let source of msg.sources; let i = index"
@@ -124,8 +184,16 @@
                       target="_blank"
                       rel="noopener noreferrer"
                       [title]="source.url || ''"
-                      class="inline-flex items-center gap-1.5 max-w-[16rem] text-[11px] px-2.5 py-1 rounded-full bg-white/5 text-slate-400 hover:text-slate-100 hover:bg-white/10 transition-colors"
+                      [attr.data-source-index]="i + 1"
+                      class="inline-flex items-center gap-1.5 max-w-[16rem] text-xs15 px-2.5 py-1 rounded-full bg-white/5 text-slate-400 hover:text-slate-100 hover:bg-white/10 transition-colors"
                     >
+                      <img
+                        *ngIf="getFaviconUrl(source) as faviconUrl"
+                        [src]="faviconUrl"
+                        [alt]="sourceLabel(source)"
+                        class="w-3.5 h-3.5 rounded shrink-0 object-cover"
+                        onerror="this.style.display='none'"
+                      />
                       <span class="text-slate-500 shrink-0">{{ i + 1 }}</span>
                       <span class="truncate">{{ sourceLabel(source) }}</span>
                     </a>
@@ -136,12 +204,18 @@
                      happen before the first token exists, so when the backend
                      says what it's doing, show that instead of a bare dot -
                      a named wait reads as progress, an anonymous one reads as
-                     a hang. -->
-                <div *ngIf="chatService.isStreaming() && !msg.content" class="flex items-center gap-2 py-2">
+                     a hang. Only shown when app-research-panel above ISN'T
+                     already rendered for this message - the panel's own
+                     header carries the identical status text plus its own
+                     pulsing indicator, so showing both duplicates the same
+                     line. This stays visible only for the brief window
+                     before the very first research_status event arrives, if
+                     that window exists at all. -->
+                <div *ngIf="chatService.isStreaming() && !msg.content && !researchTraceFor(msg)" class="flex items-center gap-2 py-2">
                   <span class="w-2 h-2 rounded-full bg-slate-500 animate-ping shrink-0"></span>
                   <span
                     *ngIf="chatService.activityStatus() as status"
-                    class="text-[11px] text-slate-400 animate-pulse"
+                    class="text-xs15 text-slate-400 animate-pulse"
                   >{{ status }}</span>
                 </div>
 
@@ -158,13 +232,13 @@
                     (load)="onContentLoad()"
                   />
                   <div class="flex items-center justify-between px-3 py-2 border-t border-white/5">
-                    <span class="text-[11px] text-slate-400">Generated image</span>
+                    <span class="text-xs15 text-slate-400">Generated image</span>
                     <a
                       [href]="msg.imageUrl"
                       download="generated-image.png"
                       target="_blank"
                       rel="noopener"
-                      class="text-[11px] text-slate-300 hover:text-white font-medium transition-colors"
+                      class="text-xs15 text-slate-300 hover:text-white font-medium transition-colors"
                     >
                       Download
                     </a>
@@ -186,7 +260,7 @@
                       download="generated-image.png"
                       target="_blank"
                       rel="noopener"
-                      class="text-[11px] text-slate-400 hover:text-slate-300 transition-colors"
+                      class="text-xs15 text-slate-400 hover:text-slate-300 transition-colors"
                     >
                       Download
                     </a>
@@ -198,7 +272,7 @@
               <div *ngIf="msg.content && !(chatService.isStreaming() && !msg.content)" class="flex items-center justify-start gap-3 pt-2">
                 <button
                   (click)="copyMessage(msg.id, msg.content)"
-                  class="flex items-center space-x-1 text-[11px] text-slate-400 hover:text-slate-300 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100"
+                  class="flex items-center space-x-1 text-xs15 text-slate-400 hover:text-slate-300 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accentCyan focus-visible:ring-offset-2 focus-visible:ring-offset-obsidian rounded-md"
                 >
                   <ng-container *ngIf="copiedMessageId() === msg.id; else assistantCopyIcon">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -219,7 +293,7 @@
                 <button
                   *ngIf="last"
                   (click)="chatService.regenerateLastResponse()"
-                  class="flex items-center space-x-1 text-[11px] text-slate-400 hover:text-slate-300 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100"
+                  class="flex items-center space-x-1 text-xs15 text-slate-400 hover:text-slate-300 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accentCyan focus-visible:ring-offset-2 focus-visible:ring-offset-obsidian rounded-md"
                 >
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path
@@ -235,7 +309,7 @@
                 <!-- Share this response - device share sheet, falling back to clipboard. -->
                 <button
                   (click)="shareMessage(msg.id, msg.content)"
-                  class="flex items-center space-x-1 text-[11px] text-slate-400 hover:text-slate-300 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100"
+                  class="flex items-center space-x-1 text-xs15 text-slate-400 hover:text-slate-300 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accentCyan focus-visible:ring-offset-2 focus-visible:ring-offset-obsidian rounded-md"
                 >
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path
@@ -248,6 +322,45 @@
                   <span *ngIf="shareFeedback()?.id !== msg.id">Share</span>
                   <span *ngIf="shareFeedback()?.id === msg.id">{{ shareFeedback()?.message }}</span>
                 </button>
+
+                <!-- Feedback: thumbs up/down on this response. Re-clicking the
+                     already-selected thumb clears the rating (toggle off) -
+                     see ChatService.rateMessage / message-feedback.util.ts. -->
+                <button
+                  type="button"
+                  (click)="rateMessage(msg, 'up')"
+                  [attr.aria-pressed]="ratingFor(msg) === 'up'"
+                  [attr.aria-label]="ratingFor(msg) === 'up' ? 'Remove helpful rating' : 'Mark this response as helpful'"
+                  [class.text-accentCyan]="ratingFor(msg) === 'up'"
+                  class="flex items-center space-x-1 text-xs15 text-slate-400 hover:text-slate-300 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accentCyan focus-visible:ring-offset-2 focus-visible:ring-offset-obsidian rounded-md"
+                >
+                  <svg class="w-3.5 h-3.5" [attr.fill]="ratingFor(msg) === 'up' ? 'currentColor' : 'none'" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"
+                    />
+                  </svg>
+                </button>
+
+                <button
+                  type="button"
+                  (click)="rateMessage(msg, 'down')"
+                  [attr.aria-pressed]="ratingFor(msg) === 'down'"
+                  [attr.aria-label]="ratingFor(msg) === 'down' ? 'Remove not-helpful rating' : 'Mark this response as not helpful'"
+                  [class.text-accentCyan]="ratingFor(msg) === 'down'"
+                  class="flex items-center space-x-1 text-xs15 text-slate-400 hover:text-slate-300 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accentCyan focus-visible:ring-offset-2 focus-visible:ring-offset-obsidian rounded-md"
+                >
+                  <svg class="w-3.5 h-3.5" [attr.fill]="ratingFor(msg) === 'down' ? 'currentColor' : 'none'" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3"
+                    />
+                  </svg>
+                </button>
               </div>
 
               <!-- Suggested Follow-up Questions -->
@@ -257,7 +370,7 @@
               >
                 <button
                   *ngFor="let suggestion of msg.suggestions"
-                  (click)="chatService.sendMessage(suggestion)"
+                  (click)="actionDispatcher.dispatchLabel(suggestion)"
                   class="px-3 py-1.5 rounded-full text-xs bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition-all"
                 >
                   {{ suggestion }}

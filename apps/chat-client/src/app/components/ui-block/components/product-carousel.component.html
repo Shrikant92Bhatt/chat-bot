@@ -1,0 +1,46 @@
+<div class="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+  <div class="flex gap-3 overflow-x-auto pb-2 -mx-3 px-3" role="region" aria-label="Product carousel">
+    <a
+      *ngFor="let product of data.products"
+      [href]="product.url || null"
+      target="_blank"
+      rel="noopener"
+      class="rounded-xl border border-white/10 bg-white/[0.04] overflow-hidden shrink-0 w-48 hover:border-white/20 hover:bg-white/[0.06] transition-all duration-200 group"
+      [class.cursor-default]="!product.url"
+    >
+      <!-- Image -->
+      <div class="w-full h-28 overflow-hidden bg-white/5">
+        <img
+          *ngIf="product.imageUrl"
+          [src]="product.imageUrl"
+          alt=""
+          class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          loading="lazy"
+        />
+        <div *ngIf="!product.imageUrl" class="w-full h-full flex items-center justify-center text-slate-600">
+          <svg viewBox="0 0 24 24" class="w-8 h-8" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <circle cx="8.5" cy="8.5" r="1.5" />
+            <path d="M21 15l-5-5L5 21" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- Info -->
+      <div class="p-3 flex flex-col gap-2">
+        <h3 class="text-xs font-semibold text-white line-clamp-2 leading-tight">{{ product.name }}</h3>
+
+        <!-- Price and rating -->
+        <div class="flex items-center justify-between gap-2">
+          <span *ngIf="product.price != null" class="text-sm font-bold text-white">
+            {{ product.price | number: '1.0-2' }}<span class="text-xs text-slate-400"> {{ product.currency }}</span>
+          </span>
+          <span *ngIf="product.rating != null" class="text-xs text-accentAmber font-medium">★ {{ product.rating }}</span>
+        </div>
+
+        <!-- Link -->
+        <div *ngIf="product.url" class="text-xs text-accentCyan font-medium group-hover:text-cyan-300">View ↗</div>
+      </div>
+    </a>
+  </div>
+</div>

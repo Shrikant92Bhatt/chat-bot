@@ -20,8 +20,8 @@
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
 
-    <span class="text-[11px] font-medium text-slate-300 uppercase tracking-wide shrink-0">Thinking</span>
-    <span class="text-[11px] text-slate-400 truncate flex-1" [class.animate-pulse]="isRunning">{{ headline }}</span>
+    <span class="text-xs15 font-medium text-slate-300 uppercase tracking-wide shrink-0">Thinking</span>
+    <span class="text-xs15 text-slate-400 truncate flex-1" [class.animate-pulse]="isRunning">{{ headline }}</span>
 
     <svg
       class="w-3.5 h-3.5 text-slate-500 shrink-0 transition-transform"
@@ -36,21 +36,21 @@
 
   <div *ngIf="expanded" class="px-3 pb-3 pt-1 border-t border-white/5 space-y-3">
     <!-- Why the assistant decided to search (or not) -->
-    <p *ngIf="trace.reasoning" class="text-[11px] text-slate-400 italic leading-relaxed">
+    <p *ngIf="trace.reasoning" class="text-xs15 text-slate-400 italic leading-relaxed">
       {{ trace.reasoning }}
     </p>
-    <p *ngIf="!trace.ran && trace.message" class="text-[11px] text-slate-400 leading-relaxed">
+    <p *ngIf="!trace.ran && trace.message" class="text-xs15 text-slate-400 leading-relaxed">
       {{ trace.message }}
     </p>
 
     <!-- Planned searches, with per-query state -->
     <div *ngIf="trace.queries.length > 0" class="space-y-1">
-      <div class="text-[10px] uppercase tracking-wide text-slate-500">
+      <div class="text-xs2 uppercase tracking-wide text-slate-500">
         Searches ({{ trace.queries.length }})
       </div>
       <div
         *ngFor="let q of trace.queries"
-        class="flex items-start gap-2 text-[11px]"
+        class="flex items-start gap-2 text-xs15"
         [title]="q.preview || ''"
       >
         <span class="shrink-0 mt-[3px] w-3 text-center">
@@ -68,8 +68,8 @@
 
     <!-- Pages opened in full via browse_page -->
     <div *ngIf="trace.browsed.length > 0" class="space-y-1">
-      <div class="text-[10px] uppercase tracking-wide text-slate-500">Pages read</div>
-      <div *ngFor="let page of trace.browsed" class="flex items-start gap-2 text-[11px]">
+      <div class="text-xs2 uppercase tracking-wide text-slate-500">Pages read</div>
+      <div *ngFor="let page of trace.browsed" class="flex items-start gap-2 text-xs15">
         <span class="shrink-0 mt-[3px] w-3 text-center">
           <span *ngIf="page.ok" class="text-emerald-400">✓</span>
           <span *ngIf="!page.ok" class="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
@@ -78,23 +78,10 @@
       </div>
     </div>
 
-    <!-- Everything the answer rests on -->
-    <div *ngIf="trace.sources.length > 0" class="space-y-1.5">
-      <div class="text-[10px] uppercase tracking-wide text-slate-500">
-        Sources ({{ trace.sources.length }})
-      </div>
-      <div class="flex flex-wrap gap-1.5">
-        <a
-          *ngFor="let source of trace.sources"
-          [href]="source.url"
-          target="_blank"
-          rel="noopener noreferrer"
-          [title]="source.url"
-          class="inline-flex items-center max-w-[15rem] text-[11px] px-2 py-0.5 rounded-full bg-white/5 text-slate-400 hover:text-slate-100 hover:bg-white/10 transition-colors"
-        >
-          <span class="truncate">{{ hostLabel(source.url, source.title) }}</span>
-        </a>
-      </div>
-    </div>
+    <!-- Sources are deliberately NOT repeated here - chat-window.component.html
+         renders the canonical, numbered Sources list below the answer
+         (msg.sources, which already merges these same citations with any
+         the model declared itself). Showing trace.sources here too would put
+         the same URLs on screen twice for one message. -->
   </div>
 </div>

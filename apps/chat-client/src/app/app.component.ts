@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, OnInit } from '@angular/core';
+import { Component, ChangeDetectionStrategy, OnInit, OnDestroy, HostListener } from '@angular/core';
 import { CommonModule, Location } from '@angular/common';
 import { NavbarComponent } from './components/navbar/navbar.component';
 import { SidebarComponent } from './components/sidebar/sidebar.component';
@@ -29,7 +29,7 @@ import { AuthService } from './services/auth.service';
   changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './app.component.html',
 })
-export class AppComponent implements OnInit {
+export class AppComponent implements OnInit, OnDestroy {
   public isSettingsOpen = false;
   public isProjectsOpen = false;
   public isAdminViewOpen = false;
@@ -46,6 +46,21 @@ export class AppComponent implements OnInit {
       if (path.includes('/emulator')) {
         this.initialAdminView = 'emulator';
       }
+    }
+  }
+
+  ngOnDestroy(): void {
+    // Cleanup happens via HostListener, no manual cleanup needed
+  }
+
+  @HostListener('window:resize')
+  onWindowResize(): void {
+    const shouldBeOpen = window.innerWidth >= AppComponent.MOBILE_BREAKPOINT_PX;
+    // Close sidebar when transitioning to mobile; open when transitioning to desktop
+    if (!shouldBeOpen && this.isSidebarOpen) {
+      this.isSidebarOpen = false;
+    } else if (shouldBeOpen && !this.isSidebarOpen) {
+      this.isSidebarOpen = true;
     }
   }
 

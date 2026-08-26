@@ -44,6 +44,20 @@ module.exports = {
         accentAmber: '#f59e0b',
         accentRose: '#f43f5e',
       },
+      fontSize: {
+        xs: '0.75rem', // 12px - labels, badges, small UI
+        sm: '0.875rem', // 14px - body text alternative
+        base: '1rem', // 16px - body text default
+        lg: '1.125rem', // 18px - slightly larger text
+        xl: '1.25rem', // 20px - headlines
+        '2xl': '1.5rem', // 24px - prominent headlines
+        '3xl': '1.875rem', // 30px - hero text
+        '4xl': '2.25rem', // 36px - large hero text
+        // Microscopic sizes for dense UI elements (annotations, badges, labels)
+        xs3: '9px', // very compact annotations
+        xs2: '10px', // compact annotations
+        xs15: '11px', // small annotations, metadata labels
+      },
       fontFamily: {
         // Plus Jakarta Sans/Inter/sans-serif have no emoji glyphs, so without
         // an explicit color-emoji fallback the browser picks whatever emoji
@@ -64,6 +78,15 @@ module.exports = {
       backdropBlur: {
         xs: '2px',
         glass: '16px',
+      },
+      borderRadius: {
+        sm: '0.25rem', // 4px - small, compact components
+        md: '0.375rem', // 6px - form inputs, small buttons
+        lg: '0.5rem', // 8px - medium components
+        xl: '0.75rem', // 12px - dialogs, cards
+        '2xl': '1rem', // 16px - large modals, prominent surfaces
+        '3xl': '1.5rem', // 24px - hero elements
+        full: '9999px', // circular
       },
       boxShadow: {
         glass: '0 8px 32px 0 rgba(0, 0, 0, 0.37)',

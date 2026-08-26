@@ -1,8 +1,10 @@
 import { AIMessage, BaseMessage, SystemMessage, ToolMessage } from '@langchain/core/messages';
+import { UIStreamEvent } from '@chat-monorepo/shared';
 import { AgentState, AgentStateUpdate } from './state';
 import { createOmniRouteChatModel } from '../llm/client';
 import { McpAdapter } from '../mcp/adapter';
 import { buildSystemPrompt } from '../prompt/prompt-manager';
+import { normalizeToolResultForUi } from './ui-tool-adapter';
 
 const mcpAdapter = new McpAdapter();
 
@@ -55,6 +57,7 @@ export async function toolsNode(state: AgentState): Promise<AgentStateUpdate> {
 
   const toolMessages: ToolMessage[] = [];
   let generatedImageUrl: string | null = state.generatedImageUrl ?? null;
+  const pendingUiEvents: UIStreamEvent[] = [];
 
   for (const call of toolCalls) {
     const result = await mcpAdapter.executeTool(call.name, call.args as Record<string, unknown>);
@@ -70,10 +73,27 @@ export async function toolsNode(state: AgentState): Promise<AgentStateUpdate> {
       }
     }
 
+    // Tool-backed structured UI (weather/stock): normalize the raw tool
+    // result into a ui_update/ui_error event so graph.ts can stream the
+    // component the moment this tool resolves, rather than waiting for the
+    // model's trailing ```ui block at the very end of the reply.
+    // Same fallback as the ToolMessage's tool_call_id below, so an id
+    // computed here always matches the ui_start id graph.ts emitted for
+    // this same call before the tool ran.
+    const id = call.id ?? call.name;
+    const uiResult = normalizeToolResultForUi(call.name, result);
+    if (uiResult) {
+      pendingUiEvents.push(
+        'error' in uiResult
+          ? { type: 'ui_error', id, componentType: uiResult.componentType, message: uiResult.error }
+          : { type: 'ui_update', id, componentType: uiResult.componentType, data: uiResult.data }
+      );
+    }
+
     toolMessages.push(new ToolMessage({ content: result, tool_call_id: call.id ?? call.name }));
   }
 
-  return { messages: toolMessages, generatedImageUrl };
+  return { messages: toolMessages, generatedImageUrl, pendingUiEvents };
 }
 
 /**

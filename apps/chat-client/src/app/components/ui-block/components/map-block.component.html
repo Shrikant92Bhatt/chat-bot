@@ -1,0 +1,32 @@
+<div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4 max-w-md">
+  <!-- Header -->
+  <div class="flex items-center gap-2 mb-3">
+    <span class="text-lg">📍</span>
+    <div>
+      <div class="text-xs font-semibold text-slate-400 uppercase tracking-wide">Location</div>
+      <div class="text-sm font-mono text-white">{{ data.center.lat | number: '1.4-4' }} {{ data.center.lng | number: '1.4-4' }}</div>
+    </div>
+  </div>
+
+  <!-- Markers -->
+  <div *ngIf="data.markers && data.markers.length > 0" class="flex flex-wrap gap-2 mb-4">
+    <span
+      *ngFor="let marker of data.markers"
+      class="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-accentCyan/10 border border-accentCyan/20 text-accentCyan"
+    >
+      <span>📌</span>
+      {{ marker.label || (marker.lat | number: '1.2-2') + ', ' + (marker.lng | number: '1.2-2') }}
+    </span>
+  </div>
+
+  <!-- CTA -->
+  <a
+    [href]="osmLink(data.center.lat, data.center.lng, data.zoom || 12)"
+    target="_blank"
+    rel="noopener"
+    class="inline-flex items-center gap-2 text-sm font-semibold text-white bg-accentCyan/20 hover:bg-accentCyan/30 text-accentCyan hover:text-cyan-200 px-4 py-2.5 rounded-lg transition-all duration-200 border border-accentCyan/30"
+  >
+    <span>🗺️</span>
+    Open Map ↗
+  </a>
+</div>

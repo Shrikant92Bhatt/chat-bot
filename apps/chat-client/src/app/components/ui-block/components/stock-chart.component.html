@@ -1,0 +1,34 @@
+<div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-3">
+    <div class="text-sm font-semibold text-slate-300">
+      <span class="text-white">{{ data.symbol }}</span>
+      <span *ngIf="data.name" class="text-slate-500 font-normal"> — {{ data.name }}</span>
+    </div>
+    <div *ngIf="data.interval" class="text-xs text-slate-400 bg-white/[0.03] px-2.5 py-1 rounded-md">{{ data.interval }}</div>
+  </div>
+
+  <!-- Chart -->
+  <svg viewBox="0 0 300 120" class="w-full h-24" role="img" aria-label="Stock price chart for {{ data.symbol }}">
+    <defs>
+      <linearGradient id="stockGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" style="stop-color:#06b6d4;stop-opacity:0.15" />
+        <stop offset="100%" style="stop-color:#06b6d4;stop-opacity:0" />
+      </linearGradient>
+    </defs>
+    <!-- Grid line -->
+    <line x1="12" y1="60" x2="300" y2="60" stroke="#ffffff" stroke-opacity="0.05" stroke-width="1" />
+    <!-- Area under curve -->
+    <polyline [attr.points]="'12,60 ' + stockSparklinePoints(data) + ' 288,60'" fill="url(#stockGradient)" />
+    <!-- Main line -->
+    <polyline
+      [attr.points]="stockSparklinePoints(data)"
+      fill="none"
+      stroke="#06b6d4"
+      stroke-width="2.5"
+      stroke-linejoin="round"
+      stroke-linecap="round"
+      vector-effect="non-scaling-stroke"
+    />
+  </svg>
+</div>

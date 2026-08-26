@@ -5,18 +5,56 @@ import {
   ChatAttachment,
   ChatMessage,
   ChatThread,
+  MessageFeedbackRating,
   MessageRole,
   SelectableModel,
   SELECTABLE_MODELS,
   DEFAULT_MODEL_ID,
+  ThreadFeedbackMap,
   UIComponent,
   OrchestratorSource,
   OrchestratorAction,
   ResearchStreamEvent,
   ResearchTrace,
+  UIStreamEvent,
+  PendingUIBlock,
 } from '@chat-monorepo/shared';
 import { AuthService } from './auth.service';
 import { getApiBaseUrl } from '../core/runtime-config';
+import { SseEventParser } from './sse-event-parser';
+import { applyRating, nextRatingOnClick } from './message-feedback.util';
+import { getFriendlyErrorMessage } from '../core/error-messages.util';
+import { ResponseRendererService } from './response-renderer.service';
+
+/**
+ * Whether a finished research trace is worth pinning onto the message (and
+ * therefore showing the "Thinking" panel forever after, on every reload).
+ *
+ * The research node (see orchestration/research.ts) always reports at least
+ * one `research_status` event, so a trace exists for every single turn -
+ * including ones that never needed research at all ("what is closure in
+ * JavaScript?"). Persisting that trace unconditionally is the bug: a plain
+ * answer would carry a permanent "Answered without research" panel.
+ *
+ * `trace.ran` already distinguishes "the planner said yes and search results
+ * came back" (research_sources sets it true) from "gated out before a
+ * search ever ran" (mcp/search disabled, no research signal, planner call
+ * failed, or the planner itself said no - research.ts's various skipWith()
+ * paths, all of which report phase:'skipped' and never set ran). None of
+ * those are worth a persisted panel.
+ *
+ * The one deliberate exception: every planned query failing (research.ts's
+ * "findings.length === 0" branch) also reports phase:'skipped' - so
+ * `ran` ends up false even though real queries were planned and attempted.
+ * That is different from never trying: the panel still has something
+ * genuine to show (which queries were attempted and that they failed), so
+ * it counts as worth persisting whenever at least one query reached a
+ * settled 'ok'/'failed' state.
+ */
+export function isResearchTraceWorthPersisting(trace: ResearchTrace): boolean {
+  if (trace.ran) return true;
+  return trace.queries.some((q) => q.status === 'ok' || q.status === 'failed');
+}
 
 @Injectable({
   providedIn: 'root',
@@ -36,6 +74,16 @@ export class ChatService {
   public isLoadingThreads = signal<boolean>(false);
   public isStreaming = signal<boolean>(false);
   /**
+   * The id of the user message currently being edited via the composer, or
+   * null when no edit is in progress. Only ever set on the LAST user
+   * message in the active thread (see isLastUserMessage()/
+   * startEditingMessage() below) - editing an earlier one is out of scope,
+   * for the same reason regenerating an earlier assistant reply is: it
+   * would invalidate summarizedThroughIndex, which assumes stable
+   * message-array indices (see PROJECT_CONTEXT.md's Known gaps).
+   */
+  public editingMessageId = signal<string | null>(null);
+  /**
    * What the backend is doing right now ("Searching the web", "Read 6
    * sources across 4 searches"). Research and tool round-trips all happen
    * before the first token exists, so without this the user watches an
@@ -53,6 +101,21 @@ export class ChatService {
   // On by default so tool calls (image generation, calculator) work out of
   // the box - users can still switch it off in Settings.
   public mcpEnabled = signal<boolean>(true);
+
+  /**
+   * One-shot text to drop into the composer, set by the empty-state
+   * capability chips (chat-window.component) and consumed by
+   * MessageInputComponent - the two are siblings under app.component with
+   * no other shared channel, so this signal is the handoff. Never sent
+   * automatically: the user still reviews/edits/submits it like anything
+   * else they type. null when there's nothing pending.
+   */
+  public composerDraft = signal<string | null>(null);
+
+  /** Prefills the composer with a starter prompt - see composerDraft above. */
+  public prefillComposer(text: string): void {
+    this.composerDraft.set(text);
+  }
 
   // Tracks unauthenticated user message limit (Max 1 message allowed without sign-in)
   public unauthUserMessageCount = signal<number>(0);
@@ -84,6 +147,20 @@ export class ChatService {
   private readonly ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'];
   private readonly ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
 
+  /**
+   * Thumbs up/down state for the ACTIVE thread's messages only, keyed by
+   * messageId - refetched (see loadFeedbackForThread below) whenever
+   * activeThreadId changes, so reopening a saved conversation shows prior
+   * ratings instead of resetting to neutral. Not a cache of every thread's
+   * feedback: a per-thread GET on selection keeps this simple and avoids
+   * fetching/storing feedback for conversations the user never reopens.
+   */
+  public messageFeedback = signal<ThreadFeedbackMap>({});
+  // Guards against a slow GET for a thread the user has since switched away
+  // from overwriting the feedback map for whichever thread is active by the
+  // time it resolves.
+  private feedbackRequestToken = 0;
+
   public activeThread = computed(() => {
     const id = this.activeThreadId();
     return this.threads().find((t) => t.id === id) || null;
@@ -108,7 +185,8 @@ export class ChatService {
 
   constructor(
     private authService: AuthService,
-    private location: Location
+    private location: Location,
+    private responseRenderer: ResponseRendererService
   ) {
     this.createInitialThread();
     void this.loadAvailableModels();
@@ -124,6 +202,24 @@ export class ChatService {
       const id = this.activeThreadId();
       if (id) this.location.replaceState(`/chat/${id}`);
     });
+
+    // Restores this thread's thumbs-up/down state whenever the active
+    // thread changes (switching threads, or resuming one on reload) - see
+    // messageFeedback above. Cleared immediately (not left showing the
+    // previous thread's ratings) while the fetch for the new thread is in
+    // flight; anonymous users have nothing to fetch (the endpoint requires
+    // a session), so their feedback map just stays empty.
+    effect(
+      () => {
+        const threadId = this.activeThreadId();
+        const uid = this.authService.userSignal()?.uid;
+        this.messageFeedback.set({});
+        if (threadId && uid) {
+          void this.loadFeedbackForThread(threadId);
+        }
+      },
+      { allowSignalWrites: true }
+    );
 
     // Effect: Reacts to User Login/Logout state changes
     effect(
@@ -146,6 +242,18 @@ export class ChatService {
       // clearUnauthenticatedHistory/createInitialThread write signals (threads,
       // unauthUserMessageCount) owned by this same service, which Angular
       // disallows from inside an effect by default (NG0600) unless opted in.
+      { allowSignalWrites: true }
+    );
+
+    // Editing the last user message only makes sense within the thread it
+    // belongs to - clear any in-progress edit the moment the active thread
+    // changes (thread switch, new thread, history load) so a stale edit
+    // session can't leak its draft into a different conversation.
+    effect(
+      () => {
+        this.activeThreadId();
+        this.editingMessageId.set(null);
+      },
       { allowSignalWrites: true }
     );
   }
@@ -354,21 +462,20 @@ export class ChatService {
   }
 
   public createInitialThread() {
+    // No seeded assistant greeting: an empty `messages` array lets the
+    // empty-state hero (capability chips, "How can I help you today?") in
+    // chat-window.component.html render for a genuinely new session,
+    // matching the already-empty threads created by createNewThread() and
+    // the authenticated fresh-thread fallback in loadUserThreadHistory()
+    // above. A seeded message here also had no preceding user turn, so its
+    // "Regenerate" button (`*ngIf="last"`) would silently no-op if clicked.
     const initialThread: ChatThread = {
       id: 'thread-' + Date.now(),
-      title: 'Enterprise Architecture & Multi-LLM Chat',
+      title: 'New Chat',
       createdAt: Date.now(),
       updatedAt: Date.now(),
       model: this.selectedModel(),
-      messages: [
-        {
-          id: 'welcome-msg',
-          role: 'assistant',
-          content: "Hello! I'm NexusAI, your intelligent assistant. Ask me anything — I'm here to help with questions, ideas, writing, and code.",
-          timestamp: Date.now(),
-          model: 'gemini-flash-latest',
-        },
-      ],
+      messages: [],
     };
 
     this.threads.set([initialThread]);
@@ -415,6 +522,66 @@ export class ChatService {
 
   /** Project the active conversation is scoped to, if any. */
   public activeProjectId = computed(() => this.activeThread()?.projectId ?? null);
+
+  /**
+   * Fetches the caller's ratings for every message in `threadId` (see
+   * GET /api/chat/threads/:id/feedback) and, unless the user has since
+   * switched to a different thread, replaces messageFeedback with the
+   * result. Silent on failure - a missed feedback fetch degrades to "shows
+   * as unrated", never an error toast, since this is a nicety on top of the
+   * conversation, not something a failure here should interrupt.
+   */
+  private async loadFeedbackForThread(threadId: string): Promise<void> {
+    const requestToken = ++this.feedbackRequestToken;
+    try {
+      const res = await fetch(`${this.apiUrl}/threads/${encodeURIComponent(threadId)}/feedback`, {
+        headers: { Authorization: `Bearer ${this.authService.getIdToken()}` },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (requestToken !== this.feedbackRequestToken || this.activeThreadId() !== threadId) return;
+      this.messageFeedback.set((data?.feedback as ThreadFeedbackMap) ?? {});
+    } catch (e) {
+      console.warn('[ChatService] Could not fetch message feedback:', e);
+    }
+  }
+
+  /**
+   * Rates (or, clicking the already-selected thumb again, un-rates - see
+   * nextRatingOnClick) one assistant message. Applies the change to
+   * messageFeedback optimistically so the button reflects the click
+   * immediately, then persists it; a failed request reverts the optimistic
+   * change (unless a newer click has already moved the rating on again),
+   * so a network hiccup never leaves the button showing a state that
+   * silently didn't save.
+   */
+  public async rateMessage(threadId: string, messageId: string, clicked: MessageFeedbackRating): Promise<void> {
+    const previousForMessage = this.messageFeedback()[messageId] ?? null;
+    const nextForMessage = nextRatingOnClick(previousForMessage, clicked);
+
+    this.messageFeedback.update((current) => applyRating(current, messageId, nextForMessage));
+
+    try {
+      const res = await fetch(`${this.apiUrl}/feedback`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.authService.getIdToken()}`,
+        },
+        body: JSON.stringify({ threadId, messageId, rating: nextForMessage }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    } catch (e) {
+      console.warn('[ChatService] Failed to save message feedback, reverting:', e);
+      this.messageFeedback.update((current) => {
+        // Only revert if this message's rating is still what we optimistically
+        // set - a rapid second click may have already moved it on again, and
+        // that newer (still in-flight) state must win, not this stale rollback.
+        if ((current[messageId] ?? null) !== nextForMessage) return current;
+        return applyRating(current, messageId, previousForMessage);
+      });
+    }
+  }
 
   // Dedicated image-generation mode (separate from normal chat, like
   // ChatGPT/Gemini's image tool) - switches the composer's placeholder and
@@ -485,7 +652,7 @@ export class ChatService {
       this.uploadedDocuments.update((docs) => [...docs, data.fileName]);
     } catch (error: any) {
       console.error('[ChatService] Document upload failed:', error);
-      this.documentUploadError.set(error.message || 'Failed to upload document.');
+      this.documentUploadError.set(getFriendlyErrorMessage(error, 'upload'));
     } finally {
       this.isUploadingDocument.set(false);
     }
@@ -557,7 +724,7 @@ export class ChatService {
       this.stagedAttachments.update((current) => [...current, ...data.attachments]);
     } catch (error: any) {
       console.error('[ChatService] Attachment upload failed:', error);
-      this.attachmentUploadError.set(error.message || 'Failed to upload attachment(s).');
+      this.attachmentUploadError.set(getFriendlyErrorMessage(error, 'upload'));
     } finally {
       this.isUploadingAttachments.set(false);
     }
@@ -624,7 +791,7 @@ export class ChatService {
       }
     } catch (error: any) {
       console.error('[ChatService] Image generation error:', error);
-      this.updateAssistantMessage(currentThreadId, assistantMessageId, `⚠️ Failed to generate image: ${error.message}`);
+      this.updateAssistantMessage(currentThreadId, assistantMessageId, `⚠️ ${getFriendlyErrorMessage(error, 'chat')}`);
     } finally {
       this.isStreaming.set(false);
       this.activityStatus.set(null);
@@ -743,6 +910,7 @@ export class ChatService {
                       error: false,
                       imageUrl: undefined,
                       ui: undefined,
+                      pendingUi: undefined,
                       sources: undefined,
                       actions: undefined,
                       suggestions: undefined,
@@ -753,6 +921,112 @@ export class ChatService {
           : t
       )
     );
+
+    await this.streamAssistantReply(currentThreadId, assistantMessageId, contextMessages, thread.projectId ?? null);
+  }
+
+  /**
+   * True when `msg` is the LAST user message in the active thread - not
+   * necessarily the last message overall, since that user turn's assistant
+   * reply (or placeholder) normally follows it. Edit is only ever offered
+   * here (see chat-window.component.html), mirroring why Regenerate is only
+   * offered on the last assistant message: summarizedThroughIndex assumes
+   * stable message-array indices, and editing an earlier turn would shift/
+   * invalidate it (see PROJECT_CONTEXT.md's Known gaps).
+   */
+  public isLastUserMessage(msg: ChatMessage): boolean {
+    if (msg.role !== 'user') return false;
+    const messages = this.activeThread()?.messages ?? [];
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') return messages[i].id === msg.id;
+    }
+    return false;
+  }
+
+  /** Enters edit mode for `msg` - see isLastUserMessage() for the restriction. */
+  public startEditingMessage(msg: ChatMessage): void {
+    if (this.isStreaming() || !this.isLastUserMessage(msg)) return;
+    this.editingMessageId.set(msg.id);
+  }
+
+  /** Leaves edit mode without sending anything. */
+  public cancelEditingMessage(): void {
+    this.editingMessageId.set(null);
+  }
+
+  /**
+   * Replaces the LAST user message's content in place and re-runs its
+   * assistant reply, exactly like regenerateLastResponse() above (reset the
+   * trailing assistant message in place, resend the trailing context) except
+   * the edited turn's own content changes too. Because sendMessage() (and
+   * this method, on a prior edit) always append a user message and its
+   * assistant placeholder together, the last user message - the only one
+   * Edit ever targets, see isLastUserMessage() - is always immediately
+   * followed by that turn's assistant reply as the very last message in the
+   * thread, the same shape regenerateLastResponse() relies on.
+   */
+  public async editLastUserMessage(newContent: string): Promise<void> {
+    const currentThreadId = this.activeThreadId();
+    const trimmed = newContent.trim();
+    if (!currentThreadId || !trimmed || this.isStreaming()) return;
+
+    const thread = this.activeThread();
+    const userMessageId = this.editingMessageId();
+    if (!thread || !userMessageId || thread.messages.length < 2) return;
+
+    const lastMessage = thread.messages[thread.messages.length - 1];
+    const secondLastMessage = thread.messages[thread.messages.length - 2];
+    if (lastMessage.role !== 'assistant' || secondLastMessage.role !== 'user' || secondLastMessage.id !== userMessageId) {
+      // Shape doesn't match what editLastUserMessage() expects (e.g. the
+      // thread changed out from under an open edit) - the thread-change
+      // effect above already clears editingMessageId in that case, but bail
+      // out defensively rather than mutate the wrong message.
+      return;
+    }
+
+    const assistantMessageId = lastMessage.id;
+
+    this.threads.update((threadsList) =>
+      threadsList.map((t) =>
+        t.id === currentThreadId
+          ? {
+              ...t,
+              updatedAt: Date.now(),
+              messages: t.messages.map((m) => {
+                if (m.id === userMessageId) return { ...m, content: trimmed };
+                if (m.id === assistantMessageId) {
+                  // Reset the trailing assistant reply in place, keeping its
+                  // id/position, and drop everything the previous run
+                  // attached (image, UI cards, suggestions) so stale extras
+                  // from the old answer don't linger - same as
+                  // regenerateLastResponse() above.
+                  return {
+                    ...m,
+                    content: '',
+                    error: false,
+                    imageUrl: undefined,
+                    ui: undefined,
+                    sources: undefined,
+                    actions: undefined,
+                    suggestions: undefined,
+                  };
+                }
+                return m;
+              }),
+            }
+          : t
+      )
+    );
+
+    this.editingMessageId.set(null);
+
+    const contextMessages = thread.messages
+      .filter((m) => m.id !== assistantMessageId)
+      .map((m) => ({
+        role: m.role,
+        content: m.id === userMessageId ? trimmed : m.content,
+        attachments: m.attachments,
+      }));
 
     await this.streamAssistantReply(currentThreadId, assistantMessageId, contextMessages, thread.projectId ?? null);
   }
@@ -843,76 +1117,27 @@ export class ChatService {
       if (!reader) throw new Error('Response body reader is null.');
 
       let accumulatedContent = '';
+      // Buffers raw chunk text across reader.read() calls so a `data: ...`
+      // payload (or the `\n\n` that terminates it) split across two chunks
+      // is still recovered correctly instead of being silently dropped -
+      // see sse-event-parser.ts.
+      const sseParser = new SseEventParser();
 
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
 
         const chunkText = decoder.decode(value, { stream: true });
-        const lines = chunkText.split('\n\n');
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-
-              if (data.error) {
-                accumulatedContent += `\n⚠️ Error: ${data.error}`;
-              }
-
-              if (data.toolCall) {
-                accumulatedContent += `\n\n> 🔧 Using **${data.toolCall.name}**...\n\n`;
-              }
-
-              if (data.research) {
-                this.applyResearchEvent(data.research as ResearchStreamEvent);
-              }
-
-              if (data.chunk) {
-                // Real content supersedes the live status line - once the
-                // model is writing, "searching" is stale. The trace itself
-                // stays, so the panel can still be expanded.
-                this.activityStatus.set(null);
-                accumulatedContent += data.chunk;
-              }
-
-              this.updateAssistantMessage(threadId, assistantMessageId, accumulatedContent);
-
-              if (data.imageUrl) {
-                this.setMessageImageUrl(threadId, assistantMessageId, data.imageUrl);
-              }
-
-              if (data.done && Array.isArray(data.suggestions) && data.suggestions.length > 0) {
-                this.setMessageSuggestions(threadId, assistantMessageId, data.suggestions);
-              }
-
-              // Sources/actions are NOT conditional on `ui`: a researched
-              // answer is usually plain prose with no card attached, and
-              // gating on `ui` here silently threw away every citation the
-              // research node gathered.
-              if (data.done && ((Array.isArray(data.ui) && data.ui.length > 0) || data.sources?.length || data.actions?.length)) {
-                this.setMessageUi(threadId, assistantMessageId, data.ui ?? [], data.sources, data.actions);
-              }
-
-              if (data.done && data.modelSwitch) {
-                const { fromModel, toModel, resetAt } = data.modelSwitch;
-                const notice = `> ℹ️ **${this.modelDisplayName(fromModel)}**'s daily limit was reached, so this reply used **${this.modelDisplayName(toModel)}** instead (${this.formatResetLabel(resetAt)}).\n\n`;
-                accumulatedContent = notice + accumulatedContent;
-                this.updateAssistantMessage(threadId, assistantMessageId, accumulatedContent);
-                this.setMessageModel(threadId, assistantMessageId, toModel);
-                // Switch the active selection too, so the next message
-                // doesn't immediately hit the same wall again - the
-                // exhausted model stays visible in the dropdown, just
-                // greyed out (see loadAvailableModels() below), until it
-                // resets or an admin raises the cap.
-                this.selectedModel.set(toModel);
-                void this.loadAvailableModels();
-              }
-            } catch (e) {
-              // Ignore partial chunk parse failures
-            }
-          }
+        for (const payload of sseParser.push(chunkText)) {
+          accumulatedContent = this.handleSsePayload(threadId, assistantMessageId, payload, accumulatedContent);
         }
+      }
+
+      // The stream can end without a final trailing `\n\n` after the last
+      // event - flush() recovers whatever payload was still buffered.
+      const trailingPayload = sseParser.flush();
+      if (trailingPayload !== null) {
+        accumulatedContent = this.handleSsePayload(threadId, assistantMessageId, trailingPayload, accumulatedContent);
       }
     } catch (error: any) {
       if (error.name !== 'AbortError') {
@@ -920,7 +1145,7 @@ export class ChatService {
         this.updateAssistantMessage(
           threadId,
           assistantMessageId,
-          `⚠️ Failed to stream response from backend. Details: ${error.message}`
+          `⚠️ ${getFriendlyErrorMessage(error, 'chat')}`
         );
       }
     } finally {
@@ -928,17 +1153,98 @@ export class ChatService {
       this.activityStatus.set(null);
       // Pin the trace onto the message before clearing the live one, so the
       // panel stays expandable after the turn (including on reload, since
-      // the thread is persisted below).
+      // the thread is persisted below) - but only when it represents
+      // something genuinely worth showing after the fact. A trivial
+      // "thought about it, skipped" trace (the common case - most turns
+      // never need research) would otherwise leave a permanent "Answered
+      // without research" panel on every single reply. See
+      // isResearchTraceWorthPersisting() above.
       const trace = this.activeResearchTrace();
       if (trace) {
-        this.setMessageResearch(threadId, assistantMessageId, trace);
+        if (isResearchTraceWorthPersisting(trace)) {
+          this.setMessageResearch(threadId, assistantMessageId, trace);
+        }
         this.activeResearchTrace.set(null);
       }
+      // Covers Stop Generation and a dropped connection alike: either can
+      // end the turn between a tool's ui_start and its ui_update/ui_error,
+      // which would otherwise leave that card spinning forever.
+      this.clearStaleLoadingUi(threadId, assistantMessageId);
       this.abortController = null;
       if (isAuthenticated) {
         this.persistUserThreadHistory();
       }
     }
+  }
+
+  /**
+   * Applies one fully-recovered SSE event payload (a `data: ...` JSON body,
+   * already extracted from the raw stream by SseEventParser above) to the
+   * in-flight assistant message. Pulled out of streamAssistantReply's
+   * reading loop so the exact same handling also runs for a trailing event
+   * recovered via sseParser.flush() once the stream ends. Returns the
+   * updated accumulatedContent (unchanged on a malformed/partial payload).
+   */
+  private handleSsePayload(threadId: string, assistantMessageId: string, payload: string, accumulatedContent: string): string {
+    try {
+      const data = JSON.parse(payload);
+
+      // CRITICAL: Never append structured objects (error, toolCall, research, etc.) to visible text.
+      // These must be handled separately from message content to prevent JSON from appearing in UI.
+      // Only text chunks (data.chunk) should be accumulated and displayed.
+
+      if (data.research) {
+        this.applyResearchEvent(data.research as ResearchStreamEvent);
+      }
+
+      if (data.uiEvent) {
+        this.applyUiStreamEvent(threadId, assistantMessageId, data.uiEvent as UIStreamEvent);
+      }
+
+      if (data.chunk) {
+        // Real content supersedes the live status line - once the
+        // model is writing, "searching" is stale. The trace itself
+        // stays, so the panel can still be expanded.
+        this.activityStatus.set(null);
+        accumulatedContent += data.chunk;
+      }
+
+      this.updateAssistantMessage(threadId, assistantMessageId, accumulatedContent);
+
+      if (data.imageUrl) {
+        this.setMessageImageUrl(threadId, assistantMessageId, data.imageUrl);
+      }
+
+      if (data.done && Array.isArray(data.suggestions) && data.suggestions.length > 0) {
+        this.setMessageSuggestions(threadId, assistantMessageId, data.suggestions);
+      }
+
+      // Sources/actions are NOT conditional on `ui`: a researched
+      // answer is usually plain prose with no card attached, and
+      // gating on `ui` here silently threw away every citation the
+      // research node gathered.
+      if (data.done && ((Array.isArray(data.ui) && data.ui.length > 0) || data.sources?.length || data.actions?.length)) {
+        this.setMessageUi(threadId, assistantMessageId, data.ui ?? [], data.sources, data.actions);
+      }
+
+      if (data.done && data.modelSwitch) {
+        const { fromModel, toModel, resetAt } = data.modelSwitch;
+        const notice = `> ℹ️ **${this.modelDisplayName(fromModel)}**'s daily limit was reached, so this reply used **${this.modelDisplayName(toModel)}** instead (${this.formatResetLabel(resetAt)}).\n\n`;
+        accumulatedContent = notice + accumulatedContent;
+        this.updateAssistantMessage(threadId, assistantMessageId, accumulatedContent);
+        this.setMessageModel(threadId, assistantMessageId, toModel);
+        // Switch the active selection too, so the next message
+        // doesn't immediately hit the same wall again - the
+        // exhausted model stays visible in the dropdown, just
+        // greyed out (see loadAvailableModels() below), until it
+        // resets or an admin raises the cap.
+        this.selectedModel.set(toModel);
+        void this.loadAvailableModels();
+      }
+    } catch (e) {
+      // Ignore malformed/partial payloads
+    }
+    return accumulatedContent;
   }
 
   /**
@@ -1130,10 +1436,119 @@ export class ChatService {
   }
 
   /**
+   * Folds one tool-backed UI lifecycle event (ui_start/ui_update/ui_error)
+   * into a message's transient `pendingUi` list, so a WEATHER_CARD/
+   * STOCK_CARD shows a loading state the instant the model calls the tool
+   * and its real data the instant the tool resolves - instead of only
+   * appearing once the entire reply (and its trailing ```ui block) has
+   * finished streaming. See ui-stream.interface.ts.
+   *
+   * Enhanced with defensive validation:
+   * - Validates ui_update data against the declared component type
+   * - Falls back to error state if data doesn't match expected shape
+   * - Prevents malformed component data from reaching the UI
+   *
+   * ui_update additionally appends the completed component straight onto
+   * `ui` (the same array the final `done` payload writes) so it renders via
+   * the normal app-ui-block path immediately, not just as a placeholder -
+   * setMessageUi's later, authoritative write is idempotent over this.
+   */
+  private applyUiStreamEvent(threadId: string, messageId: string, event: UIStreamEvent): void {
+    this.threads.update((threadsList) =>
+      threadsList.map((t) => {
+        if (t.id !== threadId) return t;
+        return {
+          ...t,
+          messages: t.messages.map((m) => {
+            if (m.id !== messageId) return m;
+
+            if (event.type === 'ui_start') {
+              const pending: PendingUIBlock[] = [
+                ...(m.pendingUi ?? []).filter((p) => p.id !== event.id),
+                { id: event.id, componentType: event.componentType, status: 'loading' },
+              ];
+              return { ...m, pendingUi: pending };
+            }
+
+            if (event.type === 'ui_error') {
+              const pending: PendingUIBlock[] = (m.pendingUi ?? []).map((p) =>
+                p.id === event.id ? { ...p, status: 'error', errorMessage: event.message } : p
+              );
+              return { ...m, pendingUi: pending };
+            }
+
+            // ui_update: validate data before promoting from pendingUi into the real `ui` list.
+            const component: UIComponent = {
+              type: event.componentType,
+              id: event.id,
+              data: event.data,
+            } as UIComponent;
+
+            // Defensively validate the component
+            if (!this.responseRenderer.validateComponent(component)) {
+              console.warn(
+                `[ChatService] ui_update event has invalid data for type ${event.componentType}, converting to error card`,
+                component
+              );
+              const errorComponent = this.responseRenderer.createErrorCard(
+                event.componentType,
+                'Tool returned data in unexpected format.'
+              );
+              const pending = (m.pendingUi ?? []).filter((p) => p.id !== event.id);
+              const ui = [
+                ...(m.ui ?? []).filter((c) => c.id !== event.id),
+                errorComponent,
+              ];
+              return { ...m, pendingUi: pending, ui };
+            }
+
+            const pending = (m.pendingUi ?? []).filter((p) => p.id !== event.id);
+            const ui = [...(m.ui ?? []).filter((c) => c.id !== event.id), component];
+            return { ...m, pendingUi: pending, ui };
+          }),
+        };
+      })
+    );
+  }
+
+  /**
+   * Drops any pendingUi entry still stuck in 'loading' once a turn has
+   * ended (normally, via Stop Generation, or a dropped connection) - the
+   * only way one can still be there is a tool call whose ui_update/ui_error
+   * never arrived, and an indefinite spinner is worse than no card at all.
+   */
+  private clearStaleLoadingUi(threadId: string, messageId: string): void {
+    this.threads.update((threadsList) =>
+      threadsList.map((t) => {
+        if (t.id !== threadId) return t;
+        return {
+          ...t,
+          messages: t.messages.map((m) =>
+            m.id === messageId && m.pendingUi?.some((p) => p.status === 'loading')
+              ? { ...m, pendingUi: m.pendingUi.filter((p) => p.status !== 'loading') }
+              : m
+          ),
+        };
+      })
+    );
+  }
+
+  /**
    * Attaches the orchestrator's structured UI payload to a message, once,
    * on the final `done: true` SSE event - mirrors setMessageSuggestions.
+   *
+   * Enhanced with defensive validation:
+   * - Filters out any components that fail type validation
+   * - Logs warnings for invalid components (never silently drops them without notice)
+   * - Ensures only valid, properly-typed components reach the UI layer
+   *
    * `data.ui`/`sources`/`actions` are already validated server-side (see
-   * apps/chat-api/src/orchestration/ui-schema.ts) so this just stores them.
+   * apps/chat-api/src/orchestration/ui-schema.ts) so this adds a second,
+   * independent validation layer. Also prunes `pendingUi` down to just its
+   * error entries: by `done` every tool-backed component has either landed in
+   * `ui` above (dropped from pendingUi already by applyUiStreamEvent) or
+   * failed (kept, so the error card explaining the missing component stays
+   * visible) - nothing legitimate is still genuinely "loading" at this point.
    */
   private setMessageUi(
     threadId: string,
@@ -1142,10 +1557,30 @@ export class ChatService {
     sources?: OrchestratorSource[],
     actions?: OrchestratorAction[]
   ) {
+    // Defensively validate all components before attaching them
+    const validatedUi = this.responseRenderer.filterValidComponents(ui);
+
+    if (validatedUi.length !== ui.length) {
+      const droppedCount = ui.length - validatedUi.length;
+      console.warn(
+        `[ChatService] Dropped ${droppedCount} invalid component(s) during setMessageUi validation`
+      );
+    }
+
     this.threads.update((threadsList) =>
       threadsList.map((t) => {
         if (t.id === threadId) {
-          const updatedMessages = t.messages.map((m) => (m.id === messageId ? { ...m, ui, sources, actions } : m));
+          const updatedMessages = t.messages.map((m) =>
+            m.id === messageId
+              ? {
+                  ...m,
+                  ui: validatedUi,
+                  sources: sources ?? [],
+                  actions: actions ?? [],
+                  pendingUi: (m.pendingUi ?? []).filter((p) => p.status === 'error'),
+                }
+              : m
+          );
           return { ...t, messages: updatedMessages };
         }
         return t;

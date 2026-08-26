@@ -35,6 +35,13 @@
         "proxyConfig": "apps/chat-client/proxy.conf.json"
       },
       "continuous": true
+    },
+    "test": {
+      "executor": "@nx/vitest:test",
+      "outputs": ["{options.reportsDirectory}"],
+      "options": {
+        "reportsDirectory": "coverage/apps/chat-client"
+      }
     }
   }
 }

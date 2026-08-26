@@ -2,33 +2,126 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   Design Token System - comprehensive CSS custom properties for theming
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@layer base {
+  :root {
+    /* ───────────────────────────────── Colors ────────────────────────────── */
+    /* Backgrounds */
+    --color-bg-primary: #0a0d14;
+    --color-bg-secondary: #0f172a;
+    --color-bg-tertiary: #1a202c;
+
+    /* Surfaces */
+    --color-surface-primary: #1a1f2e;
+    --color-surface-secondary: #242b37;
+    --color-surface-hover: #2d3748;
+    --color-surface-active: #374151;
+
+    /* Text */
+    --color-text-primary: #f1f5f9;
+    --color-text-secondary: #cbd5e1;
+    --color-text-tertiary: #94a3b8;
+    --color-text-muted: #64748b;
+
+    /* Borders */
+    --color-border-light: rgba(255, 255, 255, 0.08);
+    --color-border-medium: rgba(255, 255, 255, 0.12);
+
+    /* Semantic */
+    --color-accent-primary: #06b6d4;
+    --color-accent-secondary: #8b5cf6;
+    --color-accent-success: #10b981;
+    --color-accent-warning: #f59e0b;
+    --color-accent-danger: #f43f5e;
+
+    /* Messages */
+    --color-message-user-bg: rgba(99, 102, 241, 0.15);
+    --color-message-user-border: rgba(99, 102, 241, 0.2);
+
+    /* ───────────────────────────────── Spacing ───────────────────────────── */
+    --space-xs: 4px;
+    --space-sm: 8px;
+    --space-md: 12px;
+    --space-lg: 16px;
+    --space-xl: 24px;
+    --space-2xl: 32px;
+    --space-3xl: 48px;
+
+    /* ───────────────────────────────── Radii ────────────────────────────── */
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+    --radius-xl: 12px;
+    --radius-2xl: 16px;
+    --radius-3xl: 24px;
+    --radius-full: 9999px;
+
+    /* ───────────────────────────────── Typography ───────────────────────── */
+    --text-xs: 0.75rem;
+    --text-sm: 0.875rem;
+    --text-base: 1rem;
+    --text-lg: 1.125rem;
+    --text-xl: 1.25rem;
+
+    /* ───────────────────────────────── Shadows ──────────────────────────── */
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+
+    /* ───────────────────────────────── Transitions ──────────────────────── */
+    --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Support for prefers-color-scheme if implemented in future */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+    }
+  }
+}
+
 @layer utilities {
+  /* Utility classes based on design tokens */
   .glass-card {
     background: rgba(15, 23, 42, 0.55);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    border: 1px solid var(--color-border-light);
+    box-shadow: var(--shadow-lg);
   }
 
   .glass-card-hover {
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all var(--transition-base);
   }
   .glass-card-hover:hover {
     background: rgba(255, 255, 255, 0.07);
-    border-color: rgba(255, 255, 255, 0.18);
+    border-color: var(--color-border-medium);
     transform: translateY(-1px);
   }
 
   .glass-input {
-    background: rgba(10, 13, 20, 0.75);
+    background: var(--color-surface-primary);
     backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    border: 1px solid var(--color-border-light);
+  }
+
+  .ui-card {
+    @apply rounded-2xl border border-white/10 bg-white/[0.03];
+  }
+
+  .ui-card-hover {
+    @apply hover:bg-white/[0.05] transition-colors duration-200;
   }
 
   .glass-input:focus-within {
-    border-color: rgba(139, 92, 246, 0.5);
-    box-shadow: 0 0 15px rgba(139, 92, 246, 0.2);
+    border-color: var(--color-border-medium);
+    box-shadow: 0 0 15px rgba(6, 182, 212, 0.1);
   }
 
   .gradient-text-gemini {
@@ -102,6 +195,91 @@
     pointer-events: none;
     z-index: 0;
   }
+
+  /* ── Mobile-First Responsive Utilities ────────────────────────────────── */
+
+  /* Touch-friendly sizing for mobile (minimum 44x44px for tap targets) */
+  .touch-target {
+    @apply min-h-11 min-w-11;
+  }
+
+  /* Safe area insets for notched devices (iPhone X+) */
+  .safe-area-inset {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Responsive padding: reduce on mobile, increase on larger screens */
+  .responsive-px {
+    @apply px-3 sm:px-4 md:px-6 lg:px-8;
+  }
+
+  .responsive-py {
+    @apply py-2 sm:py-3 md:py-4 lg:py-6;
+  }
+
+  /* Full width without horizontal scroll on mobile */
+  .no-scroll-mobile {
+    @apply overflow-x-hidden;
+  }
+
+  /* Prevent text size changes on mobile safari when keyboard appears */
+  .prevent-auto-zoom {
+    font-size: 16px;
+  }
+
+  /* Responsive font sizes (mobile-first) */
+  .text-responsive-sm {
+    @apply text-sm sm:text-base;
+  }
+
+  .text-responsive-base {
+    @apply text-base sm:text-lg;
+  }
+
+  .text-responsive-lg {
+    @apply text-lg sm:text-xl;
+  }
+
+  /* Cards with responsive padding */
+  .card-responsive {
+    @apply rounded-xl border border-white/10 bg-white/[0.03] p-3 sm:p-4 md:p-5;
+  }
+
+  /* Grid responsive columns */
+  .grid-responsive-auto {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+  }
+
+  @media (max-width: 640px) {
+    .grid-responsive-auto {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* Responsive flex direction */
+  .flex-responsive {
+    @apply flex flex-col sm:flex-row;
+  }
+
+  /* Image responsive sizing */
+  .image-responsive {
+    @apply max-w-full h-auto;
+  }
+
+  /* Reduce gap on mobile */
+  .gap-responsive {
+    @apply gap-2 sm:gap-3 md:gap-4;
+  }
+
+  /* Responsive margin for spacing */
+  .margin-responsive {
+    @apply m-2 sm:m-3 md:m-4;
+  }
 }
 
 /* Rendered assistant markdown (headings, lists, tables, code, links, blockquotes).
@@ -120,21 +298,27 @@
   .markdown-body h1,
   .markdown-body h2,
   .markdown-body h3,
-  .markdown-body h4 {
-    @apply font-bold text-white mt-3 mb-1;
+  .markdown-body h4,
+  .markdown-body h5,
+  .markdown-body h6 {
+    @apply font-bold text-white mt-4 mb-2 scroll-mt-20;
   }
   .markdown-body h1 {
-    @apply text-lg;
+    @apply text-2xl;
   }
   .markdown-body h2 {
+    @apply text-xl;
+  }
+  .markdown-body h3 {
+    @apply text-lg;
+  }
+  .markdown-body h4,
+  .markdown-body h5,
+  .markdown-body h6 {
     @apply text-base;
   }
-  .markdown-body h3,
-  .markdown-body h4 {
-    @apply text-sm;
-  }
   .markdown-body p {
-    @apply mb-2;
+    @apply mb-3 leading-7;
   }
   .markdown-body strong {
     @apply font-bold text-white;
@@ -142,44 +326,230 @@
   .markdown-body em {
     @apply italic text-slate-100;
   }
+  .markdown-body ul,
+  .markdown-body ol {
+    @apply mb-3 space-y-1.5;
+  }
   .markdown-body ul {
-    @apply list-disc list-outside pl-5 mb-2 space-y-1;
+    @apply list-disc list-outside pl-6;
   }
   .markdown-body ol {
-    @apply list-decimal list-outside pl-5 mb-2 space-y-1;
+    @apply list-decimal list-outside pl-6;
+  }
+  .markdown-body li {
+    @apply ml-0;
   }
   .markdown-body a {
-    @apply text-accentCyan underline underline-offset-2 hover:text-cyan-300;
+    @apply text-accentCyan underline underline-offset-2 hover:text-cyan-300 transition-colors;
   }
   .markdown-body blockquote {
-    @apply border-l-2 border-accentViolet/50 pl-3 italic text-slate-400 my-2;
+    @apply border-l-4 border-accentViolet/50 pl-4 italic text-slate-400 my-3 py-2 bg-white/[0.02] rounded-r-lg;
   }
   .markdown-body hr {
-    @apply border-white/10 my-3;
+    @apply border-white/10 my-4;
   }
   .markdown-body code {
-    @apply px-1.5 py-0.5 rounded bg-black/50 border border-white/10 text-accentCyan text-xs font-mono break-words;
+    @apply px-2 py-1 rounded bg-black/60 border border-white/10 text-accentCyan text-xs font-mono break-words;
   }
   .markdown-body pre {
-    @apply bg-obsidian/90 border border-glassBorder rounded-xl p-3 my-2 overflow-x-auto;
+    @apply max-w-full overflow-x-auto;
   }
-  .markdown-body pre code {
-    @apply bg-transparent border-0 p-0 text-emerald-300 text-xs leading-relaxed break-normal;
+  /* `marked`'s fenced-code renderer (code-block-renderer.ts) no longer emits
+     a bare <pre><code>; it emits the `.code-block-*` structure styled below,
+     shared with the standalone CODE_BLOCK UIComponent. Reset the inline-code
+     look for the <code> inside it (the `.markdown-body code` rule above
+     would otherwise apply there too - `.markdown-body .code-block-code` wins
+     on specificity). */
+  .markdown-body .code-block-code {
+    @apply bg-transparent border-0 p-0 text-inherit;
+  }
+}
+
+/* Code blocks: highlighted, copyable, with per-block wrap and line-number
+   toggles. Built by `code-block-renderer.ts` and shared verbatim by every
+   surface that shows code - fenced blocks inside `[innerHTML]`-rendered
+   Markdown (chat-window, the MARKDOWN UIComponent) and the standalone
+   CODE_BLOCK UIComponent - so one set of rules styles every code block in
+   the app, regardless of which path rendered it. */
+@layer components {
+  .code-block-wrap {
+    @apply my-2 max-w-full overflow-hidden rounded-2xl border border-white/10 bg-obsidian/90;
+  }
+  .code-block-header {
+    @apply flex items-center gap-2 border-b border-white/10 px-4 py-3;
+  }
+  .code-block-title {
+    @apply flex-1 truncate font-mono text-xs font-semibold text-slate-300;
+  }
+  .code-block-lang-badge {
+    @apply shrink-0 text-xs text-slate-500 px-2 py-1 rounded bg-white/5;
+  }
+  .code-block-actions {
+    @apply flex shrink-0 items-center gap-1.5;
+  }
+  .code-block-btn {
+    @apply cursor-pointer select-none rounded-lg px-2.5 py-1 text-xs text-slate-400 transition-colors duration-200 hover:bg-white/10 hover:text-slate-200 font-medium;
+  }
+  .code-block-btn:hover {
+    @apply bg-white/10 text-slate-100;
+  }
+  .code-block-btn.active {
+    @apply bg-accentCyan/20 text-accentCyan;
+  }
+  .code-block-btn.copied {
+    @apply text-emerald-300;
+  }
+
+  .code-block-pre {
+    @apply m-0 max-w-full overflow-x-auto p-4 text-xs leading-relaxed;
+    white-space: pre;
+  }
+  /* Wrap toggle: default is horizontal scroll (matches the app's previous
+     behavior); toggling `.wrap-enabled` switches to no-scroll, wrapped
+     lines instead. Scroll always stays contained to this element, never the
+     page - `max-w-full` plus `overflow-x-auto` keep a long unwrapped line
+     from ever widening the message bubble or the page itself, on mobile
+     included. */
+  .code-block-pre.wrap-enabled {
+    overflow-x: hidden;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .code-block-code {
+    @apply block font-mono text-xs text-slate-200;
+    counter-reset: code-line;
+  }
+  .code-line {
+    display: block;
+    min-height: 1.4em;
+  }
+  /* Line numbers are CSS-generated (counter-reset/counter-increment), not
+     DOM-injected number spans, so they're never part of what a manual
+     text-selection copy would pick up - not that it matters for the Copy
+     button, which always reads the untouched original text out of the
+     snippet store instead of the rendered DOM either way. */
+  .code-block-wrap.show-line-numbers .code-line {
+    position: relative;
+    padding-left: 2.75em;
+  }
+  .code-block-wrap.show-line-numbers .code-line::before {
+    counter-increment: code-line;
+    content: counter(code-line);
+    position: absolute;
+    left: 0;
+    width: 2.25em;
+    text-align: right;
+    color: rgba(148, 163, 184, 0.45);
+    user-select: none;
+  }
+
+  /* highlight.js token colors - a small custom palette (not an imported
+     hljs theme stylesheet) tuned to this app's obsidian/glass dark theme
+     rather than pulling in a separate, unthemed CSS file. */
+  .hljs-comment,
+  .hljs-quote {
+    @apply text-slate-500 italic;
+  }
+  .hljs-keyword,
+  .hljs-selector-tag,
+  .hljs-literal,
+  .hljs-subst {
+    @apply text-accentViolet;
+  }
+  .hljs-string,
+  .hljs-doctag,
+  .hljs-addition {
+    @apply text-emerald-300;
+  }
+  .hljs-number {
+    @apply text-amber-300;
+  }
+  .hljs-title,
+  .hljs-section,
+  .hljs-selector-id,
+  .hljs-name {
+    @apply text-accentCyan;
+  }
+  .hljs-type,
+  .hljs-class .hljs-title {
+    @apply text-sky-300;
+  }
+  .hljs-attribute,
+  .hljs-attr,
+  .hljs-symbol,
+  .hljs-bullet,
+  .hljs-link {
+    @apply text-rose-300;
+  }
+  .hljs-built_in,
+  .hljs-builtin-name {
+    @apply text-blue-300;
+  }
+  .hljs-variable,
+  .hljs-template-variable,
+  .hljs-regexp {
+    @apply text-orange-200;
+  }
+  .hljs-deletion {
+    @apply text-red-400;
+  }
+  .hljs-meta {
+    @apply text-slate-400;
+  }
+  .hljs-emphasis {
+    @apply italic;
+  }
+  .hljs-strong {
+    @apply font-bold;
   }
   .markdown-body table {
-    @apply w-full my-2 text-xs border-collapse;
+    @apply w-full my-4 text-xs border-collapse rounded-lg overflow-hidden;
     display: block;
     overflow-x: auto;
   }
   .markdown-body th,
   .markdown-body td {
-    @apply border border-glassBorder px-3 py-2 text-left align-top;
+    @apply border border-white/10 px-4 py-3 text-left align-top;
   }
   .markdown-body th {
-    @apply bg-white/5 text-slate-100 font-semibold whitespace-nowrap;
+    @apply bg-white/5 text-slate-100 font-semibold whitespace-nowrap sticky top-0 z-10;
+  }
+  .markdown-body tbody tr {
+    @apply hover:bg-white/[0.03] transition-colors;
   }
   .markdown-body tbody tr:nth-child(even) {
-    background: rgba(255, 255, 255, 0.02);
+    background: rgba(255, 255, 255, 0.01);
+  }
+
+  /* Inline citation marker chips - built by citation-markers.ts from an
+     in-range [n] in the model's prose, wired up to scroll-and-highlight the
+     matching Sources chip below by citation-marker-interactions.ts. Sized
+     and positioned like a footnote/superscript so it reads as an annotation
+     on the word before it, not as part of the sentence's own text. */
+  .citation-marker {
+    @apply inline-flex items-center justify-center cursor-pointer select-none rounded-full bg-white/10 text-accentCyan align-super transition-colors;
+    font-size: 0.65em;
+    line-height: 1;
+    min-width: 1.35em;
+    height: 1.35em;
+    margin: 0 0.05em;
+    padding: 0 0.35em;
+  }
+  .citation-marker:hover {
+    @apply bg-accentCyan/20 text-cyan-200;
+  }
+
+  /* Brief highlight on the Sources chip a citation marker jumps to, so the
+     reader can find it even when it's already in view and scrollIntoView()
+     produces no visible motion on its own. Timed by
+     citation-marker-interactions.ts's flashHighlight() rather than a CSS
+     animation, so a rapid second click restarts the same window instead of
+     the highlight cutting off mid-transition. */
+  .citation-source-highlight {
+    @apply bg-accentCyan/25 text-slate-100;
+    box-shadow: 0 0 0 1px rgba(6, 182, 212, 0.5);
+    transition: background-color 0.2s ease, box-shadow 0.2s ease;
   }
 }
 
@@ -201,4 +571,400 @@
 }
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
+}
+
+/* Modal entrance: fade + slight scale-up. Plain @keyframes rather than the
+   tailwindcss-animate plugin - that plugin was never added to
+   tailwind.config.js's `plugins`, so classes like `animate-in fade-in
+   zoom-in-95` (previously used on settings-modal) compiled to nothing and
+   the modal just appeared with no transition. */
+@keyframes modal-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.modal-enter {
+  animation: modal-enter 0.2s ease-out;
+}
+
+/* ── Mobile-First Responsive Typography ──────────────────────────────── */
+@media (max-width: 640px) {
+  /* Ensure readable base font size on mobile (16px minimum to prevent auto-zoom) */
+  body {
+    font-size: 16px;
+  }
+
+  /* Reduce heading sizes on small screens */
+  .markdown-body h1 {
+    @apply text-base;
+  }
+
+  .markdown-body h2 {
+    @apply text-sm;
+  }
+
+  .markdown-body h3,
+  .markdown-body h4 {
+    @apply text-xs;
+  }
+
+  /* Improve line-height for readability on mobile */
+  .markdown-body {
+    @apply leading-relaxed;
+  }
+
+  /* Compact lists on mobile */
+  .markdown-body ul,
+  .markdown-body ol {
+    @apply pl-4 space-y-0.5;
+  }
+
+  /* Ensure code blocks don't overflow */
+  .code-block-pre {
+    @apply p-2 text-xs;
+  }
+
+  /* Reduce table font size on mobile */
+  .markdown-body table {
+    @apply text-xs;
+  }
+
+  .markdown-body th,
+  .markdown-body td {
+    @apply px-2 py-1.5;
+  }
+}
+
+/* ── Mobile-Specific Component Optimizations ──────────────────────────── */
+
+/* Input & textarea optimization for mobile keyboards */
+input[type="text"],
+input[type="search"],
+textarea {
+  font-size: 16px !important; /* Prevent iOS auto-zoom */
+}
+
+/* Ensure inputs remain visible and accessible when keyboard appears */
+input:focus,
+textarea:focus {
+  font-size: 16px !important;
+}
+
+/* Message input specific mobile adjustments */
+@media (max-width: 640px) {
+  /* Reduce padding in message input for smaller screens */
+  .message-input-container {
+    @apply px-2 pb-2;
+  }
+
+  /* Ensure send button is always accessible */
+  .send-button {
+    @apply min-h-10 min-w-10;
+  }
+
+  /* Stack model selector on very small screens */
+  .model-selector {
+    max-width: 120px;
+  }
+
+  /* Hide labels on mobile, use aria-label instead */
+  .mobile-hide-label {
+    @apply hidden;
+  }
+
+  /* Make attachment previews smaller on mobile */
+  .attachment-preview {
+    @apply w-12 h-12;
+  }
+
+  /* Reduce message spacing on mobile */
+  .message-container {
+    @apply space-y-3;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1024px) {
+  /* Tablet adjustments */
+  .message-input-container {
+    @apply px-3 pb-3;
+  }
+
+  .attachment-preview {
+    @apply w-14 h-14;
+  }
+}
+
+/* Chat window responsive adjustments */
+@media (max-width: 640px) {
+  /* Reduce excessive padding in chat window */
+  .chat-window-container {
+    @apply p-2;
+  }
+
+  /* Ensure messages don't overflow */
+  .message-content {
+    @apply max-w-full break-words;
+  }
+
+  /* Responsive message avatars */
+  .message-avatar {
+    @apply w-6 h-6;
+  }
+
+  /* Reduce gap between messages */
+  .messages-list {
+    @apply space-y-3;
+  }
+
+  /* Make user message bubbles responsive */
+  .user-message-bubble {
+    @apply max-w-xs;
+  }
+
+  /* Ensure assistant message content is readable */
+  .assistant-message-content {
+    @apply text-sm leading-relaxed;
+  }
+}
+
+/* Sidebar responsive adjustments */
+@media (max-width: 1024px) {
+  /* Ensure sidebar collapses properly */
+  .sidebar-container {
+    @apply fixed inset-y-0 left-0 z-20 w-64;
+  }
+
+  /* Prevent overflow on mobile */
+  .sidebar-content {
+    @apply overflow-y-auto;
+  }
+
+  /* Make sidebar items touch-friendly */
+  .sidebar-item {
+    @apply min-h-10 px-3 py-2;
+  }
+}
+
+/* Navbar responsive adjustments */
+@media (max-width: 640px) {
+  /* Compact navbar on mobile */
+  .navbar-container {
+    @apply h-14 px-2;
+  }
+
+  /* Stack navbar items efficiently */
+  .navbar-content {
+    @apply gap-1;
+  }
+
+  /* Make navbar buttons smaller on mobile but still touch-friendly */
+  .navbar-button {
+    @apply p-2 min-h-9 min-w-9;
+  }
+
+  /* Hide labels in navbar on mobile */
+  .navbar-label {
+    @apply hidden;
+  }
+
+  /* Reduce brand text size */
+  .brand-text {
+    @apply text-base;
+  }
+}
+
+/* Responsive modal handling */
+@media (max-width: 640px) {
+  /* Full-screen modals on mobile */
+  .modal-container {
+    @apply w-full h-screen rounded-none;
+  }
+
+  /* Modal padding on mobile */
+  .modal-content {
+    @apply p-3;
+  }
+
+  /* Modal header on mobile */
+  .modal-header {
+    @apply text-lg;
+  }
+}
+
+/* Weather/Stock card responsive sizing */
+@media (max-width: 640px) {
+  /* Reduce weather card padding */
+  .weather-card,
+  .stock-card {
+    @apply p-3;
+  }
+
+  /* Stack weather info on mobile */
+  .weather-info {
+    @apply flex-col gap-2;
+  }
+
+  /* Reduce forecast preview height on mobile */
+  .weather-forecast {
+    max-height: 120px;
+  }
+
+  /* Make cards single column */
+  .card-grid {
+    @apply grid-cols-1;
+  }
+}
+
+/* Table responsive handling */
+@media (max-width: 640px) {
+  .table-container {
+    @apply max-h-60 overflow-auto;
+  }
+
+  /* Reduce table padding */
+  .markdown-body table {
+    @apply text-xs;
+  }
+
+  .markdown-body th,
+  .markdown-body td {
+    @apply px-2 py-1;
+  }
+
+  /* Simplify table on mobile */
+  .table-toolbar {
+    @apply flex-col gap-2;
+  }
+
+  .table-actions {
+    @apply flex-col gap-1;
+  }
+
+  .table-actions button {
+    @apply text-xs;
+  }
+}
+
+/* Charts and visualization responsive */
+@media (max-width: 640px) {
+  /* Reduce chart height on mobile */
+  .chart-container {
+    max-height: 200px;
+  }
+
+  /* Simplify chart elements */
+  .chart-legend {
+    @apply text-xs gap-1;
+  }
+
+  /* Reduce chart padding */
+  .chart-wrapper {
+    @apply p-2;
+  }
+}
+
+/* Respects the OS-level "reduce motion" setting: collapses every CSS
+   transition/animation in the app to effectively instant instead of
+   skipping motion component-by-component. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Viewport-Specific Optimizations ──────────────────────────────────── */
+
+/* Very small phones (320px - 380px) */
+@media (max-width: 380px) {
+  body {
+    font-size: 14px;
+  }
+
+  .navbar-container {
+    @apply h-12 px-1.5;
+  }
+
+  .sidebar-item {
+    @apply text-xs px-2 py-1.5;
+  }
+
+  .message-input-container {
+    @apply px-1.5;
+  }
+
+  /* Hide non-essential UI on tiny screens */
+  .hide-on-tiny-screen {
+    @apply hidden;
+  }
+}
+
+/* Standard phones (380px - 430px) */
+@media (min-width: 381px) and (max-width: 430px) {
+  .navbar-container {
+    @apply h-14 px-2;
+  }
+
+  .card-responsive {
+    @apply p-3;
+  }
+}
+
+/* Larger phones (430px - 640px) */
+@media (min-width: 431px) and (max-width: 640px) {
+  .navbar-container {
+    @apply h-16 px-3;
+  }
+
+  .message-input-container {
+    @apply px-3;
+  }
+}
+
+/* Tablets (768px - 1024px) */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .navbar-container {
+    @apply h-16 px-4;
+  }
+
+  .sidebar-container {
+    @apply relative w-56;
+  }
+
+  .chat-window-container {
+    @apply p-4;
+  }
+
+  .message-input-container {
+    @apply px-4;
+  }
+}
+
+/* Desktop and larger (1024px+) */
+@media (min-width: 1024px) {
+  .navbar-container {
+    @apply h-16 px-6;
+  }
+
+  .chat-window-container {
+    @apply p-8;
+  }
+
+  .message-input-container {
+    @apply px-4;
+  }
+
+  /* Show additional UI on larger screens */
+  .show-on-desktop {
+    @apply flex;
+  }
 }

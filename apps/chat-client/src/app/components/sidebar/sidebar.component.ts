@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output, ChangeDetectionStrategy } from '@angular/core';
+import { Component, EventEmitter, Input, Output, ChangeDetectionStrategy, signal, computed, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ChatService } from '../../services/chat.service';
 import { ProjectService } from '../../services/project.service';
@@ -15,8 +15,28 @@ export class SidebarComponent {
   @Output() threadSelected = new EventEmitter<void>();
   @Output() settingsClicked = new EventEmitter<void>();
   @Output() projectsClicked = new EventEmitter<void>();
+  @Output() closeSidebar = new EventEmitter<void>();
+
+  /**
+   * Client-side filter over already-loaded thread titles - no backend
+   * search endpoint exists (see chat.service.ts), so this narrows
+   * chatService.threads() in place rather than querying anything.
+   */
+  public searchQuery = signal<string>('');
+
+  public filteredThreads = computed(() => {
+    const query = this.searchQuery().trim().toLowerCase();
+    const threads = this.chatService.threads();
+    if (!query) return threads;
+    return threads.filter((t) => (t.title || 'New Chat').toLowerCase().includes(query));
+  });
 
   constructor(public chatService: ChatService, public projectService: ProjectService) {}
+
+  public onSearchInput(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    this.searchQuery.set(target.value);
+  }
 
   public selectThread(threadId: string): void {
     this.chatService.selectThread(threadId);
@@ -36,5 +56,12 @@ export class SidebarComponent {
 
   public projectNameFor(projectId: string | null | undefined): string | null {
     return this.projectService.getProjectName(projectId);
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscapeKey(): void {
+    if (this.isOpen && window.innerWidth < 1024) {
+      this.closeSidebar.emit();
+    }
   }
 }

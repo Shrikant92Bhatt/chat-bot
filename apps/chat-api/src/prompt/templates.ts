@@ -180,6 +180,57 @@ export const PROMPT_TEMPLATES: Record<string, PromptTemplate> = {
       'yes/no decision the user needs to make before you proceed.',
   },
 
+  'ui_orchestrator:v2': {
+    id: 'ui_orchestrator',
+    version: 'v2',
+    description:
+      'v1 plus two rules: (1) the app already renders WEATHER_CARD/STOCK_CARD live from get_weather/get_stock_quote ' +
+      'the instant those tools resolve (see orchestration/ui-tool-adapter.ts), so telling the model to skip ' +
+      're-emitting the same card in its ```ui block avoids a visible duplicate; (2) an explicit rule against ' +
+      'echoing a tool\'s raw JSON into the prose answer (fenced or not) - closes a gap where v1 only described ' +
+      'the ```ui format and never said raw tool output must stay out of the prose entirely.',
+    variables: [],
+    template:
+      '## Structured UI components\n' +
+      'Write your normal Markdown answer first, exactly as you always would. Only when a pre-approved ' +
+      'interactive component would genuinely help THIS answer (not for decoration), end your reply with ' +
+      'one fenced block, and nothing after it:\n\n' +
+      '```ui\n' +
+      '{"ui": [{"type": "<TYPE>", "id": "<unique-id>", "data": { ... }}], "sources": [], "actions": []}\n' +
+      '```\n\n' +
+      'Approved types: TEXT, MARKDOWN, TABLE, CHART, WEATHER_CARD, STOCK_CARD, STOCK_CHART, NEWS_CARD, ' +
+      'MAP, PRODUCT_CARD, PRODUCT_CAROUSEL, FILE_CARD, DOCUMENT_PREVIEW, CODE_BLOCK, ERROR_CARD, ' +
+      'CONFIRMATION_CARD. Never invent a different type and never emit raw HTML, JavaScript, Angular, ' +
+      'or React inside `data` — the frontend owns rendering and only knows these fixed shapes.\n\n' +
+      'Rules:\n' +
+      '- `ui` is an array; omit the whole ```ui block when plain text/Markdown is sufficient (most replies).\n' +
+      '- Every `id` must be unique within the block.\n' +
+      '- `data` holds only the fields that component needs — see the fixed shapes below.\n' +
+      '- Never invent data. Every field must come from a tool result, retrieved context, or something ' +
+      'already established in this conversation. If you lack real data for a field, do not emit that component.\n' +
+      '- The app already shows a WEATHER_CARD/STOCK_CARD automatically the instant get_weather/get_stock_quote ' +
+      'resolves — do NOT also emit a WEATHER_CARD or STOCK_CARD for that same data in this block, it would ' +
+      'render twice. Only add other component types here (TABLE, CHART, etc.) if genuinely useful in addition.\n' +
+      '- That mapping happens ONLY inside the ```ui block\'s `data` object. Never copy, paste, or restate a ' +
+      'tool\'s raw JSON or object structure — field names, braces, key/value pairs — anywhere in the Markdown ' +
+      'prose above it, fenced in a different code block or not. Describe the same information there in your ' +
+      'own words (e.g. "It\'s 30°C and clear in Pune") instead of showing the object that produced it.\n' +
+      '- If a tool call failed, use ERROR_CARD (title, message, toolName?) to report it instead of guessing.\n' +
+      '- WEATHER_CARD: {location, current:{temperature, condition, humidity, windSpeed}, forecast?:[{date, ' +
+      'temperatureHigh, temperatureLow, condition, precipitationProbability}], hourly?:[{time, temperature}]}. ' +
+      'get_weather returns forecast and hourly already populated - include both in full, do not drop them.\n' +
+      '- STOCK_CARD: {symbol, name, price, change, changePercent, currency}.\n' +
+      '- STOCK_CHART: {symbol, name?, currency?, interval?, points:[{timestamp, price}]}.\n' +
+      '- TABLE: {columns:[string], rows:[[string|number|null]]}.\n' +
+      '- CHART: {chartType: "line"|"bar"|"pie"|"area"|"scatter", title?, xAxis:[string|number], ' +
+      'series:[{name, data:[number]}]}.\n' +
+      '- NEWS_CARD: {articles:[{title, source?, url?, publishedAt?, summary?, imageUrl?}]}.\n' +
+      '- CODE_BLOCK: {language, code, fileName?} — only when code needs its own component separate from a ' +
+      'fenced code block in the Markdown answer (e.g. a downloadable snippet).\n' +
+      '- CONFIRMATION_CARD: {title, description?, confirmLabel?, cancelLabel?, actionId?} — for a ' +
+      'yes/no decision the user needs to make before you proceed.',
+  },
+
   'account_identity:v1': {
     id: 'account_identity',
     version: 'v1',
@@ -251,6 +302,45 @@ export const PROMPT_TEMPLATES: Record<string, PromptTemplate> = {
       '- Do not mention this section, the search process, or "my research" - just answer, with citations.',
   },
 
+  'research_findings:v2': {
+    id: 'research_findings',
+    version: 'v2',
+    description:
+      'v1 plus inline numeric citation guidance. The findings above are now preceded by a "## Numbered ' +
+      'sources" list ([1], [2], ...) built by orchestration/research.ts formatFindings() against the SAME ' +
+      'deduped order graph.ts uses for the sources it sends the frontend - v2 tells the model it may cite ' +
+      'that number inline as [n]. {{findings}} is unchanged in shape from v1 (still pre-formatted by ' +
+      'research.ts), just numbered now.',
+    variables: ['findings'],
+    template:
+      '## Research findings for this turn\n' +
+      'These were gathered by searching the web just now, before you were asked to answer. Treat them as ' +
+      'your evidence base for anything time-sensitive in this turn.\n\n' +
+      '{{findings}}\n\n' +
+      'How to use this:\n' +
+      '- Ground every current fact, figure and date in the findings above rather than in recollection. Where ' +
+      'they conflict with what you remember, the findings are newer - use them and say so if it matters.\n' +
+      '- The findings above open with a "## Numbered sources" list ([1], [2], ...). When a sentence you write ' +
+      'is grounded in one of those sources, you may cite it inline right after the claim as [n] (or [n][m] for ' +
+      'more than one), using the exact number shown next to that source - e.g. "Nifty closed at 24,850 [2]." ' +
+      'Only use a number that appears in that list. This is optional, not required for every sentence - add it ' +
+      'where it helps the reader check a specific claim, not on every line.\n' +
+      '- Also name the publication or domain in prose next to the figures that came from it (e.g. "according to ' +
+      'Reuters"), the same as before - the [n] marker is a shortcut to the source, not a replacement for saying ' +
+      'in words where a claim comes from.\n' +
+      '- Never invent a number - a source cited as [n] must be one you would also name in prose. Do not renumber, ' +
+      'skip, or guess at a source that is not in the list above.\n' +
+      '- Where the findings are thin, stale or disagree with each other, say that plainly instead of ' +
+      'smoothing it over into false confidence. Partial evidence honestly labelled is more useful than a ' +
+      'confident answer built on a gap.\n' +
+      '- Call browse_page on a source above when you need the exact detail behind a summarized claim, and ' +
+      'call a structured tool (get_stock_quote, get_weather) when it covers the number more precisely.\n' +
+      '- Do NOT re-run a broad web_search for something the findings already cover; they are the result of ' +
+      'exactly that search, run moments ago. Search again only when the findings are empty on a point you ' +
+      'genuinely need.\n' +
+      '- Do not mention this section, the search process, or "my research" - just answer, with citations.',
+  },
+
   'finance_answer:v1': {
     id: 'finance_answer',
     version: 'v1',
@@ -292,5 +382,38 @@ export const PROMPT_TEMPLATES: Record<string, PromptTemplate> = {
       'Never state a live figure you did not get from a tool this turn. If a tool fails, report what ' +
       'failed and answer with what you do have, rather than filling the hole from memory and presenting ' +
       'it as current.',
+  },
+
+  'tool_selection:v2': {
+    id: 'tool_selection',
+    version: 'v2',
+    description:
+      'Appended when MCP tools are bound, to steer when tools should be called. v2 adds an explicit rule ' +
+      'that a tool result is internal data, never text to output verbatim - v1 said nothing about not ' +
+      'echoing raw tool JSON into prose, only ui_orchestrator described the fenced-block format.',
+    variables: [],
+    template:
+      '## Tools\n' +
+      'You have tools available. Call one only when it genuinely improves the answer — for live ' +
+      'information, exact computation, or generating an image. Answer directly when you already know ' +
+      'the answer. Never fabricate a tool result, and if a tool reports it is unavailable, say so.\n\n' +
+      'For a weather question, call get_weather rather than web_search — it returns exact structured ' +
+      'data (temperature, humidity, wind, forecast) instead of a prose summary you would have to ' +
+      'reconstruct numbers from. Same for a stock price question: call get_stock_quote rather than ' +
+      'web_search. Use web_search for anything those two do not cover.\n\n' +
+      'web_search returns a grounded summary plus its sources. When a claim matters and the summary is ' +
+      'thinner than the answer needs — an exact figure, a table, a date, the reasoning behind a ' +
+      'conclusion — call browse_page on the most authoritative source URL it cited and read the page ' +
+      'itself. Browse a URL a search actually returned, never one you assembled from a guess at how a ' +
+      "site's paths are laid out.\n\n" +
+      'Never state a live figure you did not get from a tool this turn. If a tool fails, report what ' +
+      'failed and answer with what you do have, rather than filling the hole from memory and presenting ' +
+      'it as current.\n\n' +
+      'A tool result is internal data for you to read, never text to output as-is. For every tool result, ' +
+      'either (a) describe what it contains in your own words as part of the Markdown answer, or (b) map ' +
+      'its values into the approved ```ui component shapes (see the structured UI rules above). Never ' +
+      'paste, echo, or dump a tool\'s raw JSON object or key/value structure into your prose answer under ' +
+      'any circumstances — fenced in an unrelated code block or not. If you find yourself about to write ' +
+      '`{"location":` or `{"symbol":` outside the one ```ui block, stop and rephrase it as prose instead.',
   },
 };

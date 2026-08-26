@@ -1,4 +1,5 @@
 import { Annotation, MessagesAnnotation } from '@langchain/langgraph';
+import { UIStreamEvent } from '@chat-monorepo/shared';
 import { AssembledContext, EMPTY_CONTEXT } from '../prompt/prompt-manager';
 
 /**
@@ -73,6 +74,17 @@ export const AgentStateAnnotation = Annotation.Root({
   }),
   /** Deduplicated citations behind this turn's findings, shown to the user. */
   researchSources: Annotation<Array<{ url: string; title?: string }>>({
+    reducer: (_left, right) => right,
+    default: () => [],
+  }),
+  /**
+   * ui_update/ui_error events produced by the most recent tools-node pass
+   * (see nodes.ts toolsNode, orchestration/ui-tool-adapter.ts) - read once
+   * by graph.ts's on_chain_end('tools') handler and forwarded over SSE, so
+   * a tool-backed component (weather/stock) can render the moment its tool
+   * call resolves instead of waiting for the full reply to finish.
+   */
+  pendingUiEvents: Annotation<UIStreamEvent[]>({
     reducer: (_left, right) => right,
     default: () => [],
   }),

@@ -14,6 +14,7 @@ import { extractDocumentText } from '../rag/document-extractor';
 import { RagRetriever } from '../rag/retriever';
 import { GcsUploader } from '../storage/uploader';
 import { UsageService } from '../services/usage.service';
+import { MessageFeedbackService } from '../services/message-feedback.service';
 import { MemoryService } from '../memory/memory.service';
 import { listPromptTemplates } from '../prompt/prompt-manager';
 import { ModelConfigService } from '../services/model-config.service';
@@ -407,6 +408,75 @@ router.get('/usage', authenticateToken, async (req: AuthenticatedRequest, res: R
   } catch (error) {
     console.error('[Chat API Route] Failed to load usage records:', error);
     res.status(500).json({ error: 'Failed to load usage records.' });
+  }
+});
+
+/**
+ * POST /api/chat/feedback
+ * Thumbs up/down on one assistant message. Keyed on
+ * { userId (from the verified session token, never client-supplied),
+ * threadId, messageId } - see services/message-feedback.service.ts for why
+ * this isn't correlated to usage.service.ts's requestId instead. Ownership
+ * of threadId is verified the same way every other resource in this
+ * codebase is (ThreadService.getThread) before any write - a threadId
+ * belonging to another user 404s rather than 403s, so ids can't be probed
+ * (AGENTS.md §2b).
+ *
+ * `rating: null` clears an existing rating - re-POSTing the same rating the
+ * message already has is how the client implements "click the selected
+ * thumb again to un-rate" (toggle off), by sending null instead of
+ * repeating the rating.
+ */
+router.post('/feedback', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  const { threadId, messageId, rating } = req.body ?? {};
+
+  if (typeof threadId !== 'string' || !threadId || typeof messageId !== 'string' || !messageId) {
+    res.status(400).json({ error: 'Invalid request: "threadId" and "messageId" are required.' });
+    return;
+  }
+  if (rating !== 'up' && rating !== 'down' && rating !== null) {
+    res.status(400).json({ error: 'Invalid request: "rating" must be "up", "down", or null.' });
+    return;
+  }
+
+  try {
+    const thread = await ThreadService.getThread(req.user!.uid, threadId);
+    if (!thread) {
+      res.status(404).json({ error: 'Thread not found.' });
+      return;
+    }
+
+    await MessageFeedbackService.setRating(req.user!.uid, threadId, messageId, rating);
+    res.json({ success: true, rating });
+  } catch (error) {
+    console.error('[Chat API Route] Failed to save message feedback:', error);
+    res.status(500).json({ error: 'Failed to save feedback.' });
+  }
+});
+
+/**
+ * GET /api/chat/threads/:threadId/feedback
+ * Every message the caller has rated in this thread, keyed by messageId -
+ * lets the client restore thumbs-up/down state when a conversation is
+ * reopened (see ChatService.loadFeedbackForThread) instead of resetting to
+ * neutral on every load. Same ownership check as POST /feedback above, but
+ * a thread that doesn't exist under the caller (never persisted yet, or
+ * someone else's id) resolves to an empty map rather than a 404: it's a
+ * read, "nothing rated" is the correct answer either way, and the response
+ * is identical for both causes so neither leaks which one it was.
+ */
+router.get('/threads/:threadId/feedback', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const thread = await ThreadService.getThread(req.user!.uid, req.params.threadId);
+    if (!thread) {
+      res.json({ feedback: {} });
+      return;
+    }
+    const feedback = await MessageFeedbackService.getFeedbackForThread(req.user!.uid, req.params.threadId);
+    res.json({ feedback });
+  } catch (error) {
+    console.error('[Chat API Route] Failed to load message feedback:', error);
+    res.status(500).json({ error: 'Failed to load feedback.' });
   }
 });
 

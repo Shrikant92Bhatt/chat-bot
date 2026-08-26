@@ -73,6 +73,10 @@ export interface WeatherCardData {
     condition: string;
     humidity: number;
     windSpeed: number;
+    feelsLike?: number;
+    uvIndex?: number;
+    visibility?: number;
+    pressure?: number;
   };
   forecast?: WeatherForecastDay[];
   hourly?: WeatherHourlyPoint[];
@@ -85,6 +89,7 @@ export interface StockCardData {
   change: number;
   changePercent: number;
   currency: string;
+  chartPoints?: Array<{ timestamp: number; price: number }>;
 }
 
 export interface StockChartPoint {
@@ -199,8 +204,35 @@ export interface OrchestratorSource {
   url?: string;
 }
 
+/**
+ * Recognized values for `OrchestratorAction.type` that the frontend's
+ * ActionDispatcher (apps/chat-client/src/app/services/action-dispatcher.service.ts)
+ * gives special handling to:
+ * - `CONFIRM` / `CANCEL`: the user answered a CONFIRMATION_CARD. Set by
+ *   ConfirmationCardComponent itself on its own Confirm/Cancel buttons, not
+ *   by the model - the ui_orchestrator prompt template
+ *   (apps/chat-api/src/prompt/templates.ts) never tells the model to set
+ *   `type` on an action at all today. Dispatching one sends a message that
+ *   tells the backend what the user decided, so the model's next reply can
+ *   react to it - it does NOT pause or gate any action server-side (the
+ *   orchestrator has no such mechanism; see ActionDispatcher's docs).
+ *
+ * Anything else - including `undefined`, which is what every other action
+ * (suggestion chips, weather/stock follow-ups, standalone `actions`) carries
+ * today - falls back to the original behavior: resend `label` as a new user
+ * chat message.
+ */
+export type KnownOrchestratorActionType = 'CONFIRM' | 'CANCEL';
+
 export interface OrchestratorAction {
   id: string;
   label: string;
-  type?: string;
+  /**
+   * Freeform on the wire (the backend's `actionSchema` in
+   * apps/chat-api/src/orchestration/ui-schema.ts validates it as a plain
+   * optional string, not an enum) - narrowed here to surface the values the
+   * frontend actually recognizes while still accepting any other string
+   * without a cast. See KnownOrchestratorActionType above.
+   */
+  type?: KnownOrchestratorActionType | (string & {});
 }

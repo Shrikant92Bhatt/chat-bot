@@ -1,5 +1,6 @@
 import { UIComponent, OrchestratorSource, OrchestratorAction } from './orchestrator.interface';
 import { ResearchTrace } from './research.interface';
+import { PendingUIBlock } from './ui-stream.interface';
 
 export type AIModelType = string;
 
@@ -115,6 +116,13 @@ export interface ChatMessage {
    * text/Markdown.
    */
   ui?: UIComponent[];
+  /**
+   * Tool-backed components still loading or that failed mid-turn (see
+   * ui-stream.interface.ts). Purely transient progress state - always
+   * cleared once the turn's final `ui` payload above is attached, and
+   * never round-tripped through thread persistence.
+   */
+  pendingUi?: PendingUIBlock[];
   /** Sources cited for this reply's `ui` payload, if any. */
   sources?: OrchestratorSource[];
   /** Suggested follow-up actions tied to this reply's `ui` payload, if any. */
@@ -186,6 +194,24 @@ export interface UsageRecordDto {
   estimatedCostUsd: number | null;
   timestamp: number;
 }
+
+/** Thumbs up/down on one assistant message. See
+ *  apps/chat-api/src/services/message-feedback.service.ts for the backend
+ *  design (keyed on userId/threadId/messageId, deliberately NOT correlated
+ *  to usage.service.ts's requestId). */
+export type MessageFeedbackRating = 'up' | 'down';
+
+/** Body for POST /api/chat/feedback - rating: null clears an existing rating
+ *  (re-clicking the currently-selected thumb toggles it off). */
+export interface MessageFeedbackRequest {
+  threadId: string;
+  messageId: string;
+  rating: MessageFeedbackRating | null;
+}
+
+/** Response shape for GET /api/chat/threads/:threadId/feedback - every
+ *  message in that thread the caller has rated, keyed by messageId. */
+export type ThreadFeedbackMap = Record<string, MessageFeedbackRating>;
 
 /** A user workspace: custom instructions + its own scoped file/knowledge set. */
 export interface Project {
