@@ -1187,13 +1187,9 @@ export class ChatService {
     try {
       const data = JSON.parse(payload);
 
-      if (data.error) {
-        accumulatedContent += `\n⚠️ Error: ${data.error}`;
-      }
-
-      if (data.toolCall) {
-        accumulatedContent += `\n\n> 🔧 Using **${data.toolCall.name}**...\n\n`;
-      }
+      // CRITICAL: Never append structured objects (error, toolCall, research, etc.) to visible text.
+      // These must be handled separately from message content to prevent JSON from appearing in UI.
+      // Only text chunks (data.chunk) should be accumulated and displayed.
 
       if (data.research) {
         this.applyResearchEvent(data.research as ResearchStreamEvent);
