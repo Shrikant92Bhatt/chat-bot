@@ -41,7 +41,9 @@
 /** Field names drawn verbatim from WeatherResult/StockQuoteResult (llm/weather.ts,
  * llm/stock.ts) - kept short and specific rather than exhaustive, since a longer
  * list of generic key names (name, price, currency, time, date...) would just
- * raise the false-positive rate without meaningfully raising the catch rate. */
+ * raise the false-positive rate without meaningfully raising the catch rate.
+ * Extended with: title/link/success (news, search, API responses)
+ */
 const LEAK_FIELD_NAMES = [
   'location',
   'current',
@@ -54,6 +56,11 @@ const LEAK_FIELD_NAMES = [
   'precipitationProbability',
   'symbol',
   'changePercent',
+  // Additional fields that appear in tool results (news, search, API responses)
+  'title',
+  'link',
+  'success',
+  'items',
 ] as const;
 
 const LEAK_KEY_PATTERN = new RegExp(LEAK_FIELD_NAMES.map((name) => `"${name}"\\s*:`).join('|'), 'g');
