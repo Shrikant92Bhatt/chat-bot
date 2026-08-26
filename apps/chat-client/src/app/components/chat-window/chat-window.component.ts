@@ -99,6 +99,12 @@ export class ChatWindowComponent implements AfterViewChecked {
   private shouldAutoScroll = true;
   private readonly bottomThresholdPx = 8;
 
+  // Mirrors shouldAutoScroll as a signal purely so the template can show a
+  // "New messages" jump button while the user has scrolled away mid-stream -
+  // shouldAutoScroll itself stays a plain field so the imperative
+  // ngAfterViewChecked scroll logic above isn't tied to Angular's reactivity.
+  public isScrolledAway = signal(false);
+
   // activeMessages() gets a new array/object reference on every streamed
   // token (not just when a message is added), so an effect reading it would
   // rerun on every token. Track count/thread ourselves and only force a
@@ -130,6 +136,7 @@ export class ChatWindowComponent implements AfterViewChecked {
 
       if (threadId !== this.previousThreadId || count > this.previousMessageCount) {
         this.shouldAutoScroll = true;
+        this.isScrolledAway.set(false);
       }
 
       this.previousThreadId = threadId;
@@ -163,6 +170,7 @@ export class ChatWindowComponent implements AfterViewChecked {
   // scrolls back down to the bottom themselves.
   onUserScrollIntent(): void {
     this.shouldAutoScroll = false;
+    if (this.chatService.isStreaming()) this.isScrolledAway.set(true);
   }
 
   onScroll(): void {
@@ -170,6 +178,7 @@ export class ChatWindowComponent implements AfterViewChecked {
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     if (distanceFromBottom < this.bottomThresholdPx) {
       this.shouldAutoScroll = true;
+      this.isScrolledAway.set(false);
     }
   }
 
@@ -178,6 +187,13 @@ export class ChatWindowComponent implements AfterViewChecked {
     if (!el) return;
     if (el.scrollTop >= el.scrollHeight - el.clientHeight - 1) return;
     el.scrollTop = el.scrollHeight;
+  }
+
+  /** Jumps back to the latest message - the "↓ New messages" button's click handler. */
+  public jumpToLatest(): void {
+    this.shouldAutoScroll = true;
+    this.isScrolledAway.set(false);
+    this.scrollToBottom();
   }
 
   /**

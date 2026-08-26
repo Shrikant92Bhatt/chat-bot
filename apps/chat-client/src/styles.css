@@ -375,3 +375,36 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
 }
+
+/* Modal entrance: fade + slight scale-up. Plain @keyframes rather than the
+   tailwindcss-animate plugin - that plugin was never added to
+   tailwind.config.js's `plugins`, so classes like `animate-in fade-in
+   zoom-in-95` (previously used on settings-modal) compiled to nothing and
+   the modal just appeared with no transition. */
+@keyframes modal-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.modal-enter {
+  animation: modal-enter 0.2s ease-out;
+}
+
+/* Respects the OS-level "reduce motion" setting: collapses every CSS
+   transition/animation in the app to effectively instant instead of
+   skipping motion component-by-component. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

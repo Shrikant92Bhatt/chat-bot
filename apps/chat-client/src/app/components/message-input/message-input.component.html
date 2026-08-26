@@ -147,6 +147,7 @@
           name="messageText"
           (keydown.enter)="onKeydown($event)"
           (keydown.escape)="onEscapeKey()"
+          (input)="autoGrow()"
           rows="1"
           [attr.aria-label]="chatService.editingMessageId() ? 'Edit message' : 'Message'"
           [placeholder]="placeholder"

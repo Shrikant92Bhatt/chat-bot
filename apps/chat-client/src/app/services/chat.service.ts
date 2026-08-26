@@ -459,21 +459,20 @@ export class ChatService {
   }
 
   public createInitialThread() {
+    // No seeded assistant greeting: an empty `messages` array lets the
+    // empty-state hero (capability chips, "How can I help you today?") in
+    // chat-window.component.html render for a genuinely new session,
+    // matching the already-empty threads created by createNewThread() and
+    // the authenticated fresh-thread fallback in loadUserThreadHistory()
+    // above. A seeded message here also had no preceding user turn, so its
+    // "Regenerate" button (`*ngIf="last"`) would silently no-op if clicked.
     const initialThread: ChatThread = {
       id: 'thread-' + Date.now(),
-      title: 'Enterprise Architecture & Multi-LLM Chat',
+      title: 'New Chat',
       createdAt: Date.now(),
       updatedAt: Date.now(),
       model: this.selectedModel(),
-      messages: [
-        {
-          id: 'welcome-msg',
-          role: 'assistant',
-          content: "Hello! I'm NexusAI, your intelligent assistant. Ask me anything — I'm here to help with questions, ideas, writing, and code.",
-          timestamp: Date.now(),
-          model: 'gemini-flash-latest',
-        },
-      ],
+      messages: [],
     };
 
     this.threads.set([initialThread]);

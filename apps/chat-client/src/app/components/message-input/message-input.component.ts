@@ -30,6 +30,11 @@ export class MessageInputComponent implements OnDestroy {
   public messageText = '';
   public isModelDropdownOpen = false;
 
+  // Matches the textarea's `max-h-36` Tailwind class (9rem = 144px) - the
+  // cap auto-grow stops at before the box scrolls internally instead of
+  // continuing to push the rest of the composer down.
+  private readonly MAX_TEXTAREA_HEIGHT_PX = 144;
+
   // Dictation (speech-to-text). speechSupported is resolved once at
   // construction - the API availability doesn't change during a session, so
   // there's no need to re-check it on every template render.
@@ -72,7 +77,10 @@ export class MessageInputComponent implements OnDestroy {
         if (draft === null) return;
         this.messageText = draft;
         this.chatService.composerDraft.set(null);
-        queueMicrotask(() => this.messageTextarea?.nativeElement.focus());
+        queueMicrotask(() => {
+          this.messageTextarea?.nativeElement.focus();
+          this.autoGrow();
+        });
       },
       { allowSignalWrites: true }
     );
@@ -92,11 +100,30 @@ export class MessageInputComponent implements OnDestroy {
         this.messageText = '';
         this.lastSeededEditId = null;
       }
+      queueMicrotask(() => this.autoGrow());
     });
   }
 
+  /**
+   * Grows the textarea to fit its content (up to MAX_TEXTAREA_HEIGHT_PX,
+   * beyond which it scrolls internally via the template's overflow-y-auto).
+   * Bound to (input) for direct typing/paste; called manually after every
+   * programmatic messageText change (draft prefill, edit seeding, dictation,
+   * send/cancel clearing it) since those don't fire a DOM input event.
+   */
+  autoGrow(): void {
+    const el = this.messageTextarea?.nativeElement;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, this.MAX_TEXTAREA_HEIGHT_PX) + 'px';
+  }
+
   onKeydown(event: KeyboardEvent) {
-    if (event.key === 'Enter' && !event.shiftKey) {
+    // While streaming, send() is a no-op (see below) - previously this still
+    // called preventDefault(), silently swallowing the Enter keystroke
+    // instead of either sending or inserting a newline. Falling through to
+    // the textarea's default newline behavior instead keeps Enter useful.
+    if (event.key === 'Enter' && !event.shiftKey && !this.chatService.isStreaming()) {
       event.preventDefault();
       this.send();
     }
@@ -114,6 +141,7 @@ export class MessageInputComponent implements OnDestroy {
     this.chatService.cancelEditingMessage();
     this.messageText = '';
     this.lastSeededEditId = null;
+    queueMicrotask(() => this.autoGrow());
   }
 
   get placeholder(): string {
@@ -128,6 +156,7 @@ export class MessageInputComponent implements OnDestroy {
     const text = this.messageText;
     this.messageText = '';
     this.lastSeededEditId = null;
+    queueMicrotask(() => this.autoGrow());
 
     if (this.chatService.editingMessageId()) {
       this.chatService.editLastUserMessage(text);
@@ -205,6 +234,7 @@ export class MessageInputComponent implements OnDestroy {
       }
       const needsSpace = !!this.dictationBaseText && !this.dictationBaseText.endsWith(' ') && !!transcript;
       this.messageText = this.dictationBaseText + (needsSpace ? ' ' : '') + transcript;
+      queueMicrotask(() => this.autoGrow());
     };
 
     recognition.onerror = (event: any) => {
