@@ -255,6 +255,17 @@ export class ChatWindowComponent implements AfterViewChecked {
     }
   }
 
+  /** Get favicon URL for a source domain using DuckDuckGo's icon service. */
+  public getFaviconUrl(source: { title?: string; url?: string }): string | null {
+    if (!source.url) return null;
+    try {
+      const hostname = new URL(source.url).hostname;
+      return `https://icons.duckduckgo.com/ip3/${hostname}.ico`;
+    } catch {
+      return null;
+    }
+  }
+
   /** Shares a single response via the device's native share sheet, falling back to clipboard. */
   public async shareMessage(id: string, content: string): Promise<void> {
     const result = await this.chatService.shareMessage(content);

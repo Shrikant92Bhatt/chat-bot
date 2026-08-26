@@ -188,6 +188,13 @@
                       [attr.data-source-index]="i + 1"
                       class="inline-flex items-center gap-1.5 max-w-[16rem] text-xs15 px-2.5 py-1 rounded-full bg-white/5 text-slate-400 hover:text-slate-100 hover:bg-white/10 transition-colors"
                     >
+                      <img
+                        *ngIf="getFaviconUrl(source) as faviconUrl"
+                        [src]="faviconUrl"
+                        [alt]="sourceLabel(source)"
+                        class="w-3.5 h-3.5 rounded shrink-0 object-cover"
+                        onerror="this.style.display='none'"
+                      />
                       <span class="text-slate-500 shrink-0">{{ i + 1 }}</span>
                       <span class="truncate">{{ sourceLabel(source) }}</span>
                     </a>
