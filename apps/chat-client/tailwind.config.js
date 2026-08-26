@@ -65,6 +65,15 @@ module.exports = {
         xs: '2px',
         glass: '16px',
       },
+      borderRadius: {
+        sm: '0.25rem', // 4px - small, compact components
+        md: '0.375rem', // 6px - form inputs, small buttons
+        lg: '0.5rem', // 8px - medium components
+        xl: '0.75rem', // 12px - dialogs, cards
+        '2xl': '1rem', // 16px - large modals, prominent surfaces
+        '3xl': '1.5rem', // 24px - hero elements
+        full: '9999px', // circular
+      },
       boxShadow: {
         glass: '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
         glow: '0 0 20px rgba(139, 92, 246, 0.25)',

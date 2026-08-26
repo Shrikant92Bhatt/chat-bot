@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output, ChangeDetectionStrategy, signal, computed } from '@angular/core';
+import { Component, EventEmitter, Input, Output, ChangeDetectionStrategy, signal, computed, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ChatService } from '../../services/chat.service';
 import { ProjectService } from '../../services/project.service';
@@ -15,6 +15,7 @@ export class SidebarComponent {
   @Output() threadSelected = new EventEmitter<void>();
   @Output() settingsClicked = new EventEmitter<void>();
   @Output() projectsClicked = new EventEmitter<void>();
+  @Output() closeSidebar = new EventEmitter<void>();
 
   /**
    * Client-side filter over already-loaded thread titles - no backend
@@ -55,5 +56,12 @@ export class SidebarComponent {
 
   public projectNameFor(projectId: string | null | undefined): string | null {
     return this.projectService.getProjectName(projectId);
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscapeKey(): void {
+    if (this.isOpen && window.innerWidth < 1024) {
+      this.closeSidebar.emit();
+    }
   }
 }

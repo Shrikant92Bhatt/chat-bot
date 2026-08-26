@@ -6,6 +6,21 @@
   [class.lg:border-r-0]="!isOpen"
   class="w-64 bg-obsidian border-r border-white/5 flex flex-col transition-[transform,width] duration-300 ease-in-out absolute lg:relative lg:translate-x-0 z-20 h-[calc(100vh-4rem)] overflow-hidden"
 >
+  <!-- Mobile close button - hidden on lg and above -->
+  <div class="flex items-center justify-between px-3 py-2 lg:hidden border-b border-white/5">
+    <span class="text-xs font-semibold text-slate-400">Menu</span>
+    <button
+      (click)="closeSidebar.emit()"
+      aria-label="Close sidebar"
+      title="Close menu"
+      class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accentCyan"
+    >
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    </button>
+  </div>
+
   <div class="p-3">
     <button
       (click)="createNewThread()"
