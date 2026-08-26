@@ -23,6 +23,7 @@ import { AuthService } from './auth.service';
 import { getApiBaseUrl } from '../core/runtime-config';
 import { SseEventParser } from './sse-event-parser';
 import { applyRating, nextRatingOnClick } from './message-feedback.util';
+import { getFriendlyErrorMessage } from '../core/error-messages.util';
 
 /**
  * Whether a finished research trace is worth pinning onto the message (and
@@ -649,7 +650,7 @@ export class ChatService {
       this.uploadedDocuments.update((docs) => [...docs, data.fileName]);
     } catch (error: any) {
       console.error('[ChatService] Document upload failed:', error);
-      this.documentUploadError.set(error.message || 'Failed to upload document.');
+      this.documentUploadError.set(getFriendlyErrorMessage(error, 'upload'));
     } finally {
       this.isUploadingDocument.set(false);
     }
@@ -721,7 +722,7 @@ export class ChatService {
       this.stagedAttachments.update((current) => [...current, ...data.attachments]);
     } catch (error: any) {
       console.error('[ChatService] Attachment upload failed:', error);
-      this.attachmentUploadError.set(error.message || 'Failed to upload attachment(s).');
+      this.attachmentUploadError.set(getFriendlyErrorMessage(error, 'upload'));
     } finally {
       this.isUploadingAttachments.set(false);
     }
@@ -788,7 +789,7 @@ export class ChatService {
       }
     } catch (error: any) {
       console.error('[ChatService] Image generation error:', error);
-      this.updateAssistantMessage(currentThreadId, assistantMessageId, `⚠️ Failed to generate image: ${error.message}`);
+      this.updateAssistantMessage(currentThreadId, assistantMessageId, `⚠️ ${getFriendlyErrorMessage(error, 'chat')}`);
     } finally {
       this.isStreaming.set(false);
       this.activityStatus.set(null);
@@ -1142,7 +1143,7 @@ export class ChatService {
         this.updateAssistantMessage(
           threadId,
           assistantMessageId,
-          `⚠️ Failed to stream response from backend. Details: ${error.message}`
+          `⚠️ ${getFriendlyErrorMessage(error, 'chat')}`
         );
       }
     } finally {

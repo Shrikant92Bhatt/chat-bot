@@ -101,6 +101,13 @@ export class ProjectsModalComponent {
     this.closeModal.emit();
   }
 
+  public async deleteFile(fileId: string, fileName: string): Promise<void> {
+    const project = this.projectService.selectedProject();
+    if (!project) return;
+    if (!confirm(`Delete "${fileName}"?`)) return;
+    await this.projectService.deleteFile(project.id, fileId, fileName);
+  }
+
   public formatDate(timestamp: number): string {
     return new Date(timestamp).toLocaleDateString();
   }

@@ -29,6 +29,7 @@ export class MessageInputComponent implements OnDestroy {
 
   public messageText = '';
   public isModelDropdownOpen = false;
+  private highlightedModelId: string | null = null;
 
   // Matches the textarea's `max-h-36` Tailwind class (9rem = 144px) - the
   // cap auto-grow stops at before the box scrolls internally instead of
@@ -276,6 +277,55 @@ export class MessageInputComponent implements OnDestroy {
   selectModel(id: string): void {
     this.chatService.setModel(id as AIModelType);
     this.isModelDropdownOpen = false;
+    this.highlightedModelId = null;
+  }
+
+  toggleModelDropdown(): void {
+    if (this.isModelDropdownOpen) {
+      this.isModelDropdownOpen = false;
+      this.highlightedModelId = null;
+    } else {
+      this.isModelDropdownOpen = true;
+      this.highlightedModelId = this.chatService.selectedModel();
+    }
+  }
+
+  onModelDropdownKeydown(event: KeyboardEvent): void {
+    if (!this.isModelDropdownOpen) return;
+
+    const allModels = this.groupedModels().flatMap((g) => g.models);
+    const enabledModels = allModels.filter((m) => !m.usage?.disabled);
+
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (enabledModels.length === 0) return;
+
+      const currentIndex = this.highlightedModelId
+        ? enabledModels.findIndex((m) => m.id === this.highlightedModelId)
+        : -1;
+
+      let nextIndex: number;
+      if (event.key === 'ArrowDown') {
+        nextIndex = currentIndex < enabledModels.length - 1 ? currentIndex + 1 : 0;
+      } else {
+        nextIndex = currentIndex > 0 ? currentIndex - 1 : enabledModels.length - 1;
+      }
+
+      this.highlightedModelId = enabledModels[nextIndex].id;
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      if (this.highlightedModelId) {
+        this.selectModel(this.highlightedModelId);
+      }
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      this.isModelDropdownOpen = false;
+      this.highlightedModelId = null;
+    }
+  }
+
+  isModelHighlighted(modelId: string): boolean {
+    return this.highlightedModelId === modelId;
   }
 
   private groupModelsByProvider(models: SelectableModel[]): Array<{ provider: string; models: SelectableModel[] }> {

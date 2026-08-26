@@ -42,8 +42,12 @@
         <div *ngIf="chatService.chatMode() === 'chat'" class="model-selector relative">
           <button
             type="button"
-            (click)="isModelDropdownOpen = !isModelDropdownOpen"
-            class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/5 hover:bg-white/10 transition-all text-xs font-medium text-slate-300"
+            (click)="toggleModelDropdown()"
+            (keydown)="onModelDropdownKeydown($event)"
+            aria-haspopup="listbox"
+            [attr.aria-expanded]="isModelDropdownOpen"
+            aria-label="Select model"
+            class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/5 hover:bg-white/10 transition-all text-xs font-medium text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accentCyan focus-visible:ring-offset-1 focus-visible:ring-offset-slate-800"
           >
             <span>{{ getModelDisplayName() }}</span>
             <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -52,6 +56,8 @@
           </button>
           <div
             *ngIf="isModelDropdownOpen"
+            role="listbox"
+            (keydown)="onModelDropdownKeydown($event)"
             class="absolute bottom-full mb-1.5 right-0 w-64 max-h-80 overflow-y-auto bg-slate-900 border border-white/10 rounded-xl shadow-xl z-50 py-1"
           >
             <div *ngFor="let group of groupedModels()">
@@ -60,10 +66,14 @@
                 *ngFor="let m of group.models"
                 type="button"
                 (click)="selectModel(m.id)"
+                (mouseenter)="highlightedModelId = m.id"
+                (mouseleave)="highlightedModelId = null"
+                role="option"
+                [attr.aria-selected]="chatService.selectedModel() === m.id"
                 [disabled]="m.usage?.disabled"
                 [title]="m.usage?.disabled ? ('Daily limit reached — ' + modelResetLabel(m.usage!.resetAt)) : ''"
                 class="w-full text-left px-4 py-2 text-sm transition-colors flex items-center justify-between gap-2"
-                [ngClass]="m.usage?.disabled ? 'text-slate-600 cursor-not-allowed' : 'text-slate-300 hover:bg-white/10 hover:text-white'"
+                [ngClass]="(isModelHighlighted(m.id) || chatService.selectedModel() === m.id) ? (m.usage?.disabled ? 'bg-white/5 text-slate-600' : 'bg-white/10 text-white') : (m.usage?.disabled ? 'text-slate-600 cursor-not-allowed' : 'text-slate-300 hover:bg-white/10 hover:text-white')"
               >
                 <span class="flex items-center gap-1.5 min-w-0">
                   <span class="truncate">{{ m.name }}</span>
