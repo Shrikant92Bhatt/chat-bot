@@ -1,8 +1,12 @@
-<div class="rounded-2xl border border-accentRose/30 bg-accentRose/[0.08] p-4">
-  <div class="flex items-center gap-2 text-accentRose text-sm font-medium">
-    <span>⚠️</span>
-    <span>{{ data.title }}</span>
+<div class="rounded-2xl border border-accentRose/30 bg-gradient-to-br from-accentRose/10 to-accentRose/5 p-4">
+  <div class="flex items-start gap-3">
+    <span class="text-xl shrink-0 mt-0.5">⚠️</span>
+    <div class="flex-1 min-w-0">
+      <div class="text-sm font-semibold text-accentRose">{{ data.title }}</div>
+      <div class="text-sm text-rose-200/90 mt-2 leading-relaxed">{{ data.message }}</div>
+      <div *ngIf="data.toolName" class="text-xs text-rose-300/70 mt-2 bg-white/5 px-2.5 py-1.5 rounded-lg inline-block">
+        Tool: <span class="font-medium">{{ data.toolName }}</span>
+      </div>
+    </div>
   </div>
-  <div class="text-xs text-rose-200/80 mt-1.5">{{ data.message }}</div>
-  <div *ngIf="data.toolName" class="text-xs2 text-rose-300/60 mt-1">Tool: {{ data.toolName }}</div>
 </div>

@@ -1,5 +1,5 @@
 <div class="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-  <div *ngIf="data.title" class="text-xs15 font-medium text-slate-400 mb-2">{{ data.title }}</div>
+  <div *ngIf="data.title" class="text-sm font-semibold text-slate-300 mb-4">{{ data.title }}</div>
 
   <!-- Reusable axis fragment: gridlines + y ticks + x category labels. -->
   <ng-template #axes let-data="data">
@@ -174,8 +174,8 @@
       </div>
     </div>
 
-    <div *ngIf="data.chartType === 'pie'" class="flex items-center gap-4" role="img" [attr.aria-label]="chartSummary(data)">
-      <svg viewBox="0 0 100 100" class="w-28 h-28 shrink-0 -rotate-90" aria-hidden="true">
+    <div *ngIf="data.chartType === 'pie'" class="flex flex-col items-center gap-4" role="img" [attr.aria-label]="chartSummary(data)">
+      <svg viewBox="0 0 100 100" class="w-32 h-32 shrink-0 -rotate-90" aria-hidden="true">
         <circle
           *ngFor="let slice of pieSlices(data)"
           cx="50"
@@ -190,18 +190,18 @@
           <title>{{ slice.label }}: {{ slice.value }} ({{ slice.percent }}%)</title>
         </circle>
       </svg>
-      <ul class="text-xs text-slate-300 space-y-1">
-        <li *ngFor="let slice of pieSlices(data)" class="flex items-center gap-2">
-          <span class="w-2.5 h-2.5 rounded-full shrink-0" [style.background]="slice.color"></span>
-          <span>{{ slice.label }} — {{ slice.value }} ({{ slice.percent }}%)</span>
+      <ul class="text-xs text-slate-300 space-y-2 w-full">
+        <li *ngFor="let slice of pieSlices(data)" class="flex items-center gap-2 justify-center">
+          <span class="w-3 h-3 rounded-full shrink-0" [style.background]="slice.color"></span>
+          <span class="truncate">{{ slice.label }} — {{ slice.value }} ({{ slice.percent }}%)</span>
         </li>
       </ul>
     </div>
 
-    <div *ngIf="data.chartType !== 'pie' && data.series.length > 1" class="flex flex-wrap gap-3 mt-3">
-      <div *ngFor="let series of data.series; let i = index" class="flex items-center gap-1.5 text-xs15 text-slate-400">
-        <span class="w-2 h-2 rounded-full shrink-0" [style.background]="seriesColor(i)"></span>
-        {{ series.name }}
+    <div *ngIf="data.chartType !== 'pie' && data.series.length > 1" class="flex flex-wrap gap-3 mt-4 pt-2 border-t border-white/5">
+      <div *ngFor="let series of data.series; let i = index" class="flex items-center gap-2 text-xs text-slate-400">
+        <span class="w-2.5 h-2.5 rounded-full shrink-0" [style.background]="seriesColor(i)"></span>
+        <span>{{ series.name }}</span>
       </div>
     </div>
   </ng-container>

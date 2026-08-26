@@ -1,21 +1,56 @@
-<div class="rounded-2xl border border-white/10 bg-white/[0.03] p-2 flex flex-col gap-2">
-  <a
-    *ngFor="let article of data.articles"
-    [href]="article.url || null"
-    target="_blank"
-    rel="noopener"
-    class="flex gap-3 rounded-xl p-2 hover:bg-white/[0.04] transition-colors"
-    [class.cursor-default]="!article.url"
-  >
-    <img *ngIf="article.imageUrl" [src]="article.imageUrl" alt="" class="w-14 h-14 rounded-lg object-cover shrink-0" />
-    <div class="min-w-0">
-      <div class="text-sm text-slate-100 font-medium line-clamp-2">{{ article.title }}</div>
-      <div *ngIf="article.summary" class="text-xs text-slate-400 line-clamp-2 mt-0.5">{{ article.summary }}</div>
-      <div class="text-xs2 text-slate-500 mt-1">
-        <span *ngIf="article.source">{{ article.source }}</span>
-        <span *ngIf="article.source && article.publishedAt"> · </span>
-        <span *ngIf="article.publishedAt">{{ article.publishedAt }}</span>
+<div class="rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden flex flex-col">
+  <!-- Articles list -->
+  <div class="divide-y divide-white/5">
+    <a
+      *ngFor="let article of data.articles"
+      [href]="article.url || null"
+      target="_blank"
+      rel="noopener"
+      class="flex flex-col sm:flex-row gap-3 p-4 hover:bg-white/[0.05] transition-colors duration-200"
+      [class.cursor-default]="!article.url"
+      [attr.aria-label]="article.title"
+    >
+      <!-- Thumbnail image -->
+      <div
+        *ngIf="article.imageUrl"
+        class="shrink-0 sm:w-20 sm:h-20 h-32 w-full"
+      >
+        <img
+          [src]="article.imageUrl"
+          alt=""
+          class="w-full h-full rounded-lg object-cover bg-white/5"
+          loading="lazy"
+        />
       </div>
-    </div>
-  </a>
+
+      <!-- Article content -->
+      <div class="flex-1 min-w-0">
+        <!-- Title -->
+        <h3 class="text-sm font-semibold text-slate-100 line-clamp-2 leading-snug mb-1">
+          {{ article.title }}
+          <span *ngIf="article.url" class="ml-1 text-xs text-slate-500">↗</span>
+        </h3>
+
+        <!-- Summary -->
+        <p *ngIf="article.summary" class="text-xs text-slate-400 line-clamp-2 mb-2">
+          {{ article.summary }}
+        </p>
+
+        <!-- Meta information -->
+        <div class="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+          <span *ngIf="article.source" class="font-medium text-slate-400">{{ article.source }}</span>
+          <span *ngIf="article.source && article.publishedAt" class="opacity-40">•</span>
+          <span *ngIf="article.publishedAt">{{ article.publishedAt }}</span>
+        </div>
+      </div>
+    </a>
+  </div>
+
+  <!-- Empty state -->
+  <div *ngIf="data.articles.length === 0" class="flex flex-col items-center justify-center gap-2 py-8 text-center">
+    <svg viewBox="0 0 24 24" class="w-8 h-8 text-slate-600" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v4m2-10h.01" />
+    </svg>
+    <p class="text-xs text-slate-500">No articles available</p>
+  </div>
 </div>

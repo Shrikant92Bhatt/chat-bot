@@ -13,6 +13,7 @@ const ROWS_PER_PAGE = 20;
   imports: [CommonModule],
   templateUrl: './table-block.component.html',
   host: { style: 'display: contents' },
+  styleUrls: [],
 })
 export class TableBlockComponent implements OnChanges, OnDestroy {
   @Input({ required: true }) data!: TableData;

@@ -1,14 +1,14 @@
-<div *ngIf="(components && components.length > 0) || (pending && pending.length > 0)" class="flex flex-col gap-3">
+<div *ngIf="(components && components.length > 0) || (pending && pending.length > 0)" class="flex flex-col gap-4">
 
   <!-- Tool-backed components not yet resolved (or that failed) this turn -->
   <div *ngFor="let block of pending" class="max-w-lg">
     <div
       *ngIf="block.status === 'loading'"
-      class="flex items-center gap-2.5 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-400"
+      class="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-slate-400"
       role="status"
       [attr.aria-label]="'Loading ' + componentLabel(block.componentType)"
     >
-      <span class="w-3.5 h-3.5 rounded-full border-2 border-slate-500 border-t-accentCyan animate-spin shrink-0"></span>
+      <span class="w-4 h-4 rounded-full border-2 border-slate-500 border-t-accentCyan animate-spin shrink-0"></span>
       <span>Checking {{ componentLabel(block.componentType) }}…</span>
     </div>
 
@@ -17,8 +17,8 @@
       class="rounded-2xl border border-accentRose/20 bg-accentRose/[0.06] px-4 py-3 text-sm text-slate-300"
       role="alert"
     >
-      <div class="font-medium text-accentRose mb-0.5">Couldn't load {{ componentLabel(block.componentType) }}</div>
-      <div class="text-slate-400">{{ block.errorMessage || 'The tool call failed.' }}</div>
+      <div class="font-semibold text-accentRose mb-1">Couldn't load {{ componentLabel(block.componentType) }}</div>
+      <div class="text-xs text-slate-400">{{ block.errorMessage || 'The tool call failed.' }}</div>
     </div>
   </div>
 
@@ -32,24 +32,24 @@
   </div>
 
   <!-- Sources -->
-  <div *ngIf="sources && sources.length > 0" class="flex flex-wrap gap-2">
+  <div *ngIf="sources && sources.length > 0" class="flex flex-wrap gap-2 pt-2 border-t border-white/5">
     <a
       *ngFor="let source of sources"
       [href]="source.url || null"
       target="_blank"
       rel="noopener"
-      class="text-xs15 px-2.5 py-1 rounded-full bg-white/5 text-slate-400 hover:text-slate-200 hover:bg-white/10 transition-colors"
+      class="text-xs px-3 py-1.5 rounded-full bg-white/5 text-slate-400 hover:text-slate-200 hover:bg-white/10 transition-colors duration-200 font-medium"
     >
       {{ source.title || source.url }}
     </a>
   </div>
 
   <!-- Standalone actions (not tied to a CONFIRMATION_CARD) -->
-  <div *ngIf="actions && actions.length > 0" class="flex flex-wrap gap-2">
+  <div *ngIf="actions && actions.length > 0" class="flex flex-wrap gap-2 pt-2 border-t border-white/5">
     <button
       *ngFor="let action of actions"
       (click)="actionSelected.emit(action)"
-      class="px-3 py-1.5 rounded-full text-xs font-medium bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition-colors"
+      class="px-4 py-1.5 rounded-full text-xs font-semibold bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition-colors duration-200"
     >
       {{ action.label }}
     </button>
