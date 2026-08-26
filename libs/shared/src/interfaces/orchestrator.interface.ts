@@ -85,6 +85,7 @@ export interface StockCardData {
   change: number;
   changePercent: number;
   currency: string;
+  chartPoints?: Array<{ timestamp: number; price: number }>;
 }
 
 export interface StockChartPoint {

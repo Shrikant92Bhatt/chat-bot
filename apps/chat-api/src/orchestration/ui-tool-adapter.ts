@@ -58,6 +58,9 @@ function normalizeStock(parsed: Record<string, unknown>): StockCardData | null {
     change: parsed.change,
     changePercent: parsed.changePercent,
     currency: parsed.currency,
+    chartPoints: Array.isArray(parsed.chartPoints)
+      ? (parsed.chartPoints as Array<{ timestamp: number; price: number }>)
+      : undefined,
   };
 }
 

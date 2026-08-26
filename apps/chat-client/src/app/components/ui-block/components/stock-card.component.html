@@ -1,20 +1,23 @@
-<div
-  class="rounded-2xl border p-4"
-  [ngClass]="[stockTrend(data.change).bg, stockTrend(data.change).border]"
->
-  <div class="flex items-center justify-between">
-    <div>
-      <div class="text-sm font-semibold text-white">{{ data.symbol }}</div>
-      <div class="text-xs15 text-slate-400">{{ data.name }}</div>
+<div class="space-y-4">
+  <div
+    class="rounded-2xl border p-4"
+    [ngClass]="[stockTrend(data.change).bg, stockTrend(data.change).border]"
+  >
+    <div class="flex items-center justify-between">
+      <div>
+        <div class="text-sm font-semibold text-white">{{ data.symbol }}</div>
+        <div class="text-xs15 text-slate-400">{{ data.name }}</div>
+      </div>
+      <div class="text-right">
+        <div class="text-2xl font-semibold text-white leading-none">{{ data.price | number: '1.2-2' }}</div>
+        <div class="text-xs15 text-slate-500 mt-1">{{ data.currency }}</div>
+      </div>
     </div>
-    <div class="text-right">
-      <div class="text-2xl font-semibold text-white leading-none">{{ data.price | number: '1.2-2' }}</div>
-      <div class="text-xs15 text-slate-500 mt-1">{{ data.currency }}</div>
+    <div class="flex items-center gap-1.5 mt-3 text-sm font-medium" [ngClass]="changeColorClass(data.change)">
+      <span>{{ stockTrend(data.change).arrow }}</span>
+      <span>{{ data.change >= 0 ? '+' : '' }}{{ data.change | number: '1.2-2' }}</span>
+      <span>({{ data.changePercent >= 0 ? '+' : '' }}{{ data.changePercent | number: '1.2-2' }}%)</span>
     </div>
   </div>
-  <div class="flex items-center gap-1.5 mt-3 text-sm font-medium" [ngClass]="changeColorClass(data.change)">
-    <span>{{ stockTrend(data.change).arrow }}</span>
-    <span>{{ data.change >= 0 ? '+' : '' }}{{ data.change | number: '1.2-2' }}</span>
-    <span>({{ data.changePercent >= 0 ? '+' : '' }}{{ data.changePercent | number: '1.2-2' }}%)</span>
-  </div>
+  <app-ui-stock-chart *ngIf="getChartData()" [data]="getChartData()!"></app-ui-stock-chart>
 </div>

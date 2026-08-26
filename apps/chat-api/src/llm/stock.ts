@@ -5,6 +5,7 @@ export interface StockQuoteResult {
   change: number;
   changePercent: number;
   currency: string;
+  chartPoints?: Array<{ timestamp: number; price: number }>;
 }
 
 /**
@@ -12,11 +13,11 @@ export interface StockQuoteResult {
  * endpoint (no API key, no signup - but also undocumented and unsupported,
  * so it can change or start blocking requests without notice; a User-Agent
  * header is set because Yahoo's edge rejects requests that look like a
- * bare server-side fetch). Returns a shape that maps directly onto the
- * STOCK_CARD component (see orchestration/ui-schema.ts).
+ * bare server-side fetch). Fetches both current price and intraday sparkline.
+ * Returns a shape that maps directly onto the STOCK_CARD component.
  */
 export async function getStockQuote(symbol: string): Promise<StockQuoteResult> {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1mo`;
   const res = await fetch(url, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (compatible; NexusAI-ChatBot/1.0)',
@@ -38,6 +39,17 @@ export async function getStockQuote(symbol: string): Promise<StockQuoteResult> {
   const change = price - previousClose;
   const changePercent = previousClose ? (change / previousClose) * 100 : 0;
 
+  // Extract intraday price points for sparkline chart
+  const timestamps = result?.timestamp ?? [];
+  const closes = result?.indicators?.quote?.[0]?.close ?? [];
+  const chartPoints = timestamps
+    .slice(-30) // Last 30 points for the sparkline
+    .map((ts: number, i: number) => ({
+      timestamp: ts,
+      price: closes[timestamps.length - 30 + i] ?? 0,
+    }))
+    .filter((p: { timestamp: number; price: number }) => p.price > 0);
+
   return {
     symbol: meta.symbol ?? symbol.toUpperCase(),
     name: meta.longName || meta.shortName || meta.symbol || symbol.toUpperCase(),
@@ -45,5 +57,6 @@ export async function getStockQuote(symbol: string): Promise<StockQuoteResult> {
     change,
     changePercent,
     currency: meta.currency ?? 'USD',
+    chartPoints: chartPoints.length > 0 ? chartPoints : undefined,
   };
 }
