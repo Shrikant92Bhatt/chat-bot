@@ -41,7 +41,7 @@ export function assembleAgentMessages(state: AgentState): BaseMessage[] {
  */
 export async function agentNode(state: AgentState): Promise<AgentStateUpdate> {
   const model = createOmniRouteChatModel(state.model, state.temperature);
-  const modelWithTools = state.mcpEnabled ? model.bindTools(mcpAdapter.getTools()) : model;
+  const modelWithTools = state.mcpEnabled ? model.bindTools(await mcpAdapter.getTools()) : model;
 
   const response = await modelWithTools.invoke(assembleAgentMessages(state));
   return { messages: [response] };

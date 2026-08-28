@@ -54,6 +54,11 @@ const TOOL_ACTIVITY_LABELS: Record<string, string> = {
   system_calculator: 'Calculating',
   code_interpreter: 'Running code',
   generate_image: 'Generating an image',
+  list_screeners: 'Listing ETF screeners',
+  run_screener: 'Running an ETF screen',
+  get_etf_snapshot: 'Fetching ETF quotes',
+  get_etf_analysis: 'Analyzing an ETF',
+  get_market_status: 'Checking market status',
 };
 
 /**
