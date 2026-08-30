@@ -464,7 +464,19 @@ export class ChatService {
    * forever. A thread earns persistence the moment it has a real message,
    * not just by existing in memory.
    */
-  private async persistUserThreadHistory(): Promise<void> {
+  /**
+   * True the moment a save (of any thread) fails for a reason other than
+   * 401 (handled separately below) - a network drop, a Firestore write
+   * rejection, a transient 5xx, etc. Previously such a failure was entirely
+   * silent: no log, no retry, no signal - the in-memory thread (including
+   * any generated image/video on it) looked fine for the rest of the
+   * session, but a reload would fetch whatever Firestore actually has,
+   * which could be missing that turn entirely with no indication why.
+   * Cleared on the next successful save.
+   */
+  public threadSaveError = signal<boolean>(false);
+
+  private async persistUserThreadHistory(isRetry = false): Promise<void> {
     const user = this.authService.userSignal();
     if (!user || !user.uid) return;
 
@@ -482,9 +494,29 @@ export class ChatService {
 
       if (response.status === 401) {
         this.authService.notifySessionExpired();
+        return;
       }
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        console.error(`[ChatService] Failed to save thread history: ${response.status}`, data);
+        // One bounded retry (covers a transient Firestore/network blip) -
+        // never loops further, so a genuinely broken save (bad payload,
+        // permission error) surfaces via threadSaveError instead of retrying forever.
+        if (!isRetry) {
+          return this.persistUserThreadHistory(true);
+        }
+        this.threadSaveError.set(true);
+        return;
+      }
+
+      this.threadSaveError.set(false);
     } catch (e) {
       console.error('[ChatService] Failed to save thread history:', e);
+      if (!isRetry) {
+        return this.persistUserThreadHistory(true);
+      }
+      this.threadSaveError.set(true);
     }
   }
 

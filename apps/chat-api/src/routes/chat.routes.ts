@@ -265,7 +265,13 @@ router.put('/threads', authenticateToken, async (req: AuthenticatedRequest, res:
     res.json({ success: true });
   } catch (error) {
     console.error('[Chat API Route] Failed to save threads:', error);
-    res.status(500).json({ error: 'Failed to save chat threads.' });
+    // Forward the real reason (e.g. Firestore's 1MiB document size limit on
+    // a long thread, a permission error, a transient outage) instead of a
+    // flat string - the client previously didn't even check this response
+    // for success, so a failed save was invisible until the next reload
+    // silently came back missing whatever didn't save. See chat.service.ts
+    // persistUserThreadHistory().
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to save chat threads.' });
   }
 });
 

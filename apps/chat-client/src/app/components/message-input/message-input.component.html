@@ -306,6 +306,14 @@
         </div>
       </div>
 
+      <!-- Chat history (including any generated image/video) failed to save
+           to your account after retrying once - it's still visible now, but
+           a reload will fetch whatever was last saved, which may not
+           include this turn. See chat.service.ts persistUserThreadHistory(). -->
+      <div *ngIf="chatService.threadSaveError()" class="px-1 pt-2 text-xs15 text-red-400">
+        ⚠️ Couldn't save this conversation - it may not appear after a reload. Check your connection.
+      </div>
+
       <!-- Uploaded knowledge-base document chips -->
       <div *ngIf="chatService.uploadedDocuments().length > 0" class="flex flex-wrap gap-1.5 px-1 pt-2">
         <span
