@@ -212,11 +212,8 @@
                      before the very first research_status event arrives, if
                      that window exists at all. -->
                 <div *ngIf="chatService.isStreaming() && !msg.content && !researchTraceFor(msg)" class="flex items-center gap-2 py-2">
-                  <span class="w-2 h-2 rounded-full bg-slate-500 animate-ping shrink-0"></span>
-                  <span
-                    *ngIf="chatService.activityStatus() as status"
-                    class="text-xs15 text-slate-400 animate-pulse"
-                  >{{ status }}</span>
+                  <span class="w-2 h-2 rounded-full bg-accentCyan animate-ping shrink-0"></span>
+                  <span class="text-xs15 shimmer-text">{{ chatService.activityStatus() || 'Thinking…' }}</span>
                 </div>
 
                 <!-- Generated Image: standalone card when it's the whole reply (dedicated Image mode) -->

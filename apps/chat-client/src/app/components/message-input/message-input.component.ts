@@ -37,10 +37,6 @@ export class MessageInputComponent implements OnDestroy {
   public isModelDropdownOpen = false;
   private highlightedModelId: string | null = null;
 
-  // Matches the textarea's `max-h-36` Tailwind class (9rem = 144px) - the
-  // cap auto-grow stops at before the box scrolls internally instead of
-  // continuing to push the rest of the composer down.
-  private readonly MAX_TEXTAREA_HEIGHT_PX = 144;
 
   // Dictation (speech-to-text). speechSupported is resolved once at
   // construction - the API availability doesn't change during a session, so
@@ -114,8 +110,15 @@ export class MessageInputComponent implements OnDestroy {
   }
 
   /**
-   * Grows the textarea to fit its content (up to MAX_TEXTAREA_HEIGHT_PX,
-   * beyond which it scrolls internally via the template's overflow-y-auto).
+   * Grows the textarea to fit its content, capped at whatever the
+   * template's own `max-h-32 sm:max-h-36` Tailwind class currently resolves
+   * to (128px on mobile, 144px on sm:+) - read live via getComputedStyle
+   * rather than a hardcoded constant, which previously only matched the
+   * desktop value. That mismatch meant on mobile the box tried to grow past
+   * what CSS actually allowed (CSS max-height always wins over an inline
+   * height), so the last few lines before the internal scroll kicked in
+   * rendered cramped/inconsistently. Reading the real value here means this
+   * can never drift out of sync with the template's breakpoints again.
    * Bound to (input) for direct typing/paste; called manually after every
    * programmatic messageText change (draft prefill, edit seeding, dictation,
    * send/cancel clearing it) since those don't fire a DOM input event.
@@ -123,8 +126,9 @@ export class MessageInputComponent implements OnDestroy {
   autoGrow(): void {
     const el = this.messageTextarea?.nativeElement;
     if (!el) return;
+    const maxHeight = parseFloat(getComputedStyle(el).maxHeight) || 144;
     el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, this.MAX_TEXTAREA_HEIGHT_PX) + 'px';
+    el.style.height = Math.min(el.scrollHeight, maxHeight) + 'px';
   }
 
   onKeydown(event: KeyboardEvent) {
