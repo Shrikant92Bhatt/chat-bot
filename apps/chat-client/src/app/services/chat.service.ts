@@ -20,6 +20,7 @@ import {
   ResearchTrace,
   UIStreamEvent,
   PendingUIBlock,
+  normalizeAttachmentKind,
 } from '@chat-monorepo/shared';
 import { AuthService } from './auth.service';
 import { getApiBaseUrl } from '../core/runtime-config';
@@ -149,8 +150,6 @@ export class ChatService {
   // client-side pre-validation never drifts from what the server enforces.
   public maxAttachments = signal<number>(4);
   public maxAttachmentBytes = signal<number>(25 * 1024 * 1024);
-  private readonly ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'];
-  private readonly ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
 
   /**
    * Thumbs up/down state for the ACTIVE thread's messages only, keyed by
@@ -718,9 +717,7 @@ export class ChatService {
 
     const maxBytes = this.maxAttachmentBytes();
     for (const file of toUpload) {
-      const isImage = this.ALLOWED_IMAGE_TYPES.includes(file.type);
-      const isVideo = this.ALLOWED_VIDEO_TYPES.includes(file.type);
-      if (!isImage && !isVideo) {
+      if (!normalizeAttachmentKind(file.type)) {
         this.attachmentUploadError.set(
           `Unsupported file type "${file.type || file.name}". Supported: photos (jpg, png, webp, gif, heic) and video (mp4, mov, webm).`
         );

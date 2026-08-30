@@ -5,7 +5,7 @@ import { AIRouterService } from '../services/ai-router.service';
 import { UserRegistryService } from '../services/user-registry.service';
 import { ThreadService } from '../services/thread.service';
 import { isOpenAiConfigured } from '../services/openai.service';
-import { AttachmentKind, ChatAttachment, ChatStreamRequest, ChatThread } from '@chat-monorepo/shared';
+import { ChatAttachment, ChatStreamRequest, ChatThread, normalizeAttachmentKind } from '@chat-monorepo/shared';
 import { streamGraphResponse } from '../orchestration/graph';
 import { StorageMetricsService } from '../storage/metrics';
 import { generateImage } from '../llm/image-gen';
@@ -42,17 +42,6 @@ const HARD_MAX_ATTACHMENTS_PER_MESSAGE = 10;
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: HARD_MAX_DOCUMENT_BYTES } });
 
-const ATTACHMENT_MIME_KIND: Record<string, AttachmentKind> = {
-  'image/jpeg': 'image',
-  'image/png': 'image',
-  'image/webp': 'image',
-  'image/gif': 'image',
-  'image/heic': 'image',
-  'image/heif': 'image',
-  'video/mp4': 'video',
-  'video/quicktime': 'video',
-  'video/webm': 'video',
-};
 const mediaUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: HARD_MAX_ATTACHMENT_BYTES, files: HARD_MAX_ATTACHMENTS_PER_MESSAGE },
@@ -438,7 +427,7 @@ router.post('/attachments', authenticateToken, handleMediaUpload, async (req: Au
     const attachments: ChatAttachment[] = [];
 
     for (const file of files) {
-      const kind = ATTACHMENT_MIME_KIND[file.mimetype];
+      const kind = normalizeAttachmentKind(file.mimetype);
       if (!kind) {
         res.status(400).json({
           error: `Unsupported file type "${file.mimetype}". Supported: photos (jpg, png, webp, gif, heic) and video (mp4, mov, webm).`,

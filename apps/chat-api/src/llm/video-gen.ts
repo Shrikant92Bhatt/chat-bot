@@ -1,7 +1,7 @@
 import { SelectableModel } from '@chat-monorepo/shared';
 import { getOmniRouteBaseUrl, getOmniRouteApiKey, isUsingOpenRouter, VIDEO_GENERATION_MODEL } from './client';
 import { GcsUploader } from '../storage/uploader';
-import { detectVideoMode, getOpenRouterVideoCapabilities, assertVideoRequestSupported, VideoGenerationError } from './video-modes';
+import { getOpenRouterVideoCapabilities, assertVideoRequestSupported, VideoGenerationError } from './video-modes';
 
 const POLL_INTERVAL_MS = 5_000;
 // Most jobs finish in well under 2 minutes; bounded so a stuck provider job
@@ -175,9 +175,10 @@ export async function generateVideo(prompt: string, options: GenerateVideoOption
   // Capability gate: runs before any OpenRouter call, so a request the
   // provider can't fulfill (video-to-video, character replacement from a
   // source video, ...) never gets submitted - and never costs anything -
-  // instead of failing (and billing) after the fact, every time.
-  const mode = detectVideoMode({ referenceImageUrls, referenceVideoUrls });
-  assertVideoRequestSupported(mode, getOpenRouterVideoCapabilities());
+  // instead of failing (and billing) after the fact, every time. Same
+  // shared validateVideoGenerationRequest() the frontend's pre-submit
+  // warning uses (see video-modes.ts), so the two can never disagree.
+  assertVideoRequestSupported({ referenceImageUrls, referenceVideoUrls, capabilities: getOpenRouterVideoCapabilities() });
 
   const baseUrl = getOmniRouteBaseUrl();
   const apiKey = getOmniRouteApiKey();
