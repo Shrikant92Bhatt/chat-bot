@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { tool } from '@langchain/core/tools';
 import { generateImage } from '../llm/image-gen';
+import { generateVideo } from '../llm/video-gen';
 import { performWebSearch } from '../llm/web-search';
 import { browsePage } from '../llm/browse-page';
 import { getWeather } from '../llm/weather';
@@ -177,6 +178,28 @@ const generateImageTool = tool(
   }
 );
 
+const generateVideoTool = tool(
+  async ({ prompt }: { prompt: string }) => {
+    try {
+      const { videoUrl } = await generateVideo(prompt);
+      return JSON.stringify({ success: true, videoUrl, prompt });
+    } catch (error) {
+      console.error('[mcp/tools] generate_video failed:', error);
+      return JSON.stringify({ success: false, error: (error as Error).message });
+    }
+  },
+  {
+    name: 'generate_video',
+    description:
+      'Generates a short real video from a text prompt and returns its URL. Takes noticeably longer than ' +
+      'generate_image (often 30s-2min) since video generation runs as a background job - only use this when the ' +
+      'user actually asks for a video, not for an image or animation that a still image would satisfy.',
+    schema: z.object({
+      prompt: z.string().describe('The text prompt describing the desired video.'),
+    }),
+  }
+);
+
 export const MCP_TOOLS = [
   calculatorTool,
   webSearchTool,
@@ -185,4 +208,5 @@ export const MCP_TOOLS = [
   stockQuoteTool,
   codeInterpreterTool,
   generateImageTool,
+  generateVideoTool,
 ];

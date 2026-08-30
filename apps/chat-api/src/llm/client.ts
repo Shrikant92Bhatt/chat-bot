@@ -39,6 +39,20 @@ const OPENROUTER_MODEL_SLUG_MAP: Record<string, string> = {
  */
 export const IMAGE_GENERATION_MODEL = 'google/gemini-3.1-flash-image';
 
+/**
+ * Model used for the generate_video tool, via OpenRouter's video generation
+ * API (async job: POST /videos -> poll -> download - see llm/video-gen.ts).
+ * Only valid on OpenRouter, same guard as IMAGE_GENERATION_MODEL above - no
+ * equivalent exists on the local/self-hosted OmniRoute gateway.
+ *
+ * Veo 3.1 was one of the day-one models on OpenRouter's video API (launched
+ * April 2026, alongside Sora 2 Pro and Seedance); picked here for its
+ * text-to-video + audio support at a similar cost/quality class to the
+ * others - re-check https://openrouter.ai/collections/video-models if this
+ * slug ever 404s.
+ */
+export const VIDEO_GENERATION_MODEL = 'google/veo-3.1';
+
 interface GatewayConfig {
   baseUrl: string;
   apiKey: string;

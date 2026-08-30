@@ -57,6 +57,7 @@ export async function toolsNode(state: AgentState): Promise<AgentStateUpdate> {
 
   const toolMessages: ToolMessage[] = [];
   let generatedImageUrl: string | null = state.generatedImageUrl ?? null;
+  let generatedVideoUrl: string | null = state.generatedVideoUrl ?? null;
   const pendingUiEvents: UIStreamEvent[] = [];
 
   for (const call of toolCalls) {
@@ -67,6 +68,17 @@ export async function toolsNode(state: AgentState): Promise<AgentStateUpdate> {
         const parsed = JSON.parse(result);
         if (parsed.imageUrl) {
           generatedImageUrl = parsed.imageUrl;
+        }
+      } catch {
+        // Tool result wasn't parseable JSON — still hand it to the model below.
+      }
+    }
+
+    if (call.name === 'generate_video') {
+      try {
+        const parsed = JSON.parse(result);
+        if (parsed.videoUrl) {
+          generatedVideoUrl = parsed.videoUrl;
         }
       } catch {
         // Tool result wasn't parseable JSON — still hand it to the model below.
@@ -93,7 +105,7 @@ export async function toolsNode(state: AgentState): Promise<AgentStateUpdate> {
     toolMessages.push(new ToolMessage({ content: result, tool_call_id: call.id ?? call.name }));
   }
 
-  return { messages: toolMessages, generatedImageUrl, pendingUiEvents };
+  return { messages: toolMessages, generatedImageUrl, generatedVideoUrl, pendingUiEvents };
 }
 
 /**

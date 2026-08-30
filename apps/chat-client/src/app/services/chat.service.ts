@@ -909,6 +909,7 @@ export class ChatService {
                       content: '',
                       error: false,
                       imageUrl: undefined,
+                      videoUrl: undefined,
                       ui: undefined,
                       pendingUi: undefined,
                       sources: undefined,
@@ -1005,6 +1006,7 @@ export class ChatService {
                     content: '',
                     error: false,
                     imageUrl: undefined,
+                    videoUrl: undefined,
                     ui: undefined,
                     sources: undefined,
                     actions: undefined,
@@ -1213,6 +1215,10 @@ export class ChatService {
 
       if (data.imageUrl) {
         this.setMessageImageUrl(threadId, assistantMessageId, data.imageUrl);
+      }
+
+      if (data.videoUrl) {
+        this.setMessageVideoUrl(threadId, assistantMessageId, data.videoUrl);
       }
 
       if (data.done && Array.isArray(data.suggestions) && data.suggestions.length > 0) {
@@ -1605,6 +1611,18 @@ export class ChatService {
       threadsList.map((t) => {
         if (t.id === threadId) {
           const updatedMessages = t.messages.map((m) => (m.id === messageId ? { ...m, imageUrl } : m));
+          return { ...t, messages: updatedMessages };
+        }
+        return t;
+      })
+    );
+  }
+
+  private setMessageVideoUrl(threadId: string, messageId: string, videoUrl: string) {
+    this.threads.update((threadsList) =>
+      threadsList.map((t) => {
+        if (t.id === threadId) {
+          const updatedMessages = t.messages.map((m) => (m.id === messageId ? { ...m, videoUrl } : m));
           return { ...t, messages: updatedMessages };
         }
         return t;

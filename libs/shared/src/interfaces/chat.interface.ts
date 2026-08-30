@@ -106,6 +106,8 @@ export interface ChatMessage {
   /** Suggested follow-up questions, attached to the final assistant message of a turn. */
   suggestions?: string[];
   imageUrl?: string;
+  /** Set when a generate_video tool call produced a video this turn. */
+  videoUrl?: string;
   /** Photos/videos the user attached to this message, if any. */
   attachments?: ChatAttachment[];
   /**
@@ -282,6 +284,8 @@ export interface AIProviderResponse {
   };
   /** Set when a generate_image tool call produced an image this turn. */
   imageUrl?: string;
+  /** Set when a generate_video tool call produced a video this turn. */
+  videoUrl?: string;
   /** Approved UI components attached to this reply, sent once on the final (done: true) event. */
   ui?: UIComponent[];
   /** Sources for the `ui` payload, sent once on the final (done: true) event. */

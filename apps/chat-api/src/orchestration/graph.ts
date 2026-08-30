@@ -54,6 +54,7 @@ const TOOL_ACTIVITY_LABELS: Record<string, string> = {
   system_calculator: 'Calculating',
   code_interpreter: 'Running code',
   generate_image: 'Generating an image',
+  generate_video: 'Generating a video',
   list_screeners: 'Listing ETF screeners',
   run_screener: 'Running an ETF screen',
   get_etf_snapshot: 'Fetching ETF quotes',
@@ -203,6 +204,7 @@ export async function streamGraphResponse(
 
   let wroteAnyOutput = false;
   let generatedImageUrl: string | null = null;
+  let generatedVideoUrl: string | null = null;
   // Citations behind whatever the research node gathered this turn, shown
   // to the user alongside any sources the model itself declared in its
   // ```ui block (the two are merged on the final event below).
@@ -324,6 +326,11 @@ export async function streamGraphResponse(
           generatedImageUrl = output.generatedImageUrl;
           wroteAnyOutput = true;
           res.write(`data: ${JSON.stringify({ imageUrl: generatedImageUrl, done: false, model })}\n\n`);
+        }
+        if (output?.generatedVideoUrl) {
+          generatedVideoUrl = output.generatedVideoUrl;
+          wroteAnyOutput = true;
+          res.write(`data: ${JSON.stringify({ videoUrl: generatedVideoUrl, done: false, model })}\n\n`);
         }
         for (const uiEvent of output?.pendingUiEvents ?? []) {
           emitUi(uiEvent);
