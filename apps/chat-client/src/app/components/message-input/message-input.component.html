@@ -279,6 +279,15 @@
       <div *ngIf="chatService.attachmentUploadError()" class="px-1 pt-2 text-xs15 text-red-400">
         {{ chatService.attachmentUploadError() }}
       </div>
+      <!-- Attached videos aren't usable as generation input - no OpenRouter video
+           model accepts a video as input, only images (see llm/video-modes.ts).
+           Warned here, before sending, rather than only after the request round-trips. -->
+      <div
+        *ngIf="chatService.chatMode() === 'video' && hasStagedVideoAttachment()"
+        class="px-1 pt-2 text-xs15 text-amber-400"
+      >
+        ⚠️ Video attachments can't be used as a reference - only images guide generation. Remove it, or attach an image instead.
+      </div>
 
       <!-- Uploaded knowledge-base document chips -->
       <div *ngIf="chatService.uploadedDocuments().length > 0" class="flex flex-wrap gap-1.5 px-1 pt-2">

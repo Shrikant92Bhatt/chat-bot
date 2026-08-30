@@ -10,6 +10,7 @@ import { streamGraphResponse } from '../orchestration/graph';
 import { StorageMetricsService } from '../storage/metrics';
 import { generateImage } from '../llm/image-gen';
 import { generateVideo, listVideoModels } from '../llm/video-gen';
+import { VideoGenerationError, VideoErrorCode } from '../llm/video-modes';
 import { isOmniRouteConfigured } from '../llm/client';
 import { extractDocumentText } from '../rag/document-extractor';
 import { RagRetriever } from '../rag/retriever';
@@ -312,30 +313,64 @@ router.post('/generate-image', authenticateToken, async (req: AuthenticatedReque
   }
 });
 
+// HTTP status per VideoErrorCode - client-caused/detected-before-any-
+// provider-call issues are 400 (never worth retrying as-is); provider-side
+// issues are 502/503; our own storage layer or anything unclassified is 500.
+const VIDEO_ERROR_STATUS: Record<VideoErrorCode, number> = {
+  MISSING_PROMPT: 400,
+  UNSUPPORTED_REFERENCE_VIDEO: 400,
+  PROVIDER_NOT_CONFIGURED: 503,
+  PROVIDER_ERROR: 502,
+  TIMEOUT: 504,
+  RESULT_MISSING: 502,
+  STORAGE_ERROR: 500,
+  UNKNOWN_ERROR: 500,
+};
+
 /**
  * POST /api/chat/generate-video
- * Body: { prompt, model?, referenceImageUrls? }. referenceImageUrls are
- * hosted URLs already returned by POST /attachments (the Video composer
- * mode stages reference images through that same endpoint before calling
- * this one) - guides style/subject via OpenRouter's input_references, see
- * llm/video-gen.ts.
+ * Body: { prompt, model?, referenceImageUrls?, referenceVideoUrls? }.
+ * referenceImageUrls/referenceVideoUrls are hosted URLs already returned by
+ * POST /attachments (the Video composer mode stages attachments through
+ * that same endpoint before calling this one). Images guide generation via
+ * OpenRouter's input_references; videos are NOT sent to the provider (no
+ * OpenRouter video model accepts a video as input) - they're accepted here
+ * only so generateVideo()'s capability gate can detect that intent and
+ * reject it with a clear, actionable reason instead of silently dropping it
+ * and submitting (and paying for) a request that can't do what was asked.
+ * See llm/video-modes.ts and llm/video-gen.ts.
+ *
+ * On failure, returns { error, errorCode, retryable } (see VideoErrorCode)
+ * rather than a flat string - error is always the real underlying reason
+ * (generateVideo() throws VideoGenerationError at every failure point, never
+ * a plain Error), which is what makes a failure diagnosable in the chat UI
+ * itself instead of only in server logs.
  */
 router.post('/generate-video', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  const { prompt, model, referenceImageUrls, referenceVideoUrls } = req.body;
   try {
-    const { prompt, model, referenceImageUrls } = req.body;
-    if (!prompt) {
-      res.status(400).json({ error: 'Prompt is required.' });
-      return;
-    }
-
-    const { videoUrl } = await generateVideo(prompt, {
+    const { videoUrl } = await generateVideo(prompt || '', {
       model: typeof model === 'string' ? model : undefined,
       referenceImageUrls: Array.isArray(referenceImageUrls) ? referenceImageUrls.filter((u) => typeof u === 'string') : undefined,
+      referenceVideoUrls: Array.isArray(referenceVideoUrls) ? referenceVideoUrls.filter((u) => typeof u === 'string') : undefined,
     });
     res.json({ success: true, videoUrl, prompt });
   } catch (error) {
     console.error('[Chat API Route] Video generation error:', error);
-    res.status(500).json({ error: 'Failed to generate video.' });
+    if (error instanceof VideoGenerationError) {
+      res.status(VIDEO_ERROR_STATUS[error.code]).json({ error: error.message, errorCode: error.code, retryable: error.retryable });
+      return;
+    }
+    // Anything reaching here is a bug (generateVideo is expected to always
+    // throw VideoGenerationError) rather than an expected failure mode -
+    // still forward the real message (never contains the API key, which is
+    // only ever sent as a header, not echoed back or included in Error
+    // messages) so it's diagnosable without server log access either way.
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to generate video.',
+      errorCode: 'UNKNOWN_ERROR',
+      retryable: false,
+    });
   }
 });
 

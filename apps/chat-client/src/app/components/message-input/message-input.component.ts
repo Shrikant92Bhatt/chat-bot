@@ -200,6 +200,10 @@ export class MessageInputComponent implements OnDestroy {
     this.isVideoModelDropdownOpen = !this.isVideoModelDropdownOpen;
   }
 
+  hasStagedVideoAttachment(): boolean {
+    return this.chatService.stagedAttachments().some((a) => a.kind === 'video');
+  }
+
   // Knowledge-base document types stay on the existing single-file RAG
   // upload path; anything else (jpg/png/mp4/...) goes to attachMedia()
   // instead, which stages it as a chat-message attachment (see
