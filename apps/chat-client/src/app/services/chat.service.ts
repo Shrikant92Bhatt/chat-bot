@@ -10,6 +10,8 @@ import {
   SelectableModel,
   SELECTABLE_MODELS,
   DEFAULT_MODEL_ID,
+  SELECTABLE_VIDEO_MODELS,
+  DEFAULT_VIDEO_MODEL_ID,
   ThreadFeedbackMap,
   UIComponent,
   OrchestratorSource,
@@ -66,6 +68,9 @@ export class ChatService {
 
   public availableModels = signal<SelectableModel[]>([...SELECTABLE_MODELS]);
   public selectedModel = signal<AIModelType>(DEFAULT_MODEL_ID);
+  /** Video-model catalog + selection for the Video composer mode - see loadAvailableVideoModels(). */
+  public availableVideoModels = signal<SelectableModel[]>([...SELECTABLE_VIDEO_MODELS]);
+  public selectedVideoModel = signal<string>(DEFAULT_VIDEO_MODEL_ID);
   public threads = signal<ChatThread[]>([]);
   public activeThreadId = signal<string | null>(null);
   // True only while the initial fetch of saved thread history is in flight
@@ -190,6 +195,7 @@ export class ChatService {
   ) {
     this.createInitialThread();
     void this.loadAvailableModels();
+    void this.loadAvailableVideoModels();
     void this.loadEffectiveLimits();
 
     // Keeps the URL in sync with whichever thread is active - every path
@@ -283,6 +289,28 @@ export class ChatService {
       }
     } catch (e) {
       console.warn('[ChatService] Could not fetch dynamic models list, using defaults:', e);
+    }
+  }
+
+  /** Fetches the live video-model catalog (see llm/video-gen.ts listVideoModels()) for the Video composer mode. */
+  public async loadAvailableVideoModels(): Promise<void> {
+    try {
+      const token = this.authService.getIdToken();
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`${this.apiUrl}/video-models`, { headers });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && Array.isArray(data.models) && data.models.length > 0) {
+          this.availableVideoModels.set(data.models);
+          if (!data.models.some((m: SelectableModel) => m.id === this.selectedVideoModel())) {
+            this.selectedVideoModel.set(data.models[0].id);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[ChatService] Could not fetch video model catalog, using defaults:', e);
     }
   }
 
@@ -587,7 +615,7 @@ export class ChatService {
   // ChatGPT/Gemini's image tool) - switches the composer's placeholder and
   // routes submissions straight to POST /generate-image instead of the
   // chat stream, so it doesn't depend on the model deciding to call a tool.
-  public chatMode = signal<'chat' | 'image'>('chat');
+  public chatMode = signal<'chat' | 'image' | 'video'>('chat');
 
   public setModel(model: AIModelType) {
     this.selectedModel.set(model);
@@ -611,8 +639,12 @@ export class ChatService {
     this.mcpEnabled.update((v) => !v);
   }
 
-  public setChatMode(mode: 'chat' | 'image') {
+  public setChatMode(mode: 'chat' | 'image' | 'video') {
     this.chatMode.set(mode);
+  }
+
+  public setVideoModel(id: string) {
+    this.selectedVideoModel.set(id);
   }
 
   /**
@@ -801,6 +833,92 @@ export class ChatService {
     }
   }
 
+  /**
+   * Dedicated Video composer mode - mirrors generateImage() above (a single
+   * request/response call outside the normal streaming chat path) but takes
+   * noticeably longer (the backend blocks on OpenRouter's async video job,
+   * see llm/video-gen.ts) and passes along the selected video model plus any
+   * staged image attachments as reference images (input_references) to
+   * guide generation - video-only staged attachments are dropped since
+   * OpenRouter's reference images are image-only.
+   */
+  async generateVideo(prompt: string): Promise<void> {
+    const currentThreadId = this.activeThreadId();
+    if (!currentThreadId || !prompt.trim() || this.isStreaming()) return;
+
+    const referenceImageUrls = this.stagedAttachments()
+      .filter((a) => a.kind === 'image')
+      .map((a) => a.url);
+
+    const userMessage: ChatMessage = {
+      id: 'msg-' + Date.now(),
+      role: 'user',
+      content: prompt.trim(),
+      timestamp: Date.now(),
+    };
+    const assistantMessageId = 'msg-ai-' + Date.now();
+    const assistantPlaceholder: ChatMessage = {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      timestamp: Date.now(),
+      model: this.selectedModel(),
+    };
+
+    const isAuthenticated = !!this.authService.userSignal();
+    this.stagedAttachments.set([]);
+
+    this.threads.update((threadsList) =>
+      threadsList.map((t) => {
+        if (t.id === currentThreadId) {
+          const updatedTitle = t.messages.length <= 1 ? '🎬 ' + prompt.trim().slice(0, 28) : t.title;
+          return { ...t, title: updatedTitle, updatedAt: Date.now(), messages: [...t.messages, userMessage, assistantPlaceholder] };
+        }
+        return t;
+      })
+    );
+
+    this.isStreaming.set(true);
+    this.activityStatus.set('Generating a video…');
+
+    try {
+      const response = await fetch(`${this.apiUrl}/generate-video`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.authService.getIdToken()}`,
+        },
+        body: JSON.stringify({
+          prompt: prompt.trim(),
+          model: this.selectedVideoModel(),
+          referenceImageUrls: referenceImageUrls.length > 0 ? referenceImageUrls : undefined,
+        }),
+      });
+
+      if (response.status === 401) {
+        this.authService.notifySessionExpired();
+        this.updateAssistantMessage(currentThreadId, assistantMessageId, '🔒 Please sign in to generate videos.');
+        return;
+      }
+
+      const data = await response.json();
+      if (response.ok && data.success && data.videoUrl) {
+        this.setMessageVideoUrl(currentThreadId, assistantMessageId, data.videoUrl);
+      } else {
+        this.updateAssistantMessage(currentThreadId, assistantMessageId, `⚠️ ${data.error || 'Video generation failed.'}`);
+      }
+    } catch (error: any) {
+      console.error('[ChatService] Video generation error:', error);
+      this.updateAssistantMessage(currentThreadId, assistantMessageId, `⚠️ ${getFriendlyErrorMessage(error, 'chat')}`);
+    } finally {
+      this.isStreaming.set(false);
+      this.activityStatus.set(null);
+      if (isAuthenticated) {
+        this.persistUserThreadHistory();
+      }
+    }
+  }
+
   async sendMessage(userContent: string): Promise<void> {
     const currentThreadId = this.activeThreadId();
     const attachments = this.stagedAttachments();
@@ -909,6 +1027,7 @@ export class ChatService {
                       content: '',
                       error: false,
                       imageUrl: undefined,
+                      videoUrl: undefined,
                       ui: undefined,
                       pendingUi: undefined,
                       sources: undefined,
@@ -1005,6 +1124,7 @@ export class ChatService {
                     content: '',
                     error: false,
                     imageUrl: undefined,
+                    videoUrl: undefined,
                     ui: undefined,
                     sources: undefined,
                     actions: undefined,
@@ -1213,6 +1333,10 @@ export class ChatService {
 
       if (data.imageUrl) {
         this.setMessageImageUrl(threadId, assistantMessageId, data.imageUrl);
+      }
+
+      if (data.videoUrl) {
+        this.setMessageVideoUrl(threadId, assistantMessageId, data.videoUrl);
       }
 
       if (data.done && Array.isArray(data.suggestions) && data.suggestions.length > 0) {
@@ -1605,6 +1729,18 @@ export class ChatService {
       threadsList.map((t) => {
         if (t.id === threadId) {
           const updatedMessages = t.messages.map((m) => (m.id === messageId ? { ...m, imageUrl } : m));
+          return { ...t, messages: updatedMessages };
+        }
+        return t;
+      })
+    );
+  }
+
+  private setMessageVideoUrl(threadId: string, messageId: string, videoUrl: string) {
+    this.threads.update((threadsList) =>
+      threadsList.map((t) => {
+        if (t.id === threadId) {
+          const updatedMessages = t.messages.map((m) => (m.id === messageId ? { ...m, videoUrl } : m));
           return { ...t, messages: updatedMessages };
         }
         return t;

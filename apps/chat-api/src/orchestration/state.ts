@@ -29,6 +29,10 @@ export const AgentStateAnnotation = Annotation.Root({
     reducer: (_left, right) => right,
     default: () => null,
   }),
+  generatedVideoUrl: Annotation<string | null>({
+    reducer: (_left, right) => right,
+    default: () => null,
+  }),
   /**
    * Everything the context-assembly step gathered before the run started
    * (project instructions, long-term memories, RAG excerpts, conversation

@@ -266,6 +266,47 @@
                     </a>
                   </div>
                 </div>
+
+                <!-- Generated Video: standalone card when it's the whole reply -->
+                <div
+                  *ngIf="msg.videoUrl && !msg.content"
+                  class="mt-1 max-w-md rounded-2xl border border-white/10 bg-white/[0.03] overflow-hidden"
+                >
+                  <video [src]="msg.videoUrl" controls class="w-full h-auto" (loadeddata)="onContentLoad()"></video>
+                  <div class="flex items-center justify-between px-3 py-2 border-t border-white/5">
+                    <span class="text-xs15 text-slate-400">Generated video</span>
+                    <a
+                      [href]="msg.videoUrl"
+                      download="generated-video.mp4"
+                      target="_blank"
+                      rel="noopener"
+                      class="text-xs15 text-slate-300 hover:text-white font-medium transition-colors"
+                    >
+                      Download
+                    </a>
+                  </div>
+                </div>
+
+                <!-- Generated Video: smaller inline treatment when it accompanies a text reply (tool call mid-chat) -->
+                <div *ngIf="msg.videoUrl && msg.content" class="mt-3 max-w-sm">
+                  <video
+                    [src]="msg.videoUrl"
+                    controls
+                    class="rounded-xl border border-white/10 w-full h-auto"
+                    (loadeddata)="onContentLoad()"
+                  ></video>
+                  <div class="flex justify-end mt-1.5">
+                    <a
+                      [href]="msg.videoUrl"
+                      download="generated-video.mp4"
+                      target="_blank"
+                      rel="noopener"
+                      class="text-xs15 text-slate-400 hover:text-slate-300 transition-colors"
+                    >
+                      Download
+                    </a>
+                  </div>
+                </div>
               </div>
 
               <!-- Copy action -->
