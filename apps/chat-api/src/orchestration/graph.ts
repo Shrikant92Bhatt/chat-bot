@@ -385,6 +385,23 @@ export async function streamGraphResponse(
     ...researchSources.filter((s) => s.url && !seenSourceUrls.has(s.url)),
   ];
 
+  // Defensive fallback: a turn that produced genuinely nothing - no visible
+  // text, no image/video, no UI card, no sources - previously ended the
+  // stream with an empty `chunk: ''` and nothing else, leaving a permanently
+  // blank assistant bubble with zero indication anything went wrong (no
+  // error event fires here, since nothing actually threw). This can happen
+  // without a hard provider error, e.g. the model returns an empty
+  // completion, or writes its entire "answer" inside a ```ui fence with no
+  // prose and the fence turns out not to parse into anything renderable.
+  // Surfacing it explicitly turns a silent, undiagnosable gap into a
+  // visible, retryable one - same principle as the thread-save and video-
+  // generation error fixes elsewhere in this file's history.
+  if (!wroteAnyOutput && mergedUi.length === 0 && mergedSources.length === 0) {
+    const fallback = "I wasn't able to generate a response for that. Could you try rephrasing, or ask again?";
+    visibleText = fallback;
+    res.write(`data: ${JSON.stringify({ chunk: fallback, done: false, model })}\n\n`);
+  }
+
   const suggestions = await generateFollowUpSuggestions(request.messages || [], visibleText);
   res.write(
     `data: ${JSON.stringify({

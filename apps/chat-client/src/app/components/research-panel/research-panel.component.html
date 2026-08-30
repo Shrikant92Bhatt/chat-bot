@@ -6,10 +6,14 @@
     class="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-white/[0.03] transition-colors"
     [attr.aria-expanded]="expanded"
   >
-    <span
-      *ngIf="isRunning"
-      class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping shrink-0"
-    ></span>
+    <!-- Phase icon: a specific glyph per phase while running (search/read/
+         write), a breathing scale instead of a hard blink so it reads as
+         "working" without feeling jumpy - swaps to a plain check once done. -->
+    <span *ngIf="isRunning" class="w-3.5 h-3.5 shrink-0 text-accentCyan icon-breathe">
+      <svg class="w-full h-full" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" [attr.d]="phaseIconPath(trace.phase)" />
+      </svg>
+    </span>
     <svg
       *ngIf="!isRunning"
       class="w-3.5 h-3.5 text-slate-500 shrink-0"
@@ -21,7 +25,7 @@
     </svg>
 
     <span class="text-xs15 font-medium text-slate-300 uppercase tracking-wide shrink-0">Thinking</span>
-    <span class="text-xs15 text-slate-400 truncate flex-1" [class.animate-pulse]="isRunning">{{ headline }}</span>
+    <span class="text-xs15 truncate flex-1" [class.shimmer-text]="isRunning" [class.text-slate-400]="!isRunning">{{ headline }}</span>
 
     <svg
       class="w-3.5 h-3.5 text-slate-500 shrink-0 transition-transform"
@@ -34,54 +38,70 @@
     </svg>
   </button>
 
-  <div *ngIf="expanded" class="px-3 pb-3 pt-1 border-t border-white/5 space-y-3">
-    <!-- Why the assistant decided to search (or not) -->
-    <p *ngIf="trace.reasoning" class="text-xs15 text-slate-400 italic leading-relaxed">
-      {{ trace.reasoning }}
-    </p>
-    <p *ngIf="!trace.ran && trace.message" class="text-xs15 text-slate-400 leading-relaxed">
-      {{ trace.message }}
-    </p>
+  <!-- Smooth height reveal (grid-template-rows 0fr->1fr, see styles.css
+       .panel-collapse) instead of *ngIf's instant show/hide - stays in the
+       DOM so the transition has something to animate between. -->
+  <div class="panel-collapse" [class.panel-collapse-open]="expanded">
+    <div>
+      <div class="px-3 pb-3 pt-1 border-t border-white/5 space-y-3">
+        <!-- Why the assistant decided to search (or not) -->
+        <p *ngIf="trace.reasoning" class="text-xs15 text-slate-400 italic leading-relaxed">
+          {{ trace.reasoning }}
+        </p>
+        <p *ngIf="!trace.ran && trace.message" class="text-xs15 text-slate-400 leading-relaxed">
+          {{ trace.message }}
+        </p>
 
-    <!-- Planned searches, with per-query state -->
-    <div *ngIf="trace.queries.length > 0" class="space-y-1">
-      <div class="text-xs2 uppercase tracking-wide text-slate-500">
-        Searches ({{ trace.queries.length }})
-      </div>
-      <div
-        *ngFor="let q of trace.queries"
-        class="flex items-start gap-2 text-xs15"
-        [title]="q.preview || ''"
-      >
-        <span class="shrink-0 mt-[3px] w-3 text-center">
-          <span *ngIf="q.status === 'ok'" class="text-emerald-400">✓</span>
-          <span *ngIf="q.status === 'failed'" class="text-accentRose">✕</span>
-          <span *ngIf="q.status === 'running'" class="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
-          <span *ngIf="q.status === 'pending'" class="text-slate-600">·</span>
-        </span>
-        <span class="text-slate-300 flex-1 min-w-0">
-          <span class="break-words">{{ q.query }}</span>
-          <span *ngIf="q.citationCount" class="text-slate-500"> — {{ q.citationCount }} source{{ q.citationCount === 1 ? '' : 's' }}</span>
-        </span>
+        <!-- Planned searches, with per-query state - connected by a hairline
+             timeline rail so a multi-search turn reads as one sequence of
+             steps rather than a loose list. -->
+        <div *ngIf="trace.queries.length > 0" class="space-y-1">
+          <div class="text-xs2 uppercase tracking-wide text-slate-500">
+            Searches ({{ trace.queries.length }})
+          </div>
+          <div class="relative">
+            <div
+              *ngIf="trace.queries.length > 1"
+              class="absolute left-[5px] top-2 bottom-2 w-px bg-white/10"
+              aria-hidden="true"
+            ></div>
+            <div
+              *ngFor="let q of trace.queries"
+              class="relative flex items-start gap-2 text-xs15 py-0.5"
+              [title]="q.preview || ''"
+            >
+              <span class="relative z-10 shrink-0 mt-[3px] w-3 text-center bg-[var(--color-surface-primary,#1a1f2e)]">
+                <span *ngIf="q.status === 'ok'" class="text-emerald-400">✓</span>
+                <span *ngIf="q.status === 'failed'" class="text-accentRose">✕</span>
+                <span *ngIf="q.status === 'running'" class="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+                <span *ngIf="q.status === 'pending'" class="text-slate-600">·</span>
+              </span>
+              <span class="text-slate-300 flex-1 min-w-0">
+                <span class="break-words">{{ q.query }}</span>
+                <span *ngIf="q.citationCount" class="text-slate-500"> — {{ q.citationCount }} source{{ q.citationCount === 1 ? '' : 's' }}</span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pages opened in full via browse_page -->
+        <div *ngIf="trace.browsed.length > 0" class="space-y-1">
+          <div class="text-xs2 uppercase tracking-wide text-slate-500">Pages read</div>
+          <div *ngFor="let page of trace.browsed" class="flex items-start gap-2 text-xs15">
+            <span class="shrink-0 mt-[3px] w-3 text-center">
+              <span *ngIf="page.ok" class="text-emerald-400">✓</span>
+              <span *ngIf="!page.ok" class="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+            </span>
+            <span class="text-slate-300 truncate">{{ hostLabel(page.url, page.title) }}</span>
+          </div>
+        </div>
+
+        <!-- Sources are deliberately NOT repeated here - chat-window.component.html
+             renders the canonical, numbered Sources list below the answer
+             (msg.sources, which already merges these same citations with any
+             the model declared itself). Showing trace.sources here too would put
+             the same URLs on screen twice for one message. -->
       </div>
     </div>
-
-    <!-- Pages opened in full via browse_page -->
-    <div *ngIf="trace.browsed.length > 0" class="space-y-1">
-      <div class="text-xs2 uppercase tracking-wide text-slate-500">Pages read</div>
-      <div *ngFor="let page of trace.browsed" class="flex items-start gap-2 text-xs15">
-        <span class="shrink-0 mt-[3px] w-3 text-center">
-          <span *ngIf="page.ok" class="text-emerald-400">✓</span>
-          <span *ngIf="!page.ok" class="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
-        </span>
-        <span class="text-slate-300 truncate">{{ hostLabel(page.url, page.title) }}</span>
-      </div>
-    </div>
-
-    <!-- Sources are deliberately NOT repeated here - chat-window.component.html
-         renders the canonical, numbered Sources list below the answer
-         (msg.sources, which already merges these same citations with any
-         the model declared itself). Showing trace.sources here too would put
-         the same URLs on screen twice for one message. -->
   </div>
 </div>

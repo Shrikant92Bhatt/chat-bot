@@ -573,6 +573,79 @@
   background: rgba(255, 255, 255, 0.3);
 }
 
+/* Shimmering loading text (the "Thinking…"/"Searching…" style label used by
+   ChatGPT/Claude/Groq-style chat UIs while a research step is in flight) - a
+   soft light band sweeps left-to-right across the text via a moving
+   background-position on a background-clip:text gradient. Cheaper and
+   smoother than animating opacity/color per-frame. */
+@keyframes shimmer-sweep {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+.shimmer-text {
+  background: linear-gradient(
+    90deg,
+    rgba(148, 163, 184, 0.55) 0%,
+    rgba(148, 163, 184, 0.55) 35%,
+    rgba(226, 232, 240, 1) 50%,
+    rgba(148, 163, 184, 0.55) 65%,
+    rgba(148, 163, 184, 0.55) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer-sweep 2.2s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .shimmer-text {
+    animation: none;
+    -webkit-text-fill-color: rgba(148, 163, 184, 0.85);
+  }
+}
+
+/* Smooth, dependency-free expand/collapse for the research panel's detail
+   section (no @angular/animations in this app - the grid-template-rows
+   0fr->1fr trick animates a genuinely variable-height reveal with plain
+   CSS, toggled by one class instead of *ngIf's instant show/hide). */
+.panel-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.25s ease;
+}
+.panel-collapse.panel-collapse-open {
+  grid-template-rows: 1fr;
+}
+.panel-collapse > div {
+  overflow: hidden;
+}
+
+/* A soft breathing scale on the active-phase icon while research is running -
+   reads as "working" without the harshness of a hard blink. */
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+}
+.icon-breathe {
+  animation: breathe 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .icon-breathe {
+    animation: none;
+  }
+}
+
 /* Modal entrance: fade + slight scale-up. Plain @keyframes rather than the
    tailwindcss-animate plugin - that plugin was never added to
    tailwind.config.js's `plugins`, so classes like `animate-in fade-in
