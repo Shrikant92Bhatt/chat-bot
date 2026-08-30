@@ -1,7 +1,13 @@
-import { Component, HostListener, ChangeDetectionStrategy, OnDestroy, computed, effect, ElementRef, ViewChild } from '@angular/core';
+import { Component, HostListener, ChangeDetectionStrategy, OnDestroy, computed, effect, isDevMode, ElementRef, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { AIModelType, SelectableModel } from '@chat-monorepo/shared';
+import {
+  AIModelType,
+  SelectableModel,
+  validateVideoGenerationRequest,
+  getOpenRouterVideoCapabilities,
+  VideoGenerationValidationResult,
+} from '@chat-monorepo/shared';
 import { ChatService } from '../../services/chat.service';
 import { ProjectService } from '../../services/project.service';
 
@@ -200,9 +206,36 @@ export class MessageInputComponent implements OnDestroy {
     this.isVideoModelDropdownOpen = !this.isVideoModelDropdownOpen;
   }
 
-  hasStagedVideoAttachment(): boolean {
-    return this.chatService.stagedAttachments().some((a) => a.kind === 'video');
-  }
+  /**
+   * The exact same validateVideoGenerationRequest() the backend calls
+   * before ever hitting OpenRouter (see apps/chat-api/src/llm/video-modes.ts) -
+   * imported from the shared lib so this warning and the backend's actual
+   * rejection can never disagree about the same set of attachments. Only
+   * warns when the CURRENTLY selected model's capabilities genuinely can't
+   * satisfy what's attached - never a blanket "video mode -> flag every
+   * video" rule, and never triggered by image-only attachments regardless
+   * of count (this is the exact scenario from the mobile bug report: 4
+   * staged images must never produce this warning).
+   */
+  videoValidation = computed<VideoGenerationValidationResult>(() => {
+    const staged = this.chatService.stagedAttachments();
+    return validateVideoGenerationRequest({
+      referenceImageUrls: staged.filter((a) => a.kind === 'image').map((a) => a.url),
+      referenceVideoUrls: staged.filter((a) => a.kind === 'video').map((a) => a.url),
+      capabilities: getOpenRouterVideoCapabilities(),
+      modelName: this.getVideoModelDisplayName(),
+    });
+  });
+
+  /**
+   * Dev-only diagnostic: every staged attachment's actual classified kind +
+   * MIME type, so a report like "the UI shows images but warns about video"
+   * is immediately checkable from the browser itself - no need to guess or
+   * reproduce on another device. isDevMode() is Angular's own dev/production
+   * flag (true in `ng serve`, compiled out/false in a production build), so
+   * this never renders for real users.
+   */
+  readonly showAttachmentDiagnostics = isDevMode();
 
   // Knowledge-base document types stay on the existing single-file RAG
   // upload path; anything else (jpg/png/mp4/...) goes to attachMedia()

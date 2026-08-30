@@ -279,14 +279,31 @@
       <div *ngIf="chatService.attachmentUploadError()" class="px-1 pt-2 text-xs15 text-red-400">
         {{ chatService.attachmentUploadError() }}
       </div>
-      <!-- Attached videos aren't usable as generation input - no OpenRouter video
-           model accepts a video as input, only images (see llm/video-modes.ts).
-           Warned here, before sending, rather than only after the request round-trips. -->
+      <!-- Capability-driven warning: only shows when the SELECTED model's
+           actual capabilities can't satisfy what's currently attached (see
+           shared validateVideoGenerationRequest(), same function the backend
+           uses to reject the request before ever calling OpenRouter) - never
+           a blanket "video mode -> flag every video" rule, and never
+           triggered by image-only attachments no matter how many are staged. -->
       <div
-        *ngIf="chatService.chatMode() === 'video' && hasStagedVideoAttachment()"
+        *ngIf="chatService.chatMode() === 'video' && !videoValidation().valid"
         class="px-1 pt-2 text-xs15 text-amber-400"
       >
-        ⚠️ Video attachments can't be used as a reference - only images guide generation. Remove it, or attach an image instead.
+        ⚠️ {{ videoValidation().warning }}
+      </div>
+
+      <!-- Dev-only: real classification of every staged attachment, so a
+           report like "the UI shows images but warns about video" is
+           checkable immediately from the browser - compiled out of
+           production builds (isDevMode()). -->
+      <div
+        *ngIf="showAttachmentDiagnostics && chatService.chatMode() === 'video' && chatService.stagedAttachments().length > 0"
+        class="px-1 pt-2 text-xs2 font-mono text-slate-500 space-y-0.5"
+      >
+        <div>[diagnostics] mode={{ videoValidation().mode }} valid={{ videoValidation().valid }}</div>
+        <div *ngFor="let att of chatService.stagedAttachments()">
+          [{{ att.kind }}] {{ att.fileName }} — mime={{ att.contentType }} id={{ att.id }}
+        </div>
       </div>
 
       <!-- Uploaded knowledge-base document chips -->
