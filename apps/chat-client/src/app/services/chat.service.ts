@@ -839,16 +839,19 @@ export class ChatService {
    * noticeably longer (the backend blocks on OpenRouter's async video job,
    * see llm/video-gen.ts) and passes along the selected video model plus any
    * staged image attachments as reference images (input_references) to
-   * guide generation - video-only staged attachments are dropped since
-   * OpenRouter's reference images are image-only.
+   * guide generation. Staged VIDEO attachments are sent too, but only so
+   * the backend's capability gate (llm/video-modes.ts) can recognize that
+   * intent and reject it with a clear reason - no OpenRouter video model
+   * accepts a video as input, so they're never actually forwarded to the
+   * provider.
    */
   async generateVideo(prompt: string): Promise<void> {
     const currentThreadId = this.activeThreadId();
     if (!currentThreadId || !prompt.trim() || this.isStreaming()) return;
 
-    const referenceImageUrls = this.stagedAttachments()
-      .filter((a) => a.kind === 'image')
-      .map((a) => a.url);
+    const staged = this.stagedAttachments();
+    const referenceImageUrls = staged.filter((a) => a.kind === 'image').map((a) => a.url);
+    const referenceVideoUrls = staged.filter((a) => a.kind === 'video').map((a) => a.url);
 
     const userMessage: ChatMessage = {
       id: 'msg-' + Date.now(),
@@ -892,6 +895,7 @@ export class ChatService {
           prompt: prompt.trim(),
           model: this.selectedVideoModel(),
           referenceImageUrls: referenceImageUrls.length > 0 ? referenceImageUrls : undefined,
+          referenceVideoUrls: referenceVideoUrls.length > 0 ? referenceVideoUrls : undefined,
         }),
       });
 

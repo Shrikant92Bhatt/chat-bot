@@ -1,11 +1,15 @@
 import { SelectableModel } from '@chat-monorepo/shared';
 import { getOmniRouteBaseUrl, getOmniRouteApiKey, isUsingOpenRouter, VIDEO_GENERATION_MODEL } from './client';
 import { GcsUploader } from '../storage/uploader';
+import { detectVideoMode, getOpenRouterVideoCapabilities, assertVideoRequestSupported, VideoGenerationError } from './video-modes';
 
 const POLL_INTERVAL_MS = 5_000;
 // Most jobs finish in well under 2 minutes; bounded so a stuck provider job
 // can't hang a chat turn indefinitely (mirrors the withTimeout pattern used
-// for the research planner in orchestration/research.ts).
+// for the research planner in orchestration/research.ts). NOT retried on
+// expiry (see the throw below) - the OpenRouter job may still be running
+// and billing past this point, and firing a second job on top of it would
+// only double the cost for the same stuck request.
 const POLL_TIMEOUT_MS = 4 * 60 * 1_000;
 const CATALOG_CACHE_TTL_MS = 30 * 60 * 1_000; // matches ModelConfigService's OpenRouter catalog cache
 
@@ -21,10 +25,29 @@ interface OpenRouterVideoModel {
   name?: string;
 }
 
+/**
+ * Fetches JSON and throws a structured VideoGenerationError on a non-2xx
+ * response, classifying retryability from the status code: a 5xx or a
+ * network-level failure (fetch rejecting before any response, e.g. DNS/
+ * connection reset) is transient and safe to retry; a 4xx means the request
+ * itself was wrong (bad model, invalid reference, auth) and retrying it
+ * unchanged would just fail identically - see "Add Retry Logic Correctly":
+ * don't blindly retry invalid requests or capability mismatches.
+ */
 async function fetchJson<T>(url: string, init: RequestInit, failureLabel: string): Promise<T> {
-  const response = await fetch(url, init);
+  let response: Response;
+  try {
+    response = await fetch(url, init);
+  } catch (error) {
+    throw new VideoGenerationError(
+      'PROVIDER_ERROR',
+      `${failureLabel}: network error (${(error as Error).message})`,
+      true
+    );
+  }
   if (!response.ok) {
-    throw new Error(`${failureLabel}: ${response.status} ${await response.text()}`);
+    const body = await response.text();
+    throw new VideoGenerationError('PROVIDER_ERROR', `${failureLabel}: ${response.status} ${body}`, response.status >= 500);
   }
   return response.json() as Promise<T>;
 }
@@ -103,6 +126,15 @@ export interface GenerateVideoOptions {
    * "here's what I mean" attachments from a chat composer.
    */
   referenceImageUrls?: string[];
+  /**
+   * Hosted video URLs the caller wanted used as generation input (e.g. "use
+   * this video, keep the same dance"). Never sent to OpenRouter - accepted
+   * here only so the capability gate below can detect the intent and reject
+   * it with a clear reason, instead of the video silently being dropped and
+   * a text-only request going out that can't possibly satisfy what was
+   * asked. See video-modes.ts.
+   */
+  referenceVideoUrls?: string[];
 }
 
 /**
@@ -111,6 +143,10 @@ export interface GenerateVideoOptions {
  * async - submit a job, poll polling_url until it completes, then download
  * the result and upload it to GCS (or return the provider's URL directly
  * when GCS isn't configured, matching generateImage's no-GCS fallback).
+ *
+ * Every failure path throws VideoGenerationError (code + retryable), never
+ * a plain Error, so the route handler can return a structured, actionable
+ * response instead of one flat string.
  *
  * OpenRouter-only: video models have no equivalent on the local/self-hosted
  * OmniRoute gateway. Same guard as image-gen.ts, for the same reason - fail
@@ -122,14 +158,30 @@ export interface GenerateVideoOptions {
  * defaults regardless of which one the caller picked.
  */
 export async function generateVideo(prompt: string, options: GenerateVideoOptions = {}): Promise<{ videoUrl: string }> {
-  if (!isUsingOpenRouter()) {
-    throw new Error('Video generation requires the OpenRouter gateway (OPENROUTER_API_KEY), which is not currently active.');
+  if (!prompt.trim()) {
+    throw new VideoGenerationError('MISSING_PROMPT', 'A prompt is required to generate a video.', false);
   }
+  if (!isUsingOpenRouter()) {
+    throw new VideoGenerationError(
+      'PROVIDER_NOT_CONFIGURED',
+      'Video generation requires the OpenRouter gateway (OPENROUTER_API_KEY), which is not currently active.',
+      false
+    );
+  }
+
+  const referenceImageUrls = options.referenceImageUrls?.filter(Boolean) ?? [];
+  const referenceVideoUrls = options.referenceVideoUrls?.filter(Boolean) ?? [];
+
+  // Capability gate: runs before any OpenRouter call, so a request the
+  // provider can't fulfill (video-to-video, character replacement from a
+  // source video, ...) never gets submitted - and never costs anything -
+  // instead of failing (and billing) after the fact, every time.
+  const mode = detectVideoMode({ referenceImageUrls, referenceVideoUrls });
+  assertVideoRequestSupported(mode, getOpenRouterVideoCapabilities());
 
   const baseUrl = getOmniRouteBaseUrl();
   const apiKey = getOmniRouteApiKey();
   const authHeaders = { Authorization: `Bearer ${apiKey}` };
-  const referenceImageUrls = options.referenceImageUrls?.filter(Boolean) ?? [];
 
   const job = await fetchJson<VideoJob>(
     `${baseUrl}/videos`,
@@ -153,10 +205,12 @@ export async function generateVideo(prompt: string, options: GenerateVideoOption
 
   while (current.status !== 'completed') {
     if (current.status === 'failed') {
-      throw new Error('Video generation job failed.');
+      throw new VideoGenerationError('PROVIDER_ERROR', 'Video generation job failed.', false);
     }
     if (Date.now() >= deadline) {
-      throw new Error(`Video generation timed out after ${POLL_TIMEOUT_MS}ms.`);
+      // Not retryable: see POLL_TIMEOUT_MS comment above - the job may
+      // still be running and billing on OpenRouter's side past this point.
+      throw new VideoGenerationError('TIMEOUT', `Video generation timed out after ${POLL_TIMEOUT_MS}ms.`, false);
     }
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
     current = await fetchJson<VideoJob>(pollUrl, { headers: authHeaders }, 'Video generation status check failed');
@@ -164,7 +218,7 @@ export async function generateVideo(prompt: string, options: GenerateVideoOption
 
   const providerUrl = current.unsigned_urls?.[0];
   if (!providerUrl) {
-    throw new Error('Video generation response did not include a video URL.');
+    throw new VideoGenerationError('RESULT_MISSING', 'Video generation response did not include a video URL.', false);
   }
 
   const uploader = new GcsUploader();
@@ -177,11 +231,24 @@ export async function generateVideo(prompt: string, options: GenerateVideoOption
     return { videoUrl: providerUrl };
   }
 
-  const videoResponse = await fetch(providerUrl);
+  let videoResponse: Response;
+  try {
+    videoResponse = await fetch(providerUrl);
+  } catch (error) {
+    throw new VideoGenerationError('RESULT_MISSING', `Failed to download generated video: ${(error as Error).message}`, true);
+  }
   if (!videoResponse.ok) {
-    throw new Error(`Failed to download generated video: ${videoResponse.status}`);
+    throw new VideoGenerationError('RESULT_MISSING', `Failed to download generated video: ${videoResponse.status}`, videoResponse.status >= 500);
   }
   const buffer = Buffer.from(await videoResponse.arrayBuffer());
-  const videoUrl = await uploader.uploadFile(buffer, `generated-${Date.now()}.mp4`, 'video/mp4');
-  return { videoUrl };
+
+  try {
+    const videoUrl = await uploader.uploadFile(buffer, `generated-${Date.now()}.mp4`, 'video/mp4');
+    return { videoUrl };
+  } catch (error) {
+    // The video WAS generated (and billed) successfully at this point - a
+    // GCS upload failure is our own storage layer, not the provider, so it
+    // gets its own code rather than being folded into PROVIDER_ERROR.
+    throw new VideoGenerationError('STORAGE_ERROR', `Video generated but failed to store: ${(error as Error).message}`, true);
+  }
 }
