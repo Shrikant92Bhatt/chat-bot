@@ -335,7 +335,14 @@ router.post('/generate-video', authenticateToken, async (req: AuthenticatedReque
     res.json({ success: true, videoUrl, prompt });
   } catch (error) {
     console.error('[Chat API Route] Video generation error:', error);
-    res.status(500).json({ error: 'Failed to generate video.' });
+    // Unlike the generic messages elsewhere in this file, forward the real
+    // reason here: error.message already carries OpenRouter's own status
+    // code + response body (see fetchJson in llm/video-gen.ts), which is
+    // usually the only way to tell "wrong model for this input", "no video
+    // credits", or "job timed out" apart without reading server logs - and
+    // it never contains the API key (that's only ever sent as a header, not
+    // echoed back by OpenRouter or included in these Error messages).
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to generate video.' });
   }
 });
 
