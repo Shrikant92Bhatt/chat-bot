@@ -179,9 +179,9 @@ const generateImageTool = tool(
 );
 
 const generateVideoTool = tool(
-  async ({ prompt }: { prompt: string }) => {
+  async ({ prompt, model }: { prompt: string; model?: string }) => {
     try {
-      const { videoUrl } = await generateVideo(prompt);
+      const { videoUrl } = await generateVideo(prompt, { model });
       return JSON.stringify({ success: true, videoUrl, prompt });
     } catch (error) {
       console.error('[mcp/tools] generate_video failed:', error);
@@ -196,6 +196,13 @@ const generateVideoTool = tool(
       'user actually asks for a video, not for an image or animation that a still image would satisfy.',
     schema: z.object({
       prompt: z.string().describe('The text prompt describing the desired video.'),
+      model: z
+        .string()
+        .optional()
+        .describe(
+          'OpenRouter video model slug to use, e.g. "google/veo-3.1". Only set this when the user names a ' +
+            'specific model/provider; otherwise omit it to use the default.'
+        ),
     }),
   }
 );

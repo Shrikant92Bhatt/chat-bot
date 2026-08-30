@@ -9,6 +9,7 @@ import { AttachmentKind, ChatAttachment, ChatStreamRequest, ChatThread } from '@
 import { streamGraphResponse } from '../orchestration/graph';
 import { StorageMetricsService } from '../storage/metrics';
 import { generateImage } from '../llm/image-gen';
+import { generateVideo, listVideoModels } from '../llm/video-gen';
 import { isOmniRouteConfigured } from '../llm/client';
 import { extractDocumentText } from '../rag/document-extractor';
 import { RagRetriever } from '../rag/retriever';
@@ -212,6 +213,23 @@ router.get('/models', authenticateOrAllowTrial, async (req: AuthenticatedRequest
 });
 
 /**
+ * GET /api/chat/video-models
+ * Returns the live OpenRouter video-model catalog (see llm/video-gen.ts) for
+ * the Video composer mode's model picker. No per-user usage/limit
+ * enrichment, unlike /models above - video generation has no daily-cap
+ * config today.
+ */
+router.get('/video-models', authenticateOrAllowTrial, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const models = await listVideoModels();
+    res.json({ models });
+  } catch (error) {
+    console.error('[Chat API Route] Failed to load video model catalog:', error);
+    res.status(500).json({ error: 'Failed to load video models.' });
+  }
+});
+
+/**
  * GET /api/chat/users
  * Returns list of authenticated application users.
  */
@@ -291,6 +309,33 @@ router.post('/generate-image', authenticateToken, async (req: AuthenticatedReque
   } catch (error) {
     console.error('[Chat API Route] Image generation error:', error);
     res.status(500).json({ error: 'Failed to generate image.' });
+  }
+});
+
+/**
+ * POST /api/chat/generate-video
+ * Body: { prompt, model?, referenceImageUrls? }. referenceImageUrls are
+ * hosted URLs already returned by POST /attachments (the Video composer
+ * mode stages reference images through that same endpoint before calling
+ * this one) - guides style/subject via OpenRouter's input_references, see
+ * llm/video-gen.ts.
+ */
+router.post('/generate-video', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { prompt, model, referenceImageUrls } = req.body;
+    if (!prompt) {
+      res.status(400).json({ error: 'Prompt is required.' });
+      return;
+    }
+
+    const { videoUrl } = await generateVideo(prompt, {
+      model: typeof model === 'string' ? model : undefined,
+      referenceImageUrls: Array.isArray(referenceImageUrls) ? referenceImageUrls.filter((u) => typeof u === 'string') : undefined,
+    });
+    res.json({ success: true, videoUrl, prompt });
+  } catch (error) {
+    console.error('[Chat API Route] Video generation error:', error);
+    res.status(500).json({ error: 'Failed to generate video.' });
   }
 });
 

@@ -75,6 +75,21 @@ export const SELECTABLE_MODELS: ReadonlyArray<SelectableModel> = [
 
 export const DEFAULT_MODEL_ID = 'gemini-flash-latest';
 
+/**
+ * Fallback list for the video-model picker UI when the live OpenRouter
+ * catalog (GET /api/chat/video-models -> apps/chat-api/src/llm/video-gen.ts
+ * listVideoModels()) hasn't loaded yet or fails - only google/veo-3.1 is
+ * hardcoded here since it's the one slug actually verified against
+ * OpenRouter's video generation API; everything else comes from the live
+ * fetch, which reflects whatever OpenRouter currently supports rather than
+ * guessed slugs that could 404.
+ */
+export const SELECTABLE_VIDEO_MODELS: ReadonlyArray<SelectableModel> = [
+  { id: 'google/veo-3.1', name: 'Veo 3.1', provider: 'Google', description: 'Text/image-to-video with audio', enabled: true },
+];
+
+export const DEFAULT_VIDEO_MODEL_ID = 'google/veo-3.1';
+
 export type MessageRole = 'user' | 'assistant' | 'system';
 
 /** 'image' attachments are sent to the model as vision input (see

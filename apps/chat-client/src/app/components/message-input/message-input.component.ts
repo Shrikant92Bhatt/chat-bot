@@ -52,6 +52,8 @@ export class MessageInputComponent implements OnDestroy {
   public availableModels = computed(() => this.chatService.availableModels());
   /** availableModels() grouped by provider, in first-seen order, for the dropdown. */
   public groupedModels = computed(() => this.groupModelsByProvider(this.availableModels()));
+  /** availableVideoModels() grouped by provider, same shape as groupedModels() above. */
+  public videoModelGroups = computed(() => this.groupModelsByProvider(this.chatService.availableVideoModels()));
 
   /** Name of the project this conversation is scoped to, or null. */
   public activeProjectName = computed(() =>
@@ -146,7 +148,10 @@ export class MessageInputComponent implements OnDestroy {
   }
 
   get placeholder(): string {
-    return this.chatService.chatMode() === 'image' ? 'Describe an image you want to create...' : 'Message NexusAI...';
+    const mode = this.chatService.chatMode();
+    if (mode === 'image') return 'Describe an image you want to create...';
+    if (mode === 'video') return 'Describe a video you want to create... (optionally attach reference images)';
+    return 'Message NexusAI...';
   }
 
   send() {
@@ -164,15 +169,35 @@ export class MessageInputComponent implements OnDestroy {
       return;
     }
 
-    if (this.chatService.chatMode() === 'image') {
+    const mode = this.chatService.chatMode();
+    if (mode === 'image') {
       this.chatService.generateImage(text);
+    } else if (mode === 'video') {
+      this.chatService.generateVideo(text);
     } else {
       this.chatService.sendMessage(text);
     }
   }
 
-  setMode(mode: 'chat' | 'image'): void {
+  setMode(mode: 'chat' | 'image' | 'video'): void {
     this.chatService.setChatMode(mode);
+  }
+
+  public isVideoModelDropdownOpen = false;
+
+  getVideoModelDisplayName(): string {
+    const active = this.chatService.selectedVideoModel();
+    const model = this.chatService.availableVideoModels().find((m) => m.id === active);
+    return model ? model.name : active;
+  }
+
+  selectVideoModel(id: string): void {
+    this.chatService.setVideoModel(id);
+    this.isVideoModelDropdownOpen = false;
+  }
+
+  toggleVideoModelDropdown(): void {
+    this.isVideoModelDropdownOpen = !this.isVideoModelDropdownOpen;
   }
 
   // Knowledge-base document types stay on the existing single-file RAG
@@ -377,6 +402,9 @@ export class MessageInputComponent implements OnDestroy {
     const target = event.target as HTMLElement;
     if (!target.closest('.model-selector')) {
       this.isModelDropdownOpen = false;
+    }
+    if (!target.closest('.video-model-selector')) {
+      this.isVideoModelDropdownOpen = false;
     }
   }
 }
