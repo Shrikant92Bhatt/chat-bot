@@ -22,3 +22,9 @@ if (!admin.apps.length) {
 // "nexus-ai") must be selected explicitly via getFirestore(app, databaseId).
 const databaseId = process.env.FIRESTORE_DATABASE_ID || '(default)';
 export const firestore = getFirestore(admin.app(), databaseId);
+// By default the SDK throws on any `undefined` field value instead of
+// dropping it, which is easy to trip over when a document is built by
+// spreading a partial DTO (e.g. a ChatMessage with an optional field set
+// to `undefined` rather than omitted) - drop the field instead of
+// rejecting the whole document.
+firestore.settings({ ignoreUndefinedProperties: true });

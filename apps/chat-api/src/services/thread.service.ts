@@ -48,16 +48,41 @@ export class ThreadService {
    * failed history load) must never be able to erase threads it doesn't
    * know about. There is no delete-thread feature, so nothing needs the
    * old destructive-replace behavior.
+   *
+   * Writes each thread independently (Promise.allSettled) instead of one
+   * atomic batch.commit(). The client normally sends exactly one thread per
+   * call now, but this used to be an all-or-nothing batch of the caller's
+   * *entire* thread list on every turn - one oversized or otherwise
+   * rejected document anywhere in that batch failed the whole write,
+   * silently blocking even a brand new one-line reply from persisting.
+   * Failing independently means a bad document can only ever block itself.
    */
   public static async saveThreadsForUser(uid: string, threads: ChatThread[]): Promise<void> {
     const collection = this.threadsCollection(uid);
-    const batch = firestore.batch();
     threads = threads.filter((t) => this.hasUserMessage(t));
-    // merge:true so the server-written summarization fields (summary,
-    // summarizedThroughIndex) survive a client save — the client round-trips
-    // them, but an older client that doesn't know about them must not wipe them.
-    threads.forEach((thread) => batch.set(collection.doc(thread.id), thread, { merge: true }));
-    await batch.commit();
+
+    const results = await Promise.allSettled(
+      // merge:true so the server-written summarization fields (summary,
+      // summarizedThroughIndex) survive a client save — the client round-trips
+      // them, but an older client that doesn't know about them must not wipe them.
+      threads.map((thread) => collection.doc(thread.id).set(thread, { merge: true }))
+    );
+
+    const failures = results
+      .map((result, i) => (result.status === 'rejected' ? { threadId: threads[i].id, reason: result.reason } : null))
+      .filter((f): f is { threadId: string; reason: unknown } => f !== null);
+
+    if (failures.length > 0) {
+      failures.forEach((f) => console.error(`[ThreadService] Failed to save thread ${f.threadId}:`, f.reason));
+      // Only throw (surfacing threadSaveError to the user) when every write
+      // failed - a partial failure among a batch of several threads still
+      // means most of the caller's data landed, which is strictly better
+      // than losing all of it over one bad document.
+      if (failures.length === results.length) {
+        const first = failures[0].reason;
+        throw first instanceof Error ? first : new Error(String(first));
+      }
+    }
   }
 
   /**
