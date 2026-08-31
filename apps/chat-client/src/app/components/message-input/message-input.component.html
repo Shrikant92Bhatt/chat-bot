@@ -16,37 +16,49 @@
           </svg>
           <span class="truncate">{{ projectName }}</span>
         </span>
-        <!-- Mode Selector -->
+        <!-- Mode Selector: icon-only on mobile (no room for three labelled
+             tabs next to the model picker on a narrow screen), icon+label
+             from sm: up. Chat gets an icon here too so it doesn't render as
+             an empty slot once labels are hidden. -->
         <div class="flex items-center gap-1 bg-[var(--color-surface-secondary)] rounded-md p-1">
           <button
             type="button"
             (click)="setMode('chat')"
             [class]="chatService.chatMode() === 'chat' ? 'bg-[var(--color-surface-active)] text-[var(--color-text-primary)]' : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]'"
-            class="px-3 py-1 rounded text-xs font-medium transition-all"
+            class="flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded text-xs font-medium transition-all"
+            title="Chat"
+            aria-label="Chat"
           >
-            Chat
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            <span class="hidden sm:inline">Chat</span>
           </button>
           <button
             type="button"
             (click)="setMode('image')"
             [class]="chatService.chatMode() === 'image' ? 'bg-[var(--color-surface-active)] text-[var(--color-text-primary)]' : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]'"
-            class="flex items-center gap-1 px-3 py-1 rounded text-xs font-medium transition-all"
+            class="flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded text-xs font-medium transition-all"
+            title="Image"
+            aria-label="Image"
           >
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M14 8h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
-            Image
+            <span class="hidden sm:inline">Image</span>
           </button>
           <button
             type="button"
             (click)="setMode('video')"
             [class]="chatService.chatMode() === 'video' ? 'bg-[var(--color-surface-active)] text-[var(--color-text-primary)]' : 'text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)]'"
-            class="flex items-center gap-1 px-3 py-1 rounded text-xs font-medium transition-all"
+            class="flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded text-xs font-medium transition-all"
+            title="Video"
+            aria-label="Video"
           >
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
             </svg>
-            Video
+            <span class="hidden sm:inline">Video</span>
           </button>
         </div>
         </div>
@@ -60,7 +72,7 @@
             aria-haspopup="listbox"
             [attr.aria-expanded]="isModelDropdownOpen"
             aria-label="Select model"
-            class="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-md bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] hover:bg-[var(--color-surface-hover)] transition-all text-xs font-medium text-[var(--color-text-secondary)] w-full sm:w-auto justify-between sm:justify-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-primary)]"
+            class="flex items-center gap-1 sm:gap-1.5 px-1.5 py-1 rounded-md hover:bg-[var(--color-surface-hover)] transition-all text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] w-full sm:w-auto justify-between sm:justify-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-primary)]"
           >
             <span>{{ getModelDisplayName() }}</span>
             <svg class="w-3.5 h-3.5 text-[var(--color-text-tertiary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -111,7 +123,7 @@
             aria-haspopup="listbox"
             [attr.aria-expanded]="isVideoModelDropdownOpen"
             aria-label="Select video model"
-            class="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 rounded-md bg-[var(--color-surface-secondary)] border border-[var(--color-border-light)] hover:bg-[var(--color-surface-hover)] transition-all text-xs font-medium text-[var(--color-text-secondary)] w-full sm:w-auto justify-between sm:justify-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-primary)]"
+            class="flex items-center gap-1 sm:gap-1.5 px-1.5 py-1 rounded-md hover:bg-[var(--color-surface-hover)] transition-all text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] w-full sm:w-auto justify-between sm:justify-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-primary)]"
           >
             <span>{{ getVideoModelDisplayName() }}</span>
             <svg class="w-3.5 h-3.5 text-[var(--color-text-tertiary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">

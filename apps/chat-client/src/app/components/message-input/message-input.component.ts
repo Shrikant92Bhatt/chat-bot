@@ -159,9 +159,9 @@ export class MessageInputComponent implements OnDestroy {
 
   get placeholder(): string {
     const mode = this.chatService.chatMode();
-    if (mode === 'image') return 'Describe an image you want to create...';
-    if (mode === 'video') return 'Describe a video you want to create... (optionally attach reference images)';
-    return 'Message NexusAI...';
+    if (mode === 'image') return 'Describe an image...';
+    if (mode === 'video') return 'Describe a video...';
+    return 'Message NexusAI';
   }
 
   send() {
