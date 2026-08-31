@@ -2,7 +2,7 @@
   <div class="max-w-4xl mx-auto">
     <form (ngSubmit)="send()" class="relative flex flex-col bg-[var(--color-surface-primary)] border border-[var(--color-border-light)] rounded-lg sm:rounded-lg p-2 sm:p-3 shadow-md focus-within:border-[var(--color-accent-primary)] focus-within:shadow-lg transition-all">
       <!-- Top row: Chat/Image mode tabs + model selector, inside the same input box -->
-      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between px-1 pb-1.5 gap-2">
+      <div class="flex flex-row items-center justify-between px-1 pb-1.5 gap-2">
         <div class="flex items-center gap-1 sm:gap-2">
         <!-- Scoped-to-project badge: this conversation gets the project's instructions + files -->
         <!-- Project Badge -->
@@ -64,7 +64,7 @@
         </div>
 
         <!-- Model Selector -->
-        <div *ngIf="chatService.chatMode() === 'chat'" class="model-selector relative w-full sm:w-auto">
+        <div *ngIf="chatService.chatMode() === 'chat'" class="model-selector relative w-auto">
           <button
             type="button"
             (click)="toggleModelDropdown()"
@@ -72,7 +72,7 @@
             aria-haspopup="listbox"
             [attr.aria-expanded]="isModelDropdownOpen"
             aria-label="Select model"
-            class="flex items-center gap-1 sm:gap-1.5 px-1.5 py-1 rounded-md hover:bg-[var(--color-surface-hover)] transition-all text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] w-full sm:w-auto justify-between sm:justify-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-primary)]"
+            class="flex items-center gap-1 sm:gap-1.5 px-1.5 py-1 rounded-md hover:bg-[var(--color-surface-hover)] transition-all text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] w-auto justify-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-primary)]"
           >
             <span>{{ getModelDisplayName() }}</span>
             <svg class="w-3.5 h-3.5 text-[var(--color-text-tertiary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -83,7 +83,7 @@
             *ngIf="isModelDropdownOpen"
             role="listbox"
             (keydown)="onModelDropdownKeydown($event)"
-            class="absolute bottom-full mb-1.5 left-0 sm:right-0 sm:left-auto w-full sm:w-64 max-h-64 sm:max-h-80 overflow-y-auto bg-[var(--color-surface-primary)] border border-[var(--color-border-light)] rounded-lg shadow-lg z-50 py-1"
+            class="absolute bottom-full mb-1.5 right-0 left-auto w-56 sm:w-64 max-h-64 sm:max-h-80 overflow-y-auto bg-[var(--color-surface-primary)] border border-[var(--color-border-light)] rounded-lg shadow-lg z-50 py-1"
           >
             <div *ngFor="let group of groupedModels()">
               <div class="px-4 pt-2 pb-1 text-xs2 font-semibold uppercase tracking-wide text-slate-500">{{ group.provider }}</div>
@@ -116,14 +116,14 @@
         </div>
 
         <!-- Video Model Selector -->
-        <div *ngIf="chatService.chatMode() === 'video'" class="video-model-selector relative w-full sm:w-auto">
+        <div *ngIf="chatService.chatMode() === 'video'" class="video-model-selector relative w-auto">
           <button
             type="button"
             (click)="toggleVideoModelDropdown()"
             aria-haspopup="listbox"
             [attr.aria-expanded]="isVideoModelDropdownOpen"
             aria-label="Select video model"
-            class="flex items-center gap-1 sm:gap-1.5 px-1.5 py-1 rounded-md hover:bg-[var(--color-surface-hover)] transition-all text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] w-full sm:w-auto justify-between sm:justify-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-primary)]"
+            class="flex items-center gap-1 sm:gap-1.5 px-1.5 py-1 rounded-md hover:bg-[var(--color-surface-hover)] transition-all text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] w-auto justify-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-primary)]"
           >
             <span>{{ getVideoModelDisplayName() }}</span>
             <svg class="w-3.5 h-3.5 text-[var(--color-text-tertiary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -133,7 +133,7 @@
           <div
             *ngIf="isVideoModelDropdownOpen"
             role="listbox"
-            class="absolute bottom-full mb-1.5 left-0 sm:right-0 sm:left-auto w-full sm:w-64 max-h-64 sm:max-h-80 overflow-y-auto bg-[var(--color-surface-primary)] border border-[var(--color-border-light)] rounded-lg shadow-lg z-50 py-1"
+            class="absolute bottom-full mb-1.5 right-0 left-auto w-56 sm:w-64 max-h-64 sm:max-h-80 overflow-y-auto bg-[var(--color-surface-primary)] border border-[var(--color-border-light)] rounded-lg shadow-lg z-50 py-1"
           >
             <div *ngFor="let group of videoModelGroups()">
               <div class="px-4 pt-2 pb-1 text-xs2 font-semibold uppercase tracking-wide text-slate-500">{{ group.provider }}</div>
