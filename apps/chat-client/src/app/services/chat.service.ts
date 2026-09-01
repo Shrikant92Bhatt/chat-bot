@@ -476,11 +476,23 @@ export class ChatService {
    */
   public threadSaveError = signal<boolean>(false);
 
-  private async persistUserThreadHistory(isRetry = false): Promise<void> {
+  /**
+   * Saves ONE thread (the one that just changed), not the caller's entire
+   * history. It used to PUT every thread with a user message on every
+   * single turn, growing unboundedly over a session and writing them all in
+   * one atomic Firestore batch (see ThreadService.saveThreadsForUser) - so
+   * one old, oversized or otherwise bad thread anywhere in that batch could
+   * fail the WHOLE write, silently blocking even a brand new one-line reply
+   * from persisting. ThreadService already upserts whatever it's given
+   * (never a destructive replace), so sending just the changed thread is
+   * both safe and strictly smaller/less fragile than sending everything.
+   */
+  private async persistUserThreadHistory(threadId: string | null, isRetry = false): Promise<void> {
     const user = this.authService.userSignal();
-    if (!user || !user.uid) return;
+    if (!user || !user.uid || !threadId) return;
 
-    const threadsWorthSaving = this.threads().filter((t) => t.messages.some((m) => m.role === 'user'));
+    const thread = this.threads().find((t) => t.id === threadId);
+    if (!thread || !thread.messages.some((m) => m.role === 'user')) return;
 
     try {
       const response = await fetch(`${this.apiUrl}/threads`, {
@@ -489,7 +501,7 @@ export class ChatService {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${this.authService.getIdToken()}`,
         },
-        body: JSON.stringify({ threads: threadsWorthSaving }),
+        body: JSON.stringify({ threads: [thread] }),
       });
 
       if (response.status === 401) {
@@ -504,7 +516,7 @@ export class ChatService {
         // never loops further, so a genuinely broken save (bad payload,
         // permission error) surfaces via threadSaveError instead of retrying forever.
         if (!isRetry) {
-          return this.persistUserThreadHistory(true);
+          return this.persistUserThreadHistory(threadId, true);
         }
         this.threadSaveError.set(true);
         return;
@@ -514,7 +526,7 @@ export class ChatService {
     } catch (e) {
       console.error('[ChatService] Failed to save thread history:', e);
       if (!isRetry) {
-        return this.persistUserThreadHistory(true);
+        return this.persistUserThreadHistory(threadId, true);
       }
       this.threadSaveError.set(true);
     }
@@ -576,7 +588,7 @@ export class ChatService {
 
     this.threads.update((curr) => [newThread, ...curr]);
     this.activeThreadId.set(newThread.id);
-    this.persistUserThreadHistory();
+    this.persistUserThreadHistory(newThread.id);
   }
 
   /** Project the active conversation is scoped to, if any. */
@@ -857,7 +869,7 @@ export class ChatService {
       this.isStreaming.set(false);
       this.activityStatus.set(null);
       if (isAuthenticated) {
-        this.persistUserThreadHistory();
+        this.persistUserThreadHistory(currentThreadId);
       }
     }
   }
@@ -947,7 +959,7 @@ export class ChatService {
       this.isStreaming.set(false);
       this.activityStatus.set(null);
       if (isAuthenticated) {
-        this.persistUserThreadHistory();
+        this.persistUserThreadHistory(currentThreadId);
       }
     }
   }
@@ -1007,7 +1019,7 @@ export class ChatService {
     if (!isAuthenticated) {
       this.unauthUserMessageCount.update((count) => count + 1);
     } else {
-      this.persistUserThreadHistory();
+      this.persistUserThreadHistory(currentThreadId);
     }
 
     const activeThread = this.activeThread();
@@ -1325,7 +1337,7 @@ export class ChatService {
       this.clearStaleLoadingUi(threadId, assistantMessageId);
       this.abortController = null;
       if (isAuthenticated) {
-        this.persistUserThreadHistory();
+        this.persistUserThreadHistory(threadId);
       }
     }
   }
