@@ -308,6 +308,21 @@
 
               <!-- Copy action -->
               <div *ngIf="msg.content && !(chatService.isStreaming() && !msg.content)" class="flex items-center justify-start gap-3 pt-2">
+                <!-- Which model Auto routed to. Present only on Auto turns:
+                     for a directly-chosen model the picker already says it,
+                     but under Auto this is the only way to know what
+                     answered. -->
+                <span
+                  *ngIf="msg.servedModel as served"
+                  [title]="'Auto routed this reply to ' + served"
+                  class="flex items-center gap-1 text-xs15 text-slate-500 shrink-0"
+                >
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  <span class="truncate max-w-[12rem]">{{ servedModelLabel(served) }}</span>
+                </span>
+
                 <button
                   (click)="copyMessage(msg.id, msg.content)"
                   class="flex items-center space-x-1 text-xs15 text-slate-400 hover:text-slate-300 transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accentCyan focus-visible:ring-offset-2 focus-visible:ring-offset-obsidian rounded-md"

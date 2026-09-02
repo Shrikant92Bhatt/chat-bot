@@ -5,10 +5,16 @@ import {
   SelectableModel,
   SELECTABLE_MODELS,
   DEFAULT_MODEL_ID,
+  AUTO_MODEL_ID,
 } from '@chat-monorepo/shared';
 
 // Initial fallback mapping for known models to real OpenRouter slugs
 const LEGACY_SLUG_MAP: Record<string, string> = {
+  // OpenRouter's own auto-router: it takes the request like any other model
+  // slug and picks the model per prompt. Requests carrying tools go through
+  // OpenRouter's tool-quality routing step, which matters here because this
+  // app binds MCP tools on most turns.
+  auto: 'openrouter/auto',
   'gemini-flash-latest': 'google/gemini-2.5-flash',
   'gemini-pro-latest': 'google/gemini-2.5-pro',
   'gpt-4o': 'openai/gpt-4o',
@@ -46,6 +52,19 @@ const DEFAULT_DAILY_LIMIT_MAP: Record<string, number> = {
   'gemini-pro-latest': 8,
   grok: 5,
 };
+
+/**
+ * Whether a model can actually be served by the currently-active gateway.
+ *
+ * Only Auto is gateway-specific today: it resolves to `openrouter/auto`,
+ * a slug the self-hosted OmniRoute gateway does not know, so offering it
+ * there would hand the user a picker entry that fails every turn. Exported
+ * so the picker endpoint and its test agree on one definition rather than
+ * each carrying their own copy of the condition.
+ */
+export function isModelServableByGateway(modelId: string, usingOpenRouter: boolean): boolean {
+  return modelId !== AUTO_MODEL_ID || usingOpenRouter;
+}
 
 export class ModelConfigService {
   private static readonly SETTINGS_COLLECTION = 'settings';
@@ -90,7 +109,16 @@ export class ModelConfigService {
       defaultModel: DEFAULT_MODEL_ID,
       models: (SELECTABLE_MODELS as SelectableModel[]).map((m) => ({
         ...m,
-        pricing: DEFAULT_COST_MAP[m.id] || DEFAULT_FALLBACK_COST,
+        // Auto is deliberately left unpriced: what it costs depends on
+        // whichever model it routes to for a given prompt, so any fixed
+        // number here would be a guess shown to users as fact (the
+        // picker's Low/Med/High badge reads exactly this field, and
+        // omitting it correctly shows no badge). Turns served by Auto are
+        // costed against the model that actually answered - see
+        // getCostRate and orchestration/graph.ts.
+        ...(m.id === AUTO_MODEL_ID
+          ? {}
+          : { pricing: DEFAULT_COST_MAP[m.id] || DEFAULT_FALLBACK_COST }),
         dailyLimitPerUser: DEFAULT_DAILY_LIMIT_MAP[m.id] ?? null,
       })),
       updatedAt: Date.now(),

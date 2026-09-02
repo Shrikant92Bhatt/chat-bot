@@ -5,13 +5,13 @@ import { AIRouterService } from '../services/ai-router.service';
 import { UserRegistryService } from '../services/user-registry.service';
 import { ThreadService } from '../services/thread.service';
 import { isOpenAiConfigured } from '../services/openai.service';
-import { ChatAttachment, ChatStreamRequest, ChatThread, normalizeAttachmentKind } from '@chat-monorepo/shared';
+import { ChatAttachment, ChatStreamRequest, ChatThread, normalizeAttachmentKind, AUTO_MODEL_ID } from '@chat-monorepo/shared';
 import { streamGraphResponse } from '../orchestration/graph';
 import { StorageMetricsService } from '../storage/metrics';
 import { generateImage } from '../llm/image-gen';
 import { generateVideo, listVideoModels } from '../llm/video-gen';
 import { VideoGenerationError, VideoErrorCode } from '../llm/video-modes';
-import { isOmniRouteConfigured } from '../llm/client';
+import { isOmniRouteConfigured, isUsingOpenRouter } from '../llm/client';
 import { extractDocumentText } from '../rag/document-extractor';
 import { RagRetriever } from '../rag/retriever';
 import { GcsUploader } from '../storage/uploader';
@@ -19,7 +19,7 @@ import { UsageService } from '../services/usage.service';
 import { MessageFeedbackService } from '../services/message-feedback.service';
 import { MemoryService } from '../memory/memory.service';
 import { listPromptTemplates } from '../prompt/prompt-manager';
-import { ModelConfigService } from '../services/model-config.service';
+import { ModelConfigService, isModelServableByGateway } from '../services/model-config.service';
 import { SystemLimitsService } from '../services/system-limits.service';
 import { AnonUsageService } from '../services/anon-usage.service';
 
@@ -169,7 +169,10 @@ router.post('/stream', authenticateOrAllowTrial, async (req: AuthenticatedReques
 router.get('/models', authenticateOrAllowTrial, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const config = await ModelConfigService.getModelConfig();
-    const enabledModels = config.models.filter((m) => m.enabled !== false);
+    const usingOpenRouter = isUsingOpenRouter();
+    const enabledModels = config.models.filter(
+      (m) => m.enabled !== false && isModelServableByGateway(m.id, usingOpenRouter)
+    );
     // ModelConfigService caches and reuses these exact model objects across
     // requests/users - copy before attaching per-user `usage` below so one
     // user's standing can never leak onto another's response via the shared

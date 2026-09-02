@@ -1396,6 +1396,10 @@ export class ChatService {
         this.setMessageUi(threadId, assistantMessageId, data.ui ?? [], data.sources, data.actions);
       }
 
+      if (data.done && typeof data.servedModel === 'string' && data.servedModel) {
+        this.setMessageServedModel(threadId, assistantMessageId, data.servedModel);
+      }
+
       if (data.done && data.modelSwitch) {
         const { fromModel, toModel, resetAt } = data.modelSwitch;
         const notice = `> ℹ️ **${this.modelDisplayName(fromModel)}**'s daily limit was reached, so this reply used **${this.modelDisplayName(toModel)}** instead (${this.formatResetLabel(resetAt)}).\n\n`;
@@ -1753,6 +1757,16 @@ export class ChatService {
           return { ...t, messages: updatedMessages };
         }
         return t;
+      })
+    );
+  }
+
+  /** Records which model Auto routed this turn to, for attribution. */
+  private setMessageServedModel(threadId: string, messageId: string, servedModel: string) {
+    this.threads.update((threadsList) =>
+      threadsList.map((t) => {
+        if (t.id !== threadId) return t;
+        return { ...t, messages: t.messages.map((m) => (m.id === messageId ? { ...m, servedModel } : m)) };
       })
     );
   }
