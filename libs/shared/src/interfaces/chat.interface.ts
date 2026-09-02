@@ -64,6 +64,17 @@ export interface OpenRouterModelCatalogItem {
 
 /** Fallback list for the model picker UI when dynamic database config is not yet loaded. */
 export const SELECTABLE_MODELS: ReadonlyArray<SelectableModel> = [
+  // Routes to OpenRouter's own auto-router (`openrouter/auto`), which picks
+  // a model per prompt. Only usable when OpenRouter is the active gateway -
+  // GET /api/chat/models drops it otherwise, since the self-hosted
+  // OmniRoute fallback has no equivalent slug (see AUTO_MODEL_ID below).
+  {
+    id: 'auto',
+    name: 'Auto',
+    provider: 'Automatic',
+    description: 'Let OpenRouter pick the best model for each message',
+    enabled: true,
+  },
   { id: 'gemini-flash-latest', name: 'Gemini Flash', provider: 'Google', description: 'Fast, lightweight & responsive', enabled: true },
   { id: 'gemini-pro-latest', name: 'Gemini Pro', provider: 'Google', description: 'Advanced reasoning & large context', enabled: true },
   { id: 'gpt-4o', name: 'GPT-4o', provider: 'OpenAI', description: 'Flagship multimodal model', enabled: true },
@@ -74,6 +85,14 @@ export const SELECTABLE_MODELS: ReadonlyArray<SelectableModel> = [
 ];
 
 export const DEFAULT_MODEL_ID = 'gemini-flash-latest';
+
+/**
+ * The app-side id for OpenRouter's auto-router. Shared so the backend's
+ * gateway guard, the slug map and the client's "which model actually
+ * answered" affordance all key off one constant instead of a loose 'auto'
+ * string in several places.
+ */
+export const AUTO_MODEL_ID = 'auto';
 
 /**
  * Fallback list for the video-model picker UI when the live OpenRouter
@@ -117,6 +136,13 @@ export interface ChatMessage {
   content: string;
   timestamp: number;
   model?: AIModelType;
+  /**
+   * The model that actually answered, when it isn't the one that was
+   * picked. Set only for turns served by Auto (see AUTO_MODEL_ID), where
+   * OpenRouter chose the model per prompt - without this the reply is
+   * unattributable, which is the main cost of handing the choice away.
+   */
+  servedModel?: string;
   error?: boolean;
   /** Suggested follow-up questions, attached to the final assistant message of a turn. */
   suggestions?: string[];

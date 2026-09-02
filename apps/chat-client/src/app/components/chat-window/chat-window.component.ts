@@ -244,6 +244,19 @@ export class ChatWindowComponent implements AfterViewChecked {
    * to the bare hostname, which is far more scannable than a full URL when
    * an answer cites half a dozen pages.
    */
+  /**
+   * Trims an OpenRouter slug down to the model name for display
+   * ("anthropic/claude-sonnet-4.5" -> "claude-sonnet-4.5"). The provider
+   * prefix is noise in a one-line attribution chip; the full slug stays in
+   * the title attribute for anyone who wants it.
+   */
+  public servedModelLabel(slug: string): string {
+    const name = slug.includes('/') ? slug.slice(slug.lastIndexOf('/') + 1) : slug;
+    // OpenRouter appends variant suffixes like ":floor" / ":nitro" that say
+    // how it was routed, not what answered.
+    return name.split(':')[0] || slug;
+  }
+
   public sourceLabel(source: { title?: string; url?: string }): string {
     const title = source.title?.trim();
     if (title) return title;

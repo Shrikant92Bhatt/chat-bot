@@ -10,10 +10,13 @@ import {
   RESEARCH_EVENT_NAME,
   UIComponent,
   UIStreamEvent,
+  AUTO_MODEL_ID,
+  DEFAULT_MODEL_ID,
 } from '@chat-monorepo/shared';
 import { AgentState, AgentStateAnnotation } from './state';
 import { agentNode, toolsNode, shouldContinue } from './nodes';
 import { researchNode } from './research';
+import { isUsingOpenRouter } from '../llm/client';
 import { buildContext, recordTurnMemories } from '../context/context-builder';
 import { generateFollowUpSuggestions } from '../services/suggestions.service';
 import { UsageService } from '../services/usage.service';
@@ -184,7 +187,15 @@ export async function streamGraphResponse(
     messages: request.messages || [],
   });
 
-  const requestedModel: AIModelType = request.model || 'gemini-flash-latest';
+  // Auto resolves to `openrouter/auto`, which only exists on OpenRouter. A
+  // client that still has it selected when the gateway is the self-hosted
+  // OmniRoute (config changed under it, or a stale cached model list) would
+  // otherwise send a slug that gateway cannot serve, failing every turn -
+  // fall back to the default rather than 500ing on the user's message.
+  const requestedModel: AIModelType =
+    request.model === AUTO_MODEL_ID && !isUsingOpenRouter()
+      ? DEFAULT_MODEL_ID
+      : request.model || DEFAULT_MODEL_ID;
   const { modelToUse: model, switchNotice } = await checkModelQuota(requestedModel, ownerId);
 
   const initialState: Partial<AgentState> = {
@@ -235,6 +246,8 @@ export async function streamGraphResponse(
   let inputTokens: number | null = null;
   let outputTokens: number | null = null;
   let sawUsageMetadata = false;
+  /** The slug the gateway says answered - see on_chat_model_end below. */
+  let servedModel: string | null = null;
 
   /**
    * Forwards a research-trace event to the client.
@@ -285,6 +298,20 @@ export async function streamGraphResponse(
           sawUsageMetadata = true;
           inputTokens = (inputTokens ?? 0) + (usage.input_tokens ?? 0);
           outputTokens = (outputTokens ?? 0) + (usage.output_tokens ?? 0);
+        }
+
+        // Which model actually answered. Only interesting under Auto, where
+        // the app asked OpenRouter to choose and otherwise has no idea what
+        // it picked - leaving the user with a reply they cannot attribute
+        // and a usage row costed against a slug that never ran.
+        //
+        // Read defensively: the field the gateway populates is not
+        // guaranteed, and an unattributed reply is a far better outcome
+        // than a failed turn.
+        const metadata = event.data?.output?.response_metadata as Record<string, unknown> | undefined;
+        const reported = metadata?.model_name ?? metadata?.model;
+        if (typeof reported === 'string' && reported.trim()) {
+          servedModel = reported.trim();
         }
       } else if (event.event === 'on_chain_end' && event.name === 'research') {
         const output = event.data?.output as Partial<AgentState> | undefined;
@@ -413,6 +440,10 @@ export async function streamGraphResponse(
       ...(uiPayload?.actions?.length ? { actions: uiPayload.actions } : {}),
       ...(mergedSources.length > 0 ? { sources: mergedSources } : {}),
       ...(switchNotice ? { modelSwitch: switchNotice } : {}),
+      // Only sent under Auto: for a directly-chosen model the client
+      // already knows what answered, and echoing it back would just be the
+      // same name twice in the UI.
+      ...(model === AUTO_MODEL_ID && servedModel ? { servedModel } : {}),
     })}\n\n`
   );
   res.end();
@@ -425,7 +456,11 @@ export async function streamGraphResponse(
       userId: ownerId ?? null,
       tenantId: null,
       conversationId: request.threadId ?? null,
-      model,
+      // Under Auto, 'auto' is not a billable model - it has no rate of its
+      // own, and costing against it would attribute every routed turn to a
+      // placeholder. Log the model that actually ran so the usage and cost
+      // reports stay meaningful.
+      model: model === AUTO_MODEL_ID && servedModel ? servedModel : model,
       inputTokens: sawUsageMetadata ? inputTokens : null,
       outputTokens: sawUsageMetadata ? outputTokens : null,
       latencyMs: Date.now() - requestStartedAt,
