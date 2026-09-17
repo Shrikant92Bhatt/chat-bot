@@ -1,0 +1,19 @@
+steps:
+  # Build the sandbox-service image only - the one piece that stays on a
+  # container host post-Vercel-migration (isolated-vm is a native addon
+  # that can't run in a Vercel serverless function). See
+  # infra/sandbox-service/README or the repo's VERCEL_MIGRATION.md.
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'asia-south1-docker.pkg.dev/$PROJECT_ID/chat-repo/sandbox-service:latest'
+      - '-f'
+      - 'infra/sandbox-service/Dockerfile'
+      - 'infra/sandbox-service'
+
+images:
+  - 'asia-south1-docker.pkg.dev/$PROJECT_ID/chat-repo/sandbox-service:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

@@ -11,6 +11,7 @@
     "build:api": "nx build chat-api",
     "build:client": "nx build chat-client",
     "build:all": "nx run-many -t build",
+    "build:vercel": "node scripts/generate-vercel-env.js && nx build chat-client",
     "lint": "nx run-many -t lint",
     "test": "nx run-many -t test"
   },
@@ -39,7 +40,6 @@
     "google-auth-library": "^9.11.0",
     "helmet": "^8.3.0",
     "highlight.js": "^11.12.0",
-    "isolated-vm": "^7.0.1",
     "jsdom": "^27.1.0",
     "jsonwebtoken": "^9.0.3",
     "marked": "^18.0.9",
