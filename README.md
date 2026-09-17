@@ -6,9 +6,9 @@
 [![Open PRs](https://img.shields.io/github/issues-pr/Shrikant92Bhatt/chat-bot)](https://github.com/Shrikant92Bhatt/chat-bot/pulls)
 [![Last Commit](https://img.shields.io/github/last-commit/Shrikant92Bhatt/chat-bot)](https://github.com/Shrikant92Bhatt/chat-bot/commits/main)
 
-An Nx monorepo AI chat application: an Angular standalone-component frontend with a glassmorphism UI, and an Express backend built around a real LangGraph agent loop — multi-LLM streaming (Gemini/GPT/Claude/Llama via OpenRouter), Projects with custom instructions and scoped knowledge bases, RAG with hybrid reranking, long-term user memory, conversation summarization, real tool calling (calculator, sandboxed code execution, image generation, web search), Firestore-backed rate limiting and usage/cost tracking, and a role-gated admin analytics console. Deployed on Google Cloud Run with Google Sign-In and a fully automated GitHub Actions CI/CD pipeline.
+An Nx monorepo AI chat application: an Angular standalone-component frontend with a glassmorphism UI, and an Express backend built around a real LangGraph agent loop — multi-LLM streaming (Gemini/GPT/Claude/Llama via OpenRouter), Projects with custom instructions and scoped knowledge bases, RAG with hybrid reranking, long-term user memory, conversation summarization, real tool calling (calculator, sandboxed code execution, image generation, web search), Firestore-backed rate limiting and usage/cost tracking, and a role-gated admin analytics console. chat-client and chat-api deploy together as one [Vercel](https://vercel.com) project (see [`VERCEL_MIGRATION.md`](VERCEL_MIGRATION.md)); only the isolated-vm code sandbox still runs on a small container host. Google Sign-In and Firestore/GCS remain unchanged.
 
-**Live:** https://nexusai-gcp.duckdns.org
+**Live:** see `VERCEL_MIGRATION.md` for the current deployment URL (previously https://nexusai-gcp.duckdns.org on Cloud Run).
 
 For a deep dive into how the pieces fit together (diagrams of the context-assembly pipeline, RAG flow, code sandbox, rate limiting, and the admin console's authorization model), see **[architecture.md](architecture.md)**.
 
@@ -49,10 +49,11 @@ For a deep dive into how the pieces fit together (diagrams of the context-assemb
 │   ├── shared/                          # Shared TS types/DTOs (@chat-monorepo/shared)
 │   └── frontend/admin-analytics/        # Admin console UI — a library CONSUMED into
 │                                        # chat-client's own build, not a separate app/deployment
-├── Dockerfile.api / Dockerfile.client    # Multi-stage production images
-├── docker-entrypoint.sh                 # Writes the API URL into chat-client at container start
-├── cloudbuild.yaml                      # Builds & pushes both images to Artifact Registry
-├── .github/workflows/ci-cd.yml          # Build, verify, and auto-deploy pipeline
+├── api/index.ts                         # Vercel serverless function entry (wraps apps/chat-api's Express app)
+├── vercel.json                          # One Vercel project serves the static client + the api/ function
+├── scripts/generate-vercel-env.js       # Writes assets/env.js at build time (same-origin API calls)
+├── infra/sandbox-service/               # Standalone isolated-vm code-exec microservice (not on Vercel — see below)
+├── .github/workflows/ci-cd.yml          # Build/lint check; deploys only infra/sandbox-service (Vercel deploys itself)
 └── nx.json / tsconfig.base.json / package.json
 ```
 
@@ -74,14 +75,14 @@ For a deep dive into how the pieces fit together (diagrams of the context-assemb
 All four are gathered in parallel by a single context-assembly step (`apps/chat-api/src/context/context-builder.ts`) that fails soft — one broken piece degrades the answer, never breaks the turn. See [architecture.md](architecture.md) for the sequence diagram.
 
 **Tools**
-- Real calculator, sandboxed JS/TS code execution (`isolated-vm`, a real V8 isolate — not `eval`), image generation, and web search (via OpenRouter's `web` plugin).
+- Real calculator, sandboxed JS/TS code execution (`isolated-vm`, a real V8 isolate — not `eval`, run by the separate [`infra/sandbox-service`](infra/sandbox-service) microservice since isolated-vm can't run inside a Vercel function), image generation, and web search (via OpenRouter's `web` plugin).
 
 **Platform**
 - Google Sign-In, with one free anonymous message per IP before sign-in is required.
 - **Role-based admin console** — a usage/cost analytics dashboard (per-user and per-model breakdowns, session-level drill-down, storage metrics, user role management) visible only to admin accounts. See [Admin Console](#admin-console) below.
-- Firestore-backed rate limiting and usage/cost tracking — correct under Cloud Run's multi-instance concurrency, unlike a simple in-memory counter.
-- Runtime-configurable deployment — the frontend image doesn't hardcode a backend URL; it's injected at container startup.
-- Automated CI/CD — every push runs a full build + Docker verification; merges to `main` auto-deploy to Cloud Run.
+- Firestore-backed rate limiting and usage/cost tracking — correct under multi-instance concurrency, unlike a simple in-memory counter.
+- Same-origin deployment — chat-client and chat-api ship as one Vercel project, so API calls need no CORS or hardcoded backend URL (see `apps/chat-client/src/app/core/runtime-config.ts`).
+- Automated CI/CD — every push runs a full build/lint check; Vercel's own GitHub integration deploys chat-client + chat-api on merges to `main` (previews on PRs), while GitHub Actions only handles the separate sandbox microservice.
 
 ---
 
@@ -136,18 +137,13 @@ The role shown to the frontend is display-only (it decides whether to show the n
 
 ## Deployment
 
-Both services deploy to **Google Cloud Run**. See [`cloudbuild.yaml`](cloudbuild.yaml), [`Dockerfile.api`](Dockerfile.api), and [`Dockerfile.client`](Dockerfile.client) for the build definitions.
+chat-client (static Angular build) and chat-api (as a serverless function at [`api/index.ts`](api/index.ts)) deploy together as **one Vercel project** — see [`vercel.json`](vercel.json) and [`VERCEL_MIGRATION.md`](VERCEL_MIGRATION.md) for the one-time setup (env vars, secrets, connecting the repo). Once connected, Vercel's own GitHub integration builds and deploys on every push — no GitHub Actions step required for either app.
 
-```bash
-gcloud builds submit --config=cloudbuild.yaml
-gcloud run deploy chat-api    --image=<region>-docker.pkg.dev/<project>/chat-repo/chat-api:latest    --region=<region>
-gcloud run deploy chat-client --image=<region>-docker.pkg.dev/<project>/chat-repo/chat-client:latest --region=<region> \
-  --set-env-vars="API_URL=<chat-api-url>"
-```
+The `code_interpreter` tool's `isolated-vm` sandbox is the one piece that can't run in a Vercel function (it's a native addon), so it stays on a small container host as [`infra/sandbox-service`](infra/sandbox-service), deployed via [`cloudbuild-sandbox.yaml`](cloudbuild-sandbox.yaml). chat-api reaches it over HTTP via `CODE_SANDBOX_SERVICE_URL` (see [`apps/chat-api/src/tools/code-sandbox.ts`](apps/chat-api/src/tools/code-sandbox.ts)).
 
-The production deployment additionally sits behind an external HTTPS load balancer (static IP + managed SSL cert) so both services share one domain, with `/api/*` routed to the backend — this avoids CORS entirely and lets the custom domain use a plain DNS A record.
+Firestore and Cloud Storage (GCS) are unaffected by this migration and continue to run as-is (they're pay-per-use, not the source of Cloud Run's cost).
 
-There's no Terraform/IaC layer — infrastructure is created and managed directly via the `gcloud` commands in `cloudbuild.yaml` and `.github/workflows/ci-cd.yml`. (One was scaffolded at one point; it was never applied and was removed rather than kept in sync for no functional benefit.)
+There's no Terraform/IaC layer — the sandbox service's infrastructure is created and managed directly via the `gcloud` commands in `cloudbuild-sandbox.yaml` and `.github/workflows/ci-cd.yml`; the Vercel project's settings live in the Vercel dashboard.
 
 ---
 
@@ -155,11 +151,12 @@ There's no Terraform/IaC layer — infrastructure is created and managed directl
 
 [`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml) runs on every push and pull request:
 
-1. **Monorepo Build Check** — installs dependencies, builds all projects.
-2. **GCP Docker Build Verification** — builds both production Docker images.
-3. **Deploy to Cloud Run** — *main branch only* — builds, pushes, and deploys both services automatically.
+1. **Monorepo Build Check** — installs dependencies, builds all projects (including a typecheck/build of chat-client and chat-api, even though their actual deploy is owned by Vercel).
+2. **Deploy Sandbox Service** — *main branch only, and only when `infra/sandbox-service` actually changed* — builds and deploys that one microservice to Cloud Run.
 
-`main` is branch-protected: **Monorepo Build Check** and **GCP Docker Build Verification** must pass before a PR can merge, and force-pushes/deletions are blocked.
+chat-client and chat-api deploys happen entirely inside Vercel (production deploy on push to `main`, a preview deploy per PR) once the Vercel project is connected to this repo - see `VERCEL_MIGRATION.md`.
+
+`main` is branch-protected: **Monorepo Build Check** must pass before a PR can merge, and force-pushes/deletions are blocked.
 
 ### Contributing
 1. Branch off `main`.

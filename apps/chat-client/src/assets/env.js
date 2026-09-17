@@ -1,8 +1,9 @@
-// Runtime configuration for the Angular app.
-// In local dev this stays empty and services fall back to http://localhost:3000.
-// In the container image, docker-entrypoint.sh regenerates this file at startup
-// from the API_URL environment variable set on the Cloud Run service, so the
-// same built image can point at any backend without a rebuild.
+// Runtime/dev-time configuration for the Angular app.
+// This checked-in copy is what `ng serve`/local dev uses - the chat-api dev
+// server on port 3000. The Vercel production build overwrites this file at
+// build time (see package.json's "build:vercel" script) with apiUrl: '',
+// meaning "call the API on this same origin" (chat-client and chat-api are
+// deployed together as one Vercel project - see vercel.json).
 window.__env = {
-  apiUrl: '',
+  apiUrl: 'http://localhost:3000',
 };

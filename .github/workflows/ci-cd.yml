@@ -75,17 +75,16 @@ jobs:
             git push origin "HEAD:${{ github.head_ref }}"
           fi
 
-  # Job 1: Nx Monorepo Compilation & Quality Check. Also determines which
-  # apps are affected by this change (via Nx's own project graph, which
-  # already knows e.g. libs/shared affects both apps and
-  # libs/frontend/admin-analytics affects only chat-client) so the docker
-  # build/deploy jobs below only run the pipeline for what actually changed.
+  # Job 1: Nx Monorepo Compilation & Quality Check. chat-client and chat-api
+  # deploys themselves are handled by Vercel's own GitHub integration (see
+  # vercel.json at the repo root) once the Vercel project is connected to
+  # this repo in the Vercel dashboard - no build/deploy steps needed here
+  # for either app.
   build-and-lint:
     name: Monorepo Build Check
     runs-on: ubuntu-latest
     outputs:
-      api_affected: ${{ steps.affected.outputs.api }}
-      client_affected: ${{ steps.affected.outputs.client }}
+      sandbox_affected: ${{ steps.affected.outputs.sandbox }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -104,107 +103,38 @@ jobs:
       - name: Derive Nx base/head SHAs for affected detection
         uses: nrwl/nx-set-shas@v4
 
-      - name: Determine affected projects
+      - name: Determine if the sandbox microservice changed
         id: affected
         run: |
-          AFFECTED=$(npx nx show projects --affected --json)
-          echo "Nx-affected projects: $AFFECTED"
-
-          API_NX=false
-          CLIENT_NX=false
-          echo "$AFFECTED" | grep -q '"chat-api"' && API_NX=true
-          echo "$AFFECTED" | grep -q '"chat-client"' && CLIENT_NX=true
-
-          # Root-level infra/config files (Dockerfiles, cloudbuild configs,
-          # this workflow, workspace-wide config) sit outside every Nx
-          # project's own root, so Nx's affected graph never sees them -
-          # without this, a Dockerfile.api-only fix (exactly like the
-          # production hotfix that motivated this pipeline change) would
-          # silently skip its own deploy.
-          CHANGED_ROOT_FILES=$(git diff --name-only "$NX_BASE" "$NX_HEAD" -- \
-            Dockerfile.api Dockerfile.client cloudbuild-api.yaml cloudbuild-client.yaml \
-            cloudbuild.yaml nginx.conf docker-entrypoint.sh package.json package-lock.json \
-            nx.json tsconfig.base.json .github/workflows/ci-cd.yml)
-          echo "Changed root infra files: $CHANGED_ROOT_FILES"
-
-          API_ROOT=false
-          CLIENT_ROOT=false
-          echo "$CHANGED_ROOT_FILES" | grep -qx 'Dockerfile.api' && API_ROOT=true
-          echo "$CHANGED_ROOT_FILES" | grep -qx 'cloudbuild-api.yaml' && API_ROOT=true
-          echo "$CHANGED_ROOT_FILES" | grep -qx 'Dockerfile.client' && CLIENT_ROOT=true
-          echo "$CHANGED_ROOT_FILES" | grep -qx 'cloudbuild-client.yaml' && CLIENT_ROOT=true
-          echo "$CHANGED_ROOT_FILES" | grep -qx -e 'nginx.conf' -e 'docker-entrypoint.sh' && CLIENT_ROOT=true
-          # Truly shared root files (lockfile, workspace config, the shared
-          # cloudbuild.yaml, this workflow itself) affect both apps.
-          if echo "$CHANGED_ROOT_FILES" | grep -qx -e 'package.json' -e 'package-lock.json' -e 'nx.json' -e 'tsconfig.base.json' -e 'cloudbuild.yaml' -e '.github/workflows/ci-cd.yml'; then
-            API_ROOT=true
-            CLIENT_ROOT=true
+          # infra/sandbox-service is a standalone Node service (not an Nx
+          # project), deployed separately to a small always-on-but-cheap
+          # container host because it depends on isolated-vm, a native addon
+          # that can't run inside a Vercel serverless function.
+          CHANGED=$(git diff --name-only "$NX_BASE" "$NX_HEAD" -- infra/sandbox-service cloudbuild-sandbox.yaml .github/workflows/ci-cd.yml)
+          echo "Changed sandbox-service files: $CHANGED"
+          if [ -n "$CHANGED" ]; then
+            echo "sandbox=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "sandbox=false" >> "$GITHUB_OUTPUT"
           fi
-
-          if [ "$API_NX" = "true" ] || [ "$API_ROOT" = "true" ]; then API=true; else API=false; fi
-          if [ "$CLIENT_NX" = "true" ] || [ "$CLIENT_ROOT" = "true" ]; then CLIENT=true; else CLIENT=false; fi
-
-          echo "api=$API" >> "$GITHUB_OUTPUT"
-          echo "client=$CLIENT" >> "$GITHUB_OUTPUT"
 
       - name: Build Affected Projects
         run: npx nx affected -t build
 
-  # Job 2: Production Container Build & GCP Integration Check. Each
-  # container is only built (and, on main, only pushed/deployed) when Nx
-  # says the corresponding app was actually affected - a chat-client-only
-  # PR no longer rebuilds/pushes/redeploys an unchanged chat-api image, and
-  # vice versa.
-  gcp-build-check:
-    name: GCP Docker Build Verification
+  # Job 2: Build & deploy the sandbox microservice only (the one piece that
+  # stays on a container host post-migration). Gated on push to main and on
+  # infra/sandbox-service actually having changed, so most pushes (which
+  # only touch chat-client/chat-api, now deployed via Vercel) skip this
+  # entirely.
+  deploy-sandbox-service:
+    name: Deploy Sandbox Service
     runs-on: ubuntu-latest
     needs: build-and-lint
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' && needs.build-and-lint.outputs.sandbox_affected == 'true' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build Backend Express API Container
-        if: ${{ needs.build-and-lint.outputs.api_affected == 'true' }}
-        run: |
-          docker build -t chat-api:test -f Dockerfile.api .
-
-      - name: Build Frontend Angular NGINX Container
-        if: ${{ needs.build-and-lint.outputs.client_affected == 'true' }}
-        run: |
-          docker build -t chat-client:test -f Dockerfile.client .
-
-      # GCP steps only run on pushes to main (not on PRs, which have no GCP creds needed).
-      # Note: the "secrets" context is not available in step-level `if:` conditions,
-      # so gating is done on github.ref/event_name here instead.
-      - name: Authenticate to GCP
-        if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' && (needs.build-and-lint.outputs.api_affected == 'true' || needs.build-and-lint.outputs.client_affected == 'true') }}
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Set up GCP Cloud SDK
-        if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' && (needs.build-and-lint.outputs.api_affected == 'true' || needs.build-and-lint.outputs.client_affected == 'true') }}
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Submit chat-api to GCP Cloud Build
-        if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' && needs.build-and-lint.outputs.api_affected == 'true' }}
-        run: |
-          gcloud builds submit --config=cloudbuild-api.yaml
-
-      - name: Submit chat-client to GCP Cloud Build
-        if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' && needs.build-and-lint.outputs.client_affected == 'true' }}
-        run: |
-          gcloud builds submit --config=cloudbuild-client.yaml
-
-  # Job 3: Deploy to Cloud Run (main branch only, after images are built
-  # above) - again, only the service whose image actually changed gets a
-  # new revision deployed.
-  deploy-to-cloud-run:
-    name: Deploy to Cloud Run
-    runs-on: ubuntu-latest
-    needs: [build-and-lint, gcp-build-check]
-    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' && (needs.build-and-lint.outputs.api_affected == 'true' || needs.build-and-lint.outputs.client_affected == 'true') }}
-    steps:
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
         with:
@@ -213,34 +143,27 @@ jobs:
       - name: Set up GCP Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Deploy chat-api
-        if: ${{ needs.build-and-lint.outputs.api_affected == 'true' }}
+      - name: Submit sandbox-service to GCP Cloud Build
         run: |
-          gcloud run deploy chat-api \
-            --image=asia-south1-docker.pkg.dev/chat-bot-505613/chat-repo/chat-api:latest \
-            --region=asia-south1 \
-            --platform=managed \
-            --allow-unauthenticated \
-            --memory=2Gi \
-            --cpu=2 \
-            --concurrency=20 \
-            --max-instances=30 \
-            --timeout=300 \
-            --cpu-boost \
-            --set-env-vars="GOOGLE_CLIENT_ID=953232172604-iukeghd5021k56htjq7ep332bvtvppot.apps.googleusercontent.com,ALLOWED_ORIGIN=https://nexusai-gcp.duckdns.org,FIRESTORE_DATABASE_ID=nexus-ai,GCS_BUCKET_NAME=nexusai-generated-images,OPENROUTER_BASE_URL=https://openrouter.ai/api/v1" \
-            --set-secrets="GEMINI_API_KEY=GEMINI_API_KEY:latest,GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest,APP_SESSION_SECRET=APP_SESSION_SECRET:latest,OPENROUTER_API_KEY=OPENROUTER_API_KEY:latest"
+          gcloud builds submit --config=cloudbuild-sandbox.yaml
 
-      - name: Deploy chat-client
-        if: ${{ needs.build-and-lint.outputs.client_affected == 'true' }}
+      - name: Deploy sandbox-service to Cloud Run
         run: |
-          gcloud run deploy chat-client \
-            --image=asia-south1-docker.pkg.dev/chat-bot-505613/chat-repo/chat-client:latest \
+          # --allow-unauthenticated: chat-api runs on Vercel, which has no
+          # GCP identity to mint an IAM auth token, so this endpoint is
+          # protected instead by the shared CODE_SANDBOX_SERVICE_SECRET
+          # header (see infra/sandbox-service/src/server.ts) - set the same
+          # value here and as CODE_SANDBOX_SERVICE_SECRET on the Vercel
+          # project.
+          gcloud run deploy sandbox-service \
+            --image=asia-south1-docker.pkg.dev/$(gcloud config get-value project)/chat-repo/sandbox-service:latest \
             --region=asia-south1 \
             --platform=managed \
             --allow-unauthenticated \
             --memory=512Mi \
             --cpu=1 \
-            --concurrency=80 \
-            --max-instances=10 \
-            --timeout=60 \
-            --set-env-vars="API_URL=https://nexusai-gcp.duckdns.org"
+            --concurrency=10 \
+            --min-instances=0 \
+            --max-instances=5 \
+            --timeout=30 \
+            --set-secrets="CODE_SANDBOX_SERVICE_SECRET=CODE_SANDBOX_SERVICE_SECRET:latest"

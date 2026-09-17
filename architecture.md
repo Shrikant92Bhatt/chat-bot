@@ -5,6 +5,14 @@ A reference for how the pieces of this system fit together. For setup/deployment
 env var, every known gap), see [`.agents/PROJECT_CONTEXT.md`](.agents/PROJECT_CONTEXT.md) — this
 document is the narrative version of the same system.
 
+> **Deployment target note:** the diagrams and prose below describe chat-client and chat-api as two
+> Cloud Run services, which was accurate when they were written. As of the Vercel migration (see
+> [`VERCEL_MIGRATION.md`](VERCEL_MIGRATION.md)), both deploy together as one Vercel project instead —
+> same code, same request flow, different host. Only the `isolated-vm` code sandbox still runs on a
+> Cloud Run-style container host, now as the standalone [`infra/sandbox-service`](infra/sandbox-service).
+> Everything else in this document (RAG, memory, rate limiting, the admin console's auth model, etc.)
+> is unchanged.
+
 ## 1. System overview
 
 ```mermaid
