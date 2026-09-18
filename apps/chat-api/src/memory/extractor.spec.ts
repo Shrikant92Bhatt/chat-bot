@@ -21,8 +21,10 @@ describe('MemoryExtractor Unit Tests', () => {
   });
 
   it('should fallback gracefully during extraction when LLM API key is missing', async () => {
-    const candidates = await extractMemoryCandidates('My name is Bob and I live in Seattle');
+    const { candidates, usage } = await extractMemoryCandidates('My name is Bob and I live in Seattle');
     expect(candidates.length).toBeGreaterThan(0);
     expect(candidates[0].content).toContain('My name is Bob');
+    // No gateway configured in the test env - heuristic fallback, no real call made.
+    expect(usage).toBeNull();
   });
 });

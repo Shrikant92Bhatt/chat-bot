@@ -11,6 +11,19 @@ import { ModelConfigService } from './model-config.service';
  * data for the turn is known.
  */
 
+/**
+ * What the logged LLM call was FOR, not just which model ran it. Without
+ * this, once the sidecar calls below started being logged too, their cost
+ * would silently blend into whatever model the user picked as "the cost of
+ * chatting" - e.g. a user on Claude via OpenRouter would show cost against
+ * claude-sonnet that actually included three unrelated Gemini Flash calls
+ * (summarization/memory/suggestions) that have nothing to do with Claude.
+ * 'chat' also covers the research planner's usage - it's summed into the
+ * same request/turn total in graph.ts because it's still spent answering
+ * THIS message, unlike the other three which serve future turns or UI sugar.
+ */
+export type UsagePurpose = 'chat' | 'summarization' | 'memory_extraction' | 'follow_up_suggestions';
+
 export interface UsageRecord {
   requestId: string;
   userId: string | null;
@@ -20,6 +33,7 @@ export interface UsageRecord {
   tenantId: string | null;
   conversationId: string | null;
   model: string;
+  purpose: UsagePurpose;
   inputTokens: number | null;
   outputTokens: number | null;
   /** Wall-clock duration of the LLM call, in milliseconds. */
@@ -85,6 +99,7 @@ export class UsageService {
       tenantId: record.tenantId ?? null,
       conversationId: record.conversationId,
       model: record.model,
+      purpose: record.purpose,
       inputTokens: record.inputTokens,
       outputTokens: record.outputTokens,
       latencyMs: record.latencyMs,

@@ -1,7 +1,8 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { MessageRole } from '@chat-monorepo/shared';
 import { estimateTokens, renderPrompt } from '../prompt/prompt-manager';
 import { ThreadService } from '../services/thread.service';
+import { UsageService } from '../services/usage.service';
+import { callUtilityModel } from '../llm/utility-model';
 
 export interface SimpleMessage {
   role: MessageRole;
@@ -25,11 +26,6 @@ const MESSAGE_COUNT_THRESHOLD = 20;
 const TOKEN_BUDGET = 6000;
 /** Turns always kept verbatim at the tail of the window. */
 const KEEP_RECENT_MESSAGES = 8;
-
-function cleanEnvVar(val?: string): string {
-  if (!val) return '';
-  return val.replace(/^﻿/, '').replace(/\r/g, '').trim();
-}
 
 function estimateHistoryTokens(messages: SimpleMessage[]): number {
   return messages.reduce((sum, m) => sum + estimateTokens(m.content || ''), 0);
@@ -64,29 +60,33 @@ function writeCache(key: string, value: { summary: string; throughIndex: number 
   summaryCache.set(key, value);
 }
 
+interface SummarizeResult {
+  summary: string;
+  model: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+}
+
 /**
- * Runs the summarization prompt. Uses a single non-streamed Gemini Flash
- * call (the same cheap-side-call pattern as suggestions.service.ts) so the
- * cost of compressing history never depends on which model is answering.
- * Returns null on any failure — the caller then falls back to sending the
- * full history, which is correct if expensive.
+ * Runs the summarization prompt via the shared cheap-side-call path (see
+ * llm/utility-model.ts) so the cost of compressing history never depends on
+ * which model is answering, is routed through the same gateway as the main
+ * chat, and its token usage is available to log. Returns null on any
+ * failure — the caller then falls back to sending the full history, which
+ * is correct if expensive.
  */
-async function summarize(previousSummary: string | null, olderMessages: SimpleMessage[]): Promise<string | null> {
-  const apiKey = cleanEnvVar(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY);
-  if (!apiKey || olderMessages.length === 0) return null;
+async function summarize(previousSummary: string | null, olderMessages: SimpleMessage[]): Promise<SummarizeResult | null> {
+  if (olderMessages.length === 0) return null;
 
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
-
     const prompt = renderPrompt('summarization:v1', {
       previousSummary: previousSummary || '(none)',
       transcript: toTranscript(olderMessages),
     });
 
-    const result = await model.generateContent(prompt);
-    const text = result.response.text().trim();
-    return text || null;
+    const { text, model, inputTokens, outputTokens } = await callUtilityModel(prompt);
+    const summary = text.trim();
+    return summary ? { summary, model, inputTokens, outputTokens } : null;
   } catch (error) {
     console.error('[Summarizer] Failed to summarize conversation:', error);
     return null;
@@ -146,20 +146,34 @@ export class SummarizationService {
     const previousSummary = stored?.summary ?? null;
     const newlyDropped = older.slice(stored?.throughIndex ?? 0);
 
-    const summary = await summarize(previousSummary, newlyDropped);
+    const callStartedAt = Date.now();
+    const result = await summarize(previousSummary, newlyDropped);
 
-    if (!summary) {
-      // Summarization unavailable (no Gemini key, or the call failed).
-      // Send the full history rather than silently amputating context.
+    if (!result) {
+      // Summarization unavailable (no gateway/key configured, or the call
+      // failed). Send the full history rather than silently amputating context.
       return { summary: previousSummary, recentMessages: previousSummary ? recent : history, summarized: false };
     }
 
-    writeCache(key, { summary, throughIndex: splitIndex });
+    // Real cost, logged the same way graph.ts logs the main chat model's
+    // usage - fire-and-forget so a Firestore hiccup never blocks the turn.
+    UsageService.logUsage({
+      userId: uid ?? null,
+      tenantId: null,
+      conversationId: threadId ?? null,
+      model: result.model,
+      purpose: 'summarization',
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      latencyMs: Date.now() - callStartedAt,
+    }).catch((error) => console.error('[Summarizer] Failed to log usage record:', error));
+
+    writeCache(key, { summary: result.summary, throughIndex: splitIndex });
 
     if (uid && threadId) {
-      await ThreadService.saveThreadSummary(uid, threadId, summary, splitIndex);
+      await ThreadService.saveThreadSummary(uid, threadId, result.summary, splitIndex);
     }
 
-    return { summary, recentMessages: recent, summarized: true };
+    return { summary: result.summary, recentMessages: recent, summarized: true };
   }
 }

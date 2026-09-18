@@ -1,6 +1,7 @@
 import { MemoryEntry } from '@chat-monorepo/shared';
 import { firestore } from '../db/firestore';
 import { extractMemoryCandidates } from './extractor';
+import { UsageService } from '../services/usage.service';
 
 const MEMORIES_COLLECTION = 'memories';
 
@@ -111,7 +112,25 @@ export class MemoryService {
     if (!userId || !message?.trim()) return [];
 
     try {
-      const candidates = await extractMemoryCandidates(message);
+      const callStartedAt = Date.now();
+      const { candidates, usage } = await extractMemoryCandidates(message);
+
+      // Real cost whenever the LLM stage actually ran, regardless of
+      // whether it found anything worth keeping - logged the same way
+      // graph.ts logs the main chat model's usage.
+      if (usage) {
+        UsageService.logUsage({
+          userId,
+          tenantId: null,
+          conversationId: sourceThreadId ?? null,
+          model: usage.model,
+          purpose: 'memory_extraction',
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          latencyMs: Date.now() - callStartedAt,
+        }).catch((error) => console.error('[MemoryService] Failed to log usage record:', error));
+      }
+
       if (candidates.length === 0) return [];
 
       const existing = await this.listMemories(userId);

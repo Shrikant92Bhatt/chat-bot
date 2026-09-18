@@ -429,7 +429,20 @@ export async function streamGraphResponse(
     res.write(`data: ${JSON.stringify({ chunk: fallback, done: false, model })}\n\n`);
   }
 
-  const suggestions = await generateFollowUpSuggestions(request.messages || [], visibleText);
+  const suggestionsStartedAt = Date.now();
+  const { suggestions, usage: suggestionsUsage } = await generateFollowUpSuggestions(request.messages || [], visibleText);
+  if (suggestionsUsage) {
+    UsageService.logUsage({
+      userId: ownerId ?? null,
+      tenantId: null,
+      conversationId: request.threadId ?? null,
+      model: suggestionsUsage.model,
+      purpose: 'follow_up_suggestions',
+      inputTokens: suggestionsUsage.inputTokens,
+      outputTokens: suggestionsUsage.outputTokens,
+      latencyMs: Date.now() - suggestionsStartedAt,
+    }).catch((error) => console.error('[StreamGraph] Failed to log follow-up-suggestions usage:', error));
+  }
   res.write(
     `data: ${JSON.stringify({
       chunk: '',
@@ -461,6 +474,7 @@ export async function streamGraphResponse(
       // placeholder. Log the model that actually ran so the usage and cost
       // reports stay meaningful.
       model: model === AUTO_MODEL_ID && servedModel ? servedModel : model,
+      purpose: 'chat',
       inputTokens: sawUsageMetadata ? inputTokens : null,
       outputTokens: sawUsageMetadata ? outputTokens : null,
       latencyMs: Date.now() - requestStartedAt,

@@ -115,7 +115,11 @@ export async function runEmulatedPipeline(query: string, res: Response): Promise
     outputPayload: null,
     timestamp: new Date().toISOString(),
   });
-  const extracted = await extractMemoryCandidates(query);
+  // Not logged to UsageService even though this can make a real LLM call -
+  // this is an admin diagnostic replay with no real user/thread behind it,
+  // and logging it as usage would misattribute cost to nobody and pollute
+  // the per-user/per-model aggregates it's meant to help debug.
+  const { candidates: extracted } = await extractMemoryCandidates(query);
   emit({
     stageId: 'memory',
     stageName: 'Long-term Memory Inspection',

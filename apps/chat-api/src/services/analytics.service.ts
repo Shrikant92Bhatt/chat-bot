@@ -1,5 +1,5 @@
 import { firestore } from '../db/firestore';
-import { UsageRecord } from './usage.service';
+import { UsagePurpose, UsageRecord } from './usage.service';
 
 /**
  * Read-side aggregation over the `usage` collection for the admin analytics
@@ -61,6 +61,25 @@ export interface UserUsageAggregate {
 
 export interface ModelUsageAggregate {
   model: string;
+  totalRequests: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalTokens: number;
+  totalEstimatedCostUsd: number;
+}
+
+/**
+ * "What was this spend actually FOR" - 'chat' (answering the user, including
+ * the research planner) vs the three sidecar calls that support a turn
+ * without being it (summarization/memory_extraction/follow_up_suggestions).
+ * Before these were logged with a `purpose` at all, that housekeeping cost
+ * was invisible - not missing from the totals above, but silently blended
+ * into whatever model the user picked, which made a Claude/GPT user's usage
+ * row look like 100% Claude/GPT spend when part of it was always Gemini
+ * Flash running in the background. This is what makes that split visible.
+ */
+export interface PurposeUsageAggregate {
+  purpose: UsagePurpose;
   totalRequests: number;
   totalInputTokens: number;
   totalOutputTokens: number;
@@ -223,6 +242,47 @@ export class AnalyticsService {
         totalEstimatedCostUsd: Math.round(entry.totalEstimatedCostUsd * 1e8) / 1e8,
       }))
       .sort((a, b) => b.totalRequests - a.totalRequests);
+  }
+
+  /**
+   * Per-purpose rollup - see PurposeUsageAggregate's doc comment for why
+   * this exists. Records logged before the `purpose` field was introduced
+   * have none stored; they were all main chat-turn calls (summarization/
+   * memory/suggestions logging didn't exist yet), so they're bucketed under
+   * 'chat' rather than dropped or shown as a confusing 'unknown'.
+   */
+  public static aggregateByPurpose(records: UsageRecord[]): PurposeUsageAggregate[] {
+    const byPurpose = new Map<UsagePurpose, PurposeUsageAggregate>();
+
+    for (const record of records) {
+      const purpose = record.purpose ?? 'chat';
+      let entry = byPurpose.get(purpose);
+
+      if (!entry) {
+        entry = {
+          purpose,
+          totalRequests: 0,
+          totalInputTokens: 0,
+          totalOutputTokens: 0,
+          totalTokens: 0,
+          totalEstimatedCostUsd: 0,
+        };
+        byPurpose.set(purpose, entry);
+      }
+
+      entry.totalRequests += 1;
+      entry.totalInputTokens += record.inputTokens ?? 0;
+      entry.totalOutputTokens += record.outputTokens ?? 0;
+      entry.totalEstimatedCostUsd += record.estimatedCostUsd ?? 0;
+    }
+
+    return [...byPurpose.values()]
+      .map((entry) => ({
+        ...entry,
+        totalTokens: entry.totalInputTokens + entry.totalOutputTokens,
+        totalEstimatedCostUsd: Math.round(entry.totalEstimatedCostUsd * 1e8) / 1e8,
+      }))
+      .sort((a, b) => b.totalEstimatedCostUsd - a.totalEstimatedCostUsd);
   }
 
   /**

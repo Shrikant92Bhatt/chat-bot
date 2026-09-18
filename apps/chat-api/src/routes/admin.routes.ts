@@ -178,6 +178,25 @@ router.get('/usage/by-model', async (req: AuthenticatedRequest, res: Response) =
 });
 
 /**
+ * GET /api/v1/admin/usage/by-purpose?days=30
+ * "How much of this spend is answering users vs. background housekeeping"
+ * (summarization/memory extraction/follow-up suggestions) - see
+ * PurposeUsageAggregate's doc comment in analytics.service.ts.
+ */
+router.get('/usage/by-purpose', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const days = parseWindowDays(req.query.days);
+    const { records, truncated } = await AnalyticsService.getUsageWindow(days);
+    const purposes = AnalyticsService.aggregateByPurpose(records);
+
+    res.json({ windowDays: days, truncated, purposes, count: purposes.length });
+  } catch (error) {
+    console.error('[Admin Route] Failed to build per-purpose usage:', error);
+    res.status(500).json({ error: 'Failed to load per-purpose usage.' });
+  }
+});
+
+/**
  * GET /api/v1/admin/usage/records?userId=&limit=&days=
  * Session-level drill-down: the individual logged requests behind the
  * aggregates above.

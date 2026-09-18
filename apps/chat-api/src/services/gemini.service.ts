@@ -94,7 +94,12 @@ export class GeminiService {
         await this.streamTextAndCaptureFunctionCall(followUpStream.stream, res, request.model, (t) => (fullResponseText += t));
       }
 
-      const suggestions = await generateFollowUpSuggestions(request.messages, fullResponseText);
+      // Not logged to UsageService: this legacy fallback path (only reached
+      // when the LangGraph path throws before writing output - see
+      // orchestration/graph.ts's doc comment) never had usage tracking for
+      // its own main completion call either, and streamChat() has no
+      // userId in scope to attribute it to.
+      const { suggestions } = await generateFollowUpSuggestions(request.messages, fullResponseText);
 
       res.write(`data: ${JSON.stringify({ chunk: '', done: true, model: request.model, suggestions })}\n\n`);
       res.end();
@@ -152,7 +157,7 @@ export class GeminiService {
       await new Promise((r) => setTimeout(r, 40));
     }
 
-    const suggestions = await generateFollowUpSuggestions(request.messages, mockReply);
+    const { suggestions } = await generateFollowUpSuggestions(request.messages, mockReply);
     res.write(`data: ${JSON.stringify({ chunk: '', done: true, model: request.model, suggestions })}\n\n`);
     res.end();
   }

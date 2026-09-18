@@ -1,10 +1,18 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { MemoryKind } from '@chat-monorepo/shared';
 import { renderPrompt } from '../prompt/prompt-manager';
+import { callUtilityModel, UtilityModelResult } from '../llm/utility-model';
 
 export interface MemoryCandidate {
   content: string;
   kind: MemoryKind;
+}
+
+export interface ExtractMemoryResult {
+  candidates: MemoryCandidate[];
+  /** Null when the LLM stage never ran - the regex gate rejected the
+   *  message, or no gateway/key is configured and the raw-sentence fallback
+   *  was used instead. Only a real LLM call has real cost to log. */
+  usage: Pick<UtilityModelResult, 'model' | 'inputTokens' | 'outputTokens'> | null;
 }
 
 /**
@@ -31,11 +39,6 @@ const CANDIDATE_PATTERNS: Array<{ pattern: RegExp; kind: MemoryKind }> = [
 const MIN_LENGTH = 8;
 const MAX_LENGTH = 600;
 const MAX_MEMORY_CHARS = 240;
-
-function cleanEnvVar(val?: string): string {
-  if (!val) return '';
-  return val.replace(/^﻿/, '').replace(/\r/g, '').trim();
-}
 
 /** True when the message is worth spending an extraction call on. */
 export function looksMemorable(message: string): { memorable: boolean; kind: MemoryKind } {
@@ -64,49 +67,48 @@ export function looksMemorable(message: string): { memorable: boolean; kind: Mem
  * Two stages, both cheap:
  *  1. `looksMemorable()` regex gate — rejects the overwhelming majority of
  *     messages with no network call at all.
- *  2. A single non-streamed Gemini Flash call (same pattern as
- *     suggestions.service.ts) that normalises the sentence into a short
- *     third-person statement and can still veto the candidate.
+ *  2. A single non-streamed cheap-model call (see llm/utility-model.ts,
+ *     same shared path as suggestions.service.ts and summarizer.ts) that
+ *     normalises the sentence into a short third-person statement and can
+ *     still veto the candidate.
  *
- * If no Gemini key is configured the LLM stage is skipped and the raw
- * (trimmed) sentence is stored — degraded but functional, never fabricated.
- * Never throws: memory is best-effort and must not break a chat turn.
+ * If no gateway/key is configured at all the LLM stage is skipped and the
+ * raw (trimmed) sentence is stored — degraded but functional, never
+ * fabricated. Never throws: memory is best-effort and must not break a chat
+ * turn. The caller (memory.service.ts's rememberFromMessage) logs `usage`
+ * when non-null - this function has no userId/threadId to log it itself.
  */
-export async function extractMemoryCandidates(message: string): Promise<MemoryCandidate[]> {
+export async function extractMemoryCandidates(message: string): Promise<ExtractMemoryResult> {
   const gate = looksMemorable(message);
-  if (!gate.memorable) return [];
+  if (!gate.memorable) return { candidates: [], usage: null };
 
   const trimmed = message.trim();
-  const apiKey = cleanEnvVar(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY);
-
-  if (!apiKey) {
-    return [{ content: trimmed.slice(0, MAX_MEMORY_CHARS), kind: gate.kind }];
-  }
 
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-flash-latest' });
-
-    const result = await model.generateContent(renderPrompt('memory_extraction:v1', { message: trimmed }));
-    const text = result.response
-      .text()
+    const { text, model, inputTokens, outputTokens } = await callUtilityModel(
+      renderPrompt('memory_extraction:v1', { message: trimmed })
+    );
+    const cleaned = text
       .trim()
       .replace(/^```(?:json)?\s*/i, '')
       .replace(/```\s*$/i, '')
       .trim();
 
-    const parsed = JSON.parse(text);
-    if (!Array.isArray(parsed)) return [];
+    const usage = { model, inputTokens, outputTokens };
+    const parsed = JSON.parse(cleaned);
+    if (!Array.isArray(parsed)) return { candidates: [], usage };
 
-    return parsed
+    const candidates = parsed
       .filter((c): c is MemoryCandidate => !!c && typeof c.content === 'string' && c.content.trim().length > 0)
       .slice(0, 3)
       .map((c) => ({
         content: c.content.trim().slice(0, MAX_MEMORY_CHARS),
         kind: (['identity', 'preference', 'fact', 'instruction'] as MemoryKind[]).includes(c.kind) ? c.kind : gate.kind,
       }));
+
+    return { candidates, usage };
   } catch (error) {
     console.error('[MemoryExtractor] LLM extraction failed, falling back to heuristic:', error);
-    return [{ content: trimmed.slice(0, MAX_MEMORY_CHARS), kind: gate.kind }];
+    return { candidates: [{ content: trimmed.slice(0, MAX_MEMORY_CHARS), kind: gate.kind }], usage: null };
   }
 }
