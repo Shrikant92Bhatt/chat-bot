@@ -1,17 +1,12 @@
-import { describe, it, expect, vi } from 'vitest';
-
-// This codebase has no established Firestore-mocking pattern yet (no
-// service test touches Firestore directly before this) - db/firestore.ts
-// is swapped for an isolated in-memory fake (testing/fake-firestore.ts) so
-// MessageFeedbackService can be exercised without a real Firestore emulator.
-vi.mock('../db/firestore', async () => {
-  const { createFakeFirestore } = await import('../testing/fake-firestore');
-  return { firestore: createFakeFirestore() };
-});
-
+import { describe, it, expect, beforeEach } from 'vitest';
+import { pool } from '../db/postgres';
 import { MessageFeedbackService } from './message-feedback.service';
 
 describe('MessageFeedbackService', () => {
+  beforeEach(async () => {
+    await pool.query('TRUNCATE message_feedback');
+  });
+
   it('writes a rating and reads it back keyed by messageId', async () => {
     await MessageFeedbackService.setRating('user-1', 'thread-1', 'msg-1', 'up');
     const feedback = await MessageFeedbackService.getFeedbackForThread('user-1', 'thread-1');

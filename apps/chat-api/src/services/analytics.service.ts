@@ -1,37 +1,24 @@
-import { firestore } from '../db/firestore';
+import { query } from '../db/postgres';
 import { UsagePurpose, UsageRecord } from './usage.service';
 
 /**
- * Read-side aggregation over the `usage` collection for the admin analytics
- * app (apps/admin-analytics). Write-side lives in usage.service.ts.
+ * Read-side aggregation over the `usage` table for the admin analytics app
+ * (apps/admin-analytics). Write-side lives in usage.service.ts.
  *
- * ── Scaling caveat (read this before trusting these numbers at volume) ──
- * Firestore has no server-side GROUP BY / SUM. Every aggregate below is
- * produced by reading the date-filtered record set into memory and folding
- * it here, which means cost and latency grow linearly with the number of
- * chat requests in the window - one document read per request logged. At the
- * current scale (a handful of users) that is a few hundred reads; at, say,
- * 100k requests/month it becomes both slow and a real Firestore bill, and
- * it will eventually exceed what a single Cloud Run instance should hold in
- * memory at once.
- *
- * The project's own architecture doc already names the intended fix:
- * Firestore for app-level state, a scheduled BigQuery export for
- * large-scale analytics. The real deployment path is a Firestore->BigQuery
- * export (or a Pub/Sub fan-out on write) plus scheduled rollup queries, with
- * these endpoints then serving pre-aggregated daily rows instead of raw
- * records. `MAX_RECORDS_SCANNED` below caps the blast radius until then -
- * responses report `truncated: true` when the cap is hit rather than
- * silently returning a partial total as if it were complete.
- *
- * Query shape note: every query here filters on `timestamp` ONLY (a single
- * field), so it needs no composite index - see .agents/AGENTS.md's Firestore
- * query rules. Per-user/per-model narrowing is done in process for the same
- * reason.
+ * This used to read every matching Firestore document into memory and fold
+ * it in JS - Firestore has no server-side GROUP BY/SUM, so that was the
+ * only option, capped by MAX_RECORDS_SCANNED to bound the blast radius, with
+ * a scheduled BigQuery export flagged as the eventual real fix at volume.
+ * Postgres makes that whole problem disappear: every aggregate below is a
+ * single GROUP BY/SUM query that runs server-side regardless of how many
+ * rows it scans, so there's no scan cap, no `truncated` risk, and no
+ * separate export pipeline to build later.
  */
 
-/** Hard ceiling on documents pulled into memory for one aggregation. */
-const MAX_RECORDS_SCANNED = 20000;
+/** Hard ceiling on raw rows returned by one drill-down page - this is the
+ *  one endpoint that still returns individual records to the client rather
+ *  than an aggregate, so it's the one place a cap still means something. */
+const MAX_RECORDS_PER_PAGE = 500;
 
 export interface UsageSummary {
   windowDays: number;
@@ -42,8 +29,6 @@ export interface UsageSummary {
   totalTokens: number;
   totalEstimatedCostUsd: number;
   activeUsers: number;
-  /** True when MAX_RECORDS_SCANNED was hit and the totals are a lower bound. */
-  truncated: boolean;
 }
 
 export interface UserUsageAggregate {
@@ -97,8 +82,9 @@ export interface DailyUsagePoint {
   estimatedCostUsd: number;
 }
 
-export interface UsageWindow {
+export interface UsageRecordsPage {
   records: UsageRecord[];
+  totalMatching: number;
   truncated: boolean;
 }
 
@@ -109,221 +95,302 @@ export function parseWindowDays(raw: unknown, fallback = 30): number {
   return Math.min(Math.floor(parsed), 365);
 }
 
-function toUtcDateKey(timestampMs: number): string {
-  return new Date(timestampMs).toISOString().slice(0, 10);
+function round(n: number): number {
+  // Sub-cent precision, rounded to kill float accumulation noise - same
+  // rounding usage.service.ts applies to a single record's estimate.
+  return Math.round(n * 1e8) / 1e8;
 }
 
 export class AnalyticsService {
-  private static usageCollection() {
-    return firestore.collection('usage');
-  }
-
-  /**
-   * Pulls the raw usage records for a rolling window, newest first. Single
-   * `timestamp` range filter + orderBy on the same field, so only the
-   * automatic single-field index is required.
-   */
-  public static async getUsageWindow(days: number): Promise<UsageWindow> {
+  public static async getUsageSummary(days: number): Promise<UsageSummary> {
     const since = Date.now() - days * 24 * 60 * 60 * 1000;
 
-    const snapshot = await this.usageCollection()
-      .where('timestamp', '>=', since)
-      .orderBy('timestamp', 'desc')
-      .limit(MAX_RECORDS_SCANNED + 1)
-      .get();
+    const rows = await query<{
+      total_requests: number;
+      total_input_tokens: number;
+      total_output_tokens: number;
+      total_estimated_cost_usd: number;
+      active_users: number;
+    }>(
+      `
+      SELECT
+        COUNT(*)::int AS total_requests,
+        COALESCE(SUM(input_tokens), 0)::int AS total_input_tokens,
+        COALESCE(SUM(output_tokens), 0)::int AS total_output_tokens,
+        COALESCE(SUM(estimated_cost_usd), 0) AS total_estimated_cost_usd,
+        COUNT(DISTINCT user_id)::int AS active_users
+      FROM usage
+      WHERE created_at >= $1
+      `,
+      [since]
+    );
 
-    const docs = snapshot.docs.map((doc) => doc.data() as UsageRecord);
-    const truncated = docs.length > MAX_RECORDS_SCANNED;
-
-    return { records: truncated ? docs.slice(0, MAX_RECORDS_SCANNED) : docs, truncated };
-  }
-
-  public static summarize(records: UsageRecord[], days: number, truncated: boolean): UsageSummary {
-    let totalInputTokens = 0;
-    let totalOutputTokens = 0;
-    let totalEstimatedCostUsd = 0;
-    const activeUserIds = new Set<string>();
-
-    for (const record of records) {
-      totalInputTokens += record.inputTokens ?? 0;
-      totalOutputTokens += record.outputTokens ?? 0;
-      totalEstimatedCostUsd += record.estimatedCostUsd ?? 0;
-      if (record.userId) activeUserIds.add(record.userId);
-    }
-
+    const row = rows[0];
     return {
       windowDays: days,
-      since: Date.now() - days * 24 * 60 * 60 * 1000,
-      totalRequests: records.length,
-      totalInputTokens,
-      totalOutputTokens,
-      totalTokens: totalInputTokens + totalOutputTokens,
-      // Sub-cent precision, rounded to kill float accumulation noise.
-      totalEstimatedCostUsd: Math.round(totalEstimatedCostUsd * 1e8) / 1e8,
-      activeUsers: activeUserIds.size,
-      truncated,
+      since,
+      totalRequests: row?.total_requests ?? 0,
+      totalInputTokens: row?.total_input_tokens ?? 0,
+      totalOutputTokens: row?.total_output_tokens ?? 0,
+      totalTokens: (row?.total_input_tokens ?? 0) + (row?.total_output_tokens ?? 0),
+      totalEstimatedCostUsd: round(row?.total_estimated_cost_usd ?? 0),
+      activeUsers: row?.active_users ?? 0,
     };
   }
 
   /**
    * Per-user rollup - "which user consumes how many tokens". Anonymous/
-   * trial requests (userId === null) are bucketed under the literal id
+   * trial requests (user_id IS NULL) are bucketed under the literal id
    * `anonymous` rather than dropped, so the per-user totals still add up to
    * the summary totals.
    */
-  public static aggregateByUser(records: UsageRecord[]): UserUsageAggregate[] {
-    const byUser = new Map<string, UserUsageAggregate>();
+  public static async aggregateByUser(days: number): Promise<UserUsageAggregate[]> {
+    const since = Date.now() - days * 24 * 60 * 60 * 1000;
 
-    for (const record of records) {
-      const userId = record.userId ?? 'anonymous';
-      let entry = byUser.get(userId);
+    const rows = await query<{
+      user_id: string;
+      total_requests: number;
+      total_input_tokens: number;
+      total_output_tokens: number;
+      total_estimated_cost_usd: number;
+      last_activity: number;
+    }>(
+      `
+      SELECT
+        COALESCE(user_id, 'anonymous') AS user_id,
+        COUNT(*)::int AS total_requests,
+        COALESCE(SUM(input_tokens), 0)::int AS total_input_tokens,
+        COALESCE(SUM(output_tokens), 0)::int AS total_output_tokens,
+        COALESCE(SUM(estimated_cost_usd), 0) AS total_estimated_cost_usd,
+        MAX(created_at) AS last_activity
+      FROM usage
+      WHERE created_at >= $1
+      GROUP BY COALESCE(user_id, 'anonymous')
+      ORDER BY (COALESCE(SUM(input_tokens), 0) + COALESCE(SUM(output_tokens), 0)) DESC, COUNT(*) DESC
+      `,
+      [since]
+    );
 
-      if (!entry) {
-        entry = {
-          userId,
-          email: null,
-          name: null,
-          role: 'user',
-          totalRequests: 0,
-          totalInputTokens: 0,
-          totalOutputTokens: 0,
-          totalTokens: 0,
-          totalEstimatedCostUsd: 0,
-          lastActivity: null,
-        };
-        byUser.set(userId, entry);
-      }
-
-      entry.totalRequests += 1;
-      entry.totalInputTokens += record.inputTokens ?? 0;
-      entry.totalOutputTokens += record.outputTokens ?? 0;
-      entry.totalEstimatedCostUsd += record.estimatedCostUsd ?? 0;
-      entry.lastActivity = Math.max(entry.lastActivity ?? 0, record.timestamp);
-    }
-
-    return [...byUser.values()]
-      .map((entry) => ({
-        ...entry,
-        totalTokens: entry.totalInputTokens + entry.totalOutputTokens,
-        totalEstimatedCostUsd: Math.round(entry.totalEstimatedCostUsd * 1e8) / 1e8,
-      }))
-      .sort((a, b) => b.totalTokens - a.totalTokens || b.totalRequests - a.totalRequests);
+    return rows.map((row) => ({
+      userId: row.user_id,
+      email: null,
+      name: null,
+      role: 'user',
+      totalRequests: row.total_requests,
+      totalInputTokens: row.total_input_tokens,
+      totalOutputTokens: row.total_output_tokens,
+      totalTokens: row.total_input_tokens + row.total_output_tokens,
+      totalEstimatedCostUsd: round(row.total_estimated_cost_usd),
+      lastActivity: row.last_activity,
+    }));
   }
 
-  public static aggregateByModel(records: UsageRecord[]): ModelUsageAggregate[] {
-    const byModel = new Map<string, ModelUsageAggregate>();
+  public static async aggregateByModel(days: number): Promise<ModelUsageAggregate[]> {
+    const since = Date.now() - days * 24 * 60 * 60 * 1000;
 
-    for (const record of records) {
-      const model = record.model || 'unknown';
-      let entry = byModel.get(model);
+    const rows = await query<{
+      model: string;
+      total_requests: number;
+      total_input_tokens: number;
+      total_output_tokens: number;
+      total_estimated_cost_usd: number;
+    }>(
+      `
+      SELECT
+        model,
+        COUNT(*)::int AS total_requests,
+        COALESCE(SUM(input_tokens), 0)::int AS total_input_tokens,
+        COALESCE(SUM(output_tokens), 0)::int AS total_output_tokens,
+        COALESCE(SUM(estimated_cost_usd), 0) AS total_estimated_cost_usd
+      FROM usage
+      WHERE created_at >= $1
+      GROUP BY model
+      ORDER BY COUNT(*) DESC
+      `,
+      [since]
+    );
 
-      if (!entry) {
-        entry = {
-          model,
-          totalRequests: 0,
-          totalInputTokens: 0,
-          totalOutputTokens: 0,
-          totalTokens: 0,
-          totalEstimatedCostUsd: 0,
-        };
-        byModel.set(model, entry);
-      }
-
-      entry.totalRequests += 1;
-      entry.totalInputTokens += record.inputTokens ?? 0;
-      entry.totalOutputTokens += record.outputTokens ?? 0;
-      entry.totalEstimatedCostUsd += record.estimatedCostUsd ?? 0;
-    }
-
-    return [...byModel.values()]
-      .map((entry) => ({
-        ...entry,
-        totalTokens: entry.totalInputTokens + entry.totalOutputTokens,
-        totalEstimatedCostUsd: Math.round(entry.totalEstimatedCostUsd * 1e8) / 1e8,
-      }))
-      .sort((a, b) => b.totalRequests - a.totalRequests);
+    return rows.map((row) => ({
+      model: row.model || 'unknown',
+      totalRequests: row.total_requests,
+      totalInputTokens: row.total_input_tokens,
+      totalOutputTokens: row.total_output_tokens,
+      totalTokens: row.total_input_tokens + row.total_output_tokens,
+      totalEstimatedCostUsd: round(row.total_estimated_cost_usd),
+    }));
   }
 
   /**
    * Per-purpose rollup - see PurposeUsageAggregate's doc comment for why
-   * this exists. Records logged before the `purpose` field was introduced
-   * have none stored; they were all main chat-turn calls (summarization/
-   * memory/suggestions logging didn't exist yet), so they're bucketed under
-   * 'chat' rather than dropped or shown as a confusing 'unknown'.
+   * this exists. Rows logged before the `purpose` column existed have none
+   * stored; COALESCE buckets them under 'chat' rather than dropping them or
+   * showing a confusing 'unknown' - they were all main chat-turn calls
+   * (summarization/memory/suggestions logging didn't exist yet).
    */
-  public static aggregateByPurpose(records: UsageRecord[]): PurposeUsageAggregate[] {
-    const byPurpose = new Map<UsagePurpose, PurposeUsageAggregate>();
+  public static async aggregateByPurpose(days: number): Promise<PurposeUsageAggregate[]> {
+    const since = Date.now() - days * 24 * 60 * 60 * 1000;
 
-    for (const record of records) {
-      const purpose = record.purpose ?? 'chat';
-      let entry = byPurpose.get(purpose);
+    const rows = await query<{
+      purpose: UsagePurpose;
+      total_requests: number;
+      total_input_tokens: number;
+      total_output_tokens: number;
+      total_estimated_cost_usd: number;
+    }>(
+      `
+      SELECT
+        COALESCE(purpose, 'chat') AS purpose,
+        COUNT(*)::int AS total_requests,
+        COALESCE(SUM(input_tokens), 0)::int AS total_input_tokens,
+        COALESCE(SUM(output_tokens), 0)::int AS total_output_tokens,
+        COALESCE(SUM(estimated_cost_usd), 0) AS total_estimated_cost_usd
+      FROM usage
+      WHERE created_at >= $1
+      GROUP BY COALESCE(purpose, 'chat')
+      ORDER BY SUM(estimated_cost_usd) DESC
+      `,
+      [since]
+    );
 
-      if (!entry) {
-        entry = {
-          purpose,
-          totalRequests: 0,
-          totalInputTokens: 0,
-          totalOutputTokens: 0,
-          totalTokens: 0,
-          totalEstimatedCostUsd: 0,
-        };
-        byPurpose.set(purpose, entry);
-      }
-
-      entry.totalRequests += 1;
-      entry.totalInputTokens += record.inputTokens ?? 0;
-      entry.totalOutputTokens += record.outputTokens ?? 0;
-      entry.totalEstimatedCostUsd += record.estimatedCostUsd ?? 0;
-    }
-
-    return [...byPurpose.values()]
-      .map((entry) => ({
-        ...entry,
-        totalTokens: entry.totalInputTokens + entry.totalOutputTokens,
-        totalEstimatedCostUsd: Math.round(entry.totalEstimatedCostUsd * 1e8) / 1e8,
-      }))
-      .sort((a, b) => b.totalEstimatedCostUsd - a.totalEstimatedCostUsd);
+    return rows.map((row) => ({
+      purpose: row.purpose,
+      totalRequests: row.total_requests,
+      totalInputTokens: row.total_input_tokens,
+      totalOutputTokens: row.total_output_tokens,
+      totalTokens: row.total_input_tokens + row.total_output_tokens,
+      totalEstimatedCostUsd: round(row.total_estimated_cost_usd),
+    }));
   }
 
   /**
    * Dense daily series for the time-series chart: every day in the window is
    * emitted, including zero-activity days, so the chart's x-axis is evenly
-   * spaced instead of silently collapsing gaps.
+   * spaced instead of silently collapsing gaps. `generate_series` builds the
+   * UTC day scaffold server-side; usage rows are bucketed into UTC dates via
+   * `AT TIME ZONE 'UTC'` on their epoch-ms timestamp, matching the UTC
+   * dates this endpoint has always reported.
    */
-  public static aggregateDaily(records: UsageRecord[], days: number): DailyUsagePoint[] {
-    const byDate = new Map<string, DailyUsagePoint>();
-    const dayMs = 24 * 60 * 60 * 1000;
+  public static async aggregateDaily(days: number): Promise<DailyUsagePoint[]> {
     const now = Date.now();
+    const since = now - (days - 1) * 24 * 60 * 60 * 1000;
 
-    for (let i = days - 1; i >= 0; i--) {
-      const key = toUtcDateKey(now - i * dayMs);
-      byDate.set(key, {
-        date: key,
-        requests: 0,
-        inputTokens: 0,
-        outputTokens: 0,
-        totalTokens: 0,
-        estimatedCostUsd: 0,
-      });
-    }
+    const rows = await query<{
+      day: string;
+      requests: number;
+      input_tokens: number;
+      output_tokens: number;
+      estimated_cost_usd: number;
+    }>(
+      `
+      WITH day_range AS (
+        SELECT generate_series(
+          (to_timestamp($1 / 1000.0) AT TIME ZONE 'UTC')::date,
+          (to_timestamp($2 / 1000.0) AT TIME ZONE 'UTC')::date,
+          '1 day'::interval
+        )::date AS day
+      ),
+      bucketed AS (
+        SELECT
+          (to_timestamp(created_at / 1000.0) AT TIME ZONE 'UTC')::date AS day,
+          COUNT(*) AS requests,
+          COALESCE(SUM(input_tokens), 0) AS input_tokens,
+          COALESCE(SUM(output_tokens), 0) AS output_tokens,
+          COALESCE(SUM(estimated_cost_usd), 0) AS estimated_cost_usd
+        FROM usage
+        WHERE created_at >= $1 AND created_at <= $2
+        GROUP BY 1
+      )
+      SELECT
+        day_range.day::text AS day,
+        COALESCE(bucketed.requests, 0)::int AS requests,
+        COALESCE(bucketed.input_tokens, 0)::int AS input_tokens,
+        COALESCE(bucketed.output_tokens, 0)::int AS output_tokens,
+        COALESCE(bucketed.estimated_cost_usd, 0) AS estimated_cost_usd
+      FROM day_range
+      LEFT JOIN bucketed ON bucketed.day = day_range.day
+      ORDER BY day_range.day
+      `,
+      [since, now]
+    );
 
-    for (const record of records) {
-      const key = toUtcDateKey(record.timestamp);
-      const point = byDate.get(key);
-      // A record can fall a few ms outside the reconstructed day range at the
-      // window edge - skip rather than inventing an out-of-order bucket.
-      if (!point) continue;
-
-      point.requests += 1;
-      point.inputTokens += record.inputTokens ?? 0;
-      point.outputTokens += record.outputTokens ?? 0;
-      point.estimatedCostUsd += record.estimatedCostUsd ?? 0;
-    }
-
-    return [...byDate.values()].map((point) => ({
-      ...point,
-      totalTokens: point.inputTokens + point.outputTokens,
-      estimatedCostUsd: Math.round(point.estimatedCostUsd * 1e8) / 1e8,
+    return rows.map((row) => ({
+      date: row.day,
+      requests: row.requests,
+      inputTokens: row.input_tokens,
+      outputTokens: row.output_tokens,
+      totalTokens: row.input_tokens + row.output_tokens,
+      estimatedCostUsd: round(row.estimated_cost_usd),
     }));
   }
+
+  /**
+   * Session-level drill-down: individual logged requests, optionally
+   * filtered to one user. `truncated` is now an exact signal (a real COUNT,
+   * not a scan-cap guess) - true whenever more matching rows exist beyond
+   * this page.
+   */
+  public static async getUsageRecords(days: number, userId: string | null, limit: number): Promise<UsageRecordsPage> {
+    const since = Date.now() - days * 24 * 60 * 60 * 1000;
+    const boundedLimit = Math.min(Math.max(limit, 1), MAX_RECORDS_PER_PAGE);
+
+    // 'anonymous' is the client-facing id for NULL user_id rows (see
+    // aggregateByUser) - translate it back to an IS NULL filter so drilling
+    // into that bucket from the by-user table works. Each query below gets
+    // its own correctly-numbered placeholders rather than sharing one
+    // clause string across two different param orderings - that's exactly
+    // what broke here the first time (the count query doesn't have a
+    // `limit` param, so reusing the rows query's `$3` for userId left the
+    // count query expecting a `$2` it never received).
+    const specificUserId = userId === 'anonymous' ? null : userId;
+    const userClauseForRows = userId === null ? '' : userId === 'anonymous' ? 'AND user_id IS NULL' : 'AND user_id = $3';
+    const userClauseForCount = userId === null ? '' : userId === 'anonymous' ? 'AND user_id IS NULL' : 'AND user_id = $2';
+
+    const [rows, countRows] = await Promise.all([
+      query<UsageRow>(
+        `SELECT * FROM usage WHERE created_at >= $1 ${userClauseForRows} ORDER BY created_at DESC LIMIT $2`,
+        userId && userId !== 'anonymous' ? [since, boundedLimit, specificUserId] : [since, boundedLimit]
+      ),
+      query<{ count: number }>(
+        `SELECT COUNT(*)::int AS count FROM usage WHERE created_at >= $1 ${userClauseForCount}`,
+        userId && userId !== 'anonymous' ? [since, specificUserId] : [since]
+      ),
+    ]);
+
+    const totalMatching = countRows[0]?.count ?? 0;
+    return {
+      records: rows.map(toUsageRecord),
+      totalMatching,
+      truncated: totalMatching > boundedLimit,
+    };
+  }
+}
+
+interface UsageRow {
+  request_id: string;
+  user_id: string | null;
+  tenant_id: string | null;
+  conversation_id: string | null;
+  model: string;
+  purpose: UsagePurpose;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  latency_ms: number;
+  estimated_cost_usd: number | null;
+  created_at: number;
+}
+
+function toUsageRecord(row: UsageRow): UsageRecord {
+  return {
+    requestId: row.request_id,
+    userId: row.user_id,
+    tenantId: row.tenant_id,
+    conversationId: row.conversation_id,
+    model: row.model,
+    purpose: row.purpose,
+    inputTokens: row.input_tokens,
+    outputTokens: row.output_tokens,
+    latencyMs: row.latency_ms,
+    estimatedCostUsd: row.estimated_cost_usd,
+    timestamp: row.created_at,
+  };
 }

@@ -6,12 +6,12 @@ import { UserRegistryService } from '../services/user-registry.service';
  * Admin authorization gate. MUST be mounted AFTER `authenticateToken`, which
  * is what populates `req.user`.
  *
- * The role is re-read from Firestore (`users/{uid}.role`) on EVERY request
+ * The role is re-read from Postgres (`users/{uid}.role`) on EVERY request
  * rather than being carried as a claim inside the session JWT. That's
  * deliberate: the app session token lives for 7 days (see
  * APP_SESSION_EXPIRY in auth.middleware.ts), so a role baked into it would
  * keep a demoted admin fully privileged for up to a week. One extra
- * Firestore document read per admin API call is a cheap price for revocation
+ * Postgres document read per admin API call is a cheap price for revocation
  * that takes effect immediately.
  */
 export async function requireAdmin(

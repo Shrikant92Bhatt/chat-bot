@@ -85,6 +85,24 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       sandbox_affected: ${{ steps.affected.outputs.sandbox }}
+    # chat-api's test suite runs against a real Postgres (see
+    # vite.config.ts's globalSetup and apps/chat-api/src/db/postgres.ts) -
+    # this service container is that database for the "Run tests" step
+    # below, torn down with the job. pgvector is required (rag/vector-db.ts).
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -120,6 +138,9 @@ jobs:
 
       - name: Build Affected Projects
         run: npx nx affected -t build
+
+      - name: Run tests
+        run: npx vitest run apps/chat-api
 
   # Job 2: Build & deploy the sandbox microservice only (the one piece that
   # stays on a container host post-migration). Gated on push to main and on

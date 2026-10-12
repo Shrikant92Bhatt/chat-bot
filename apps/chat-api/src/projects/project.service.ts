@@ -1,63 +1,88 @@
 import { Project, ProjectFile } from '@chat-monorepo/shared';
-import { firestore } from '../db/firestore';
-
-const PROJECTS_COLLECTION = 'projects';
-const FILES_SUBCOLLECTION = 'files';
+import { query } from '../db/postgres';
 
 const MAX_NAME_LENGTH = 120;
 const MAX_INSTRUCTIONS_LENGTH = 8000;
+
+interface ProjectRow {
+  id: string;
+  owner_id: string;
+  name: string;
+  instructions: string;
+  created_at: number;
+  updated_at: number;
+  file_count: number;
+}
+
+interface ProjectFileRow {
+  id: string;
+  project_id: string;
+  file_name: string;
+  characters: number;
+  uploaded_at: number;
+  storage_url: string | null;
+  text: string | null;
+}
+
+function toProject(row: ProjectRow): Project {
+  return {
+    id: row.id,
+    ownerId: row.owner_id,
+    name: row.name,
+    instructions: row.instructions,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    fileCount: row.file_count,
+  };
+}
+
+function toProjectFile(row: ProjectFileRow): ProjectFile {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    fileName: row.file_name,
+    characters: row.characters,
+    uploadedAt: row.uploaded_at,
+    storageUrl: row.storage_url,
+  };
+}
 
 /**
  * Projects: a user-owned workspace carrying custom instructions plus its own
  * scoped set of ingested files.
  *
- * Firestore layout — a top-level `projects` collection (queried by an
- * `ownerId` field, a single-field filter that needs no composite index),
- * with a `files` subcollection per project holding both the file metadata
- * AND the extracted text. Storing the text here is what lets project
- * knowledge survive a restart: the in-process vector store
- * (rag/vector-db.ts) is rehydrated from it on demand — see
- * rag/retriever.ts `ensureProjectHydrated()`.
+ * `project_files.text` holds the extracted document text alongside its
+ * metadata - storing it here is what lets project knowledge survive a
+ * restart: the vector store (rag/vector-db.ts) is rehydrated from it on
+ * demand - see rag/retriever.ts `ensureProjectHydrated()`.
  */
 export class ProjectService {
-  private static collection() {
-    return firestore.collection(PROJECTS_COLLECTION);
-  }
-
-  private static filesCollection(projectId: string) {
-    return this.collection().doc(projectId).collection(FILES_SUBCOLLECTION);
-  }
-
   static async createProject(ownerId: string, name: string, instructions = ''): Promise<Project> {
     const now = Date.now();
     const id = `proj-${now}-${Math.random().toString(36).slice(2, 8)}`;
-    const project: Project = {
-      id,
-      ownerId,
-      name: (name || 'Untitled project').trim().slice(0, MAX_NAME_LENGTH),
-      instructions: (instructions || '').slice(0, MAX_INSTRUCTIONS_LENGTH),
-      createdAt: now,
-      updatedAt: now,
-      fileCount: 0,
-    };
-    await this.collection().doc(id).set(project);
-    return project;
+    const trimmedName = (name || 'Untitled project').trim().slice(0, MAX_NAME_LENGTH);
+    const trimmedInstructions = (instructions || '').slice(0, MAX_INSTRUCTIONS_LENGTH);
+
+    await query(
+      `INSERT INTO projects (id, owner_id, name, instructions, created_at, updated_at, file_count)
+       VALUES ($1, $2, $3, $4, $5, $5, 0)`,
+      [id, ownerId, trimmedName, trimmedInstructions, now]
+    );
+
+    return { id, ownerId, name: trimmedName, instructions: trimmedInstructions, createdAt: now, updatedAt: now, fileCount: 0 };
   }
 
   static async listProjects(ownerId: string): Promise<Project[]> {
-    const snapshot = await this.collection().where('ownerId', '==', ownerId).get();
-    return snapshot.docs
-      .map((doc) => doc.data() as Project)
-      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    const rows = await query<ProjectRow>('SELECT * FROM projects WHERE owner_id = $1 ORDER BY updated_at DESC', [ownerId]);
+    return rows.map(toProject);
   }
 
   /** Returns null both for "not found" and "owned by someone else" — callers must not distinguish them. */
   static async getProject(ownerId: string, projectId: string): Promise<Project | null> {
     if (!projectId) return null;
-    const snapshot = await this.collection().doc(projectId).get();
-    if (!snapshot.exists) return null;
-    const project = snapshot.data() as Project;
-    return project.ownerId === ownerId ? project : null;
+    const rows = await query<ProjectRow>('SELECT * FROM projects WHERE id = $1', [projectId]);
+    const project = rows[0];
+    return project && project.owner_id === ownerId ? toProject(project) : null;
   }
 
   static async updateProject(
@@ -68,28 +93,36 @@ export class ProjectService {
     const existing = await this.getProject(ownerId, projectId);
     if (!existing) return null;
 
-    const patch: Partial<Project> = { updatedAt: Date.now() };
-    if (typeof updates.name === 'string' && updates.name.trim()) {
-      patch.name = updates.name.trim().slice(0, MAX_NAME_LENGTH);
-    }
-    if (typeof updates.instructions === 'string') {
-      patch.instructions = updates.instructions.slice(0, MAX_INSTRUCTIONS_LENGTH);
-    }
+    const name = typeof updates.name === 'string' && updates.name.trim() ? updates.name.trim().slice(0, MAX_NAME_LENGTH) : existing.name;
+    const instructions =
+      typeof updates.instructions === 'string' ? updates.instructions.slice(0, MAX_INSTRUCTIONS_LENGTH) : existing.instructions;
+    const updatedAt = Date.now();
 
-    await this.collection().doc(projectId).set(patch, { merge: true });
-    return { ...existing, ...patch } as Project;
+    await query('UPDATE projects SET name = $2, instructions = $3, updated_at = $4 WHERE id = $1', [
+      projectId,
+      name,
+      instructions,
+      updatedAt,
+    ]);
+
+    return { ...existing, name, instructions, updatedAt };
   }
 
   static async deleteProject(ownerId: string, projectId: string): Promise<boolean> {
     const existing = await this.getProject(ownerId, projectId);
     if (!existing) return false;
 
-    // Subcollections are not deleted with their parent in Firestore.
-    const files = await this.filesCollection(projectId).get();
-    const batch = firestore.batch();
-    files.docs.forEach((doc) => batch.delete(doc.ref));
-    batch.delete(this.collection().doc(projectId));
-    await batch.commit();
+    // project_files has ON DELETE CASCADE on project_id, so this one
+    // statement removes the project's files with it - the Firestore
+    // version needed an explicit batch delete of the files subcollection
+    // first because Firestore never cascades a parent-doc delete.
+    //
+    // rag_documents has no FK here (personal, non-project documents don't
+    // belong to any project_files row at all, so a FK couldn't require
+    // project_id to always reference one) - deleted explicitly instead, so
+    // a project's ingested vectors don't outlive the project that owned them.
+    await query('DELETE FROM rag_documents WHERE project_id = $1', [projectId]);
+    await query('DELETE FROM projects WHERE id = $1', [projectId]);
     return true;
   }
 
@@ -99,42 +132,35 @@ export class ProjectService {
   ): Promise<ProjectFile> {
     const now = Date.now();
     const id = `pf-${now}-${Math.random().toString(36).slice(2, 8)}`;
-    const metadata: ProjectFile = {
-      id,
+
+    await query(
+      `INSERT INTO project_files (id, project_id, file_name, characters, uploaded_at, storage_url, text)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [id, projectId, file.fileName, file.text.length, now, file.storageUrl ?? null, file.text]
+    );
+
+    const countRows = await query<{ count: number }>('SELECT COUNT(*)::int AS count FROM project_files WHERE project_id = $1', [
       projectId,
-      fileName: file.fileName,
-      characters: file.text.length,
-      uploadedAt: now,
-      storageUrl: file.storageUrl ?? null,
-    };
+    ]);
+    await query('UPDATE projects SET file_count = $2, updated_at = $3 WHERE id = $1', [projectId, countRows[0]?.count ?? 0, now]);
 
-    // `text` lives on the doc but is intentionally NOT part of the
-    // ProjectFile DTO — it is server-side only (rehydration source) and
-    // would otherwise be shipped to the client on every list call.
-    await this.filesCollection(projectId).doc(id).set({ ...metadata, text: file.text });
-
-    const files = await this.filesCollection(projectId).get();
-    await this.collection().doc(projectId).set({ fileCount: files.size, updatedAt: now }, { merge: true });
-
-    return metadata;
+    return { id, projectId, fileName: file.fileName, characters: file.text.length, uploadedAt: now, storageUrl: file.storageUrl ?? null };
   }
 
   static async listFiles(projectId: string): Promise<ProjectFile[]> {
-    const snapshot = await this.filesCollection(projectId).get();
-    return snapshot.docs
-      .map((doc) => {
-        const { text, ...metadata } = doc.data() as ProjectFile & { text?: string };
-        return metadata as ProjectFile;
-      })
-      .sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0));
+    const rows = await query<ProjectFileRow>(
+      'SELECT id, project_id, file_name, characters, uploaded_at, storage_url FROM project_files WHERE project_id = $1 ORDER BY uploaded_at DESC',
+      [projectId]
+    );
+    return rows.map(toProjectFile);
   }
 
   /** Files WITH their extracted text — used to rehydrate the vector store. */
   static async listFileContents(projectId: string): Promise<Array<{ id: string; fileName: string; text: string }>> {
-    const snapshot = await this.filesCollection(projectId).get();
-    return snapshot.docs
-      .map((doc) => doc.data() as ProjectFile & { text?: string })
-      .filter((d) => !!d.text)
-      .map((d) => ({ id: d.id, fileName: d.fileName, text: d.text as string }));
+    const rows = await query<{ id: string; file_name: string; text: string | null }>(
+      'SELECT id, file_name, text FROM project_files WHERE project_id = $1 AND text IS NOT NULL',
+      [projectId]
+    );
+    return rows.map((r) => ({ id: r.id, fileName: r.file_name, text: r.text as string }));
   }
 }

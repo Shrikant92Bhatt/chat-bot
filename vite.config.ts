@@ -11,5 +11,6 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['apps/chat-api/src/**/*.spec.ts'],
+    globalSetup: ['apps/chat-api/src/testing/postgres-global-setup.ts'],
   },
 });

@@ -30,7 +30,7 @@ export class RagRetriever {
   // requests within the same server process.
   private static store = new VectorDbAdapter();
 
-  // Projects already rehydrated from Firestore in this process, so the
+  // Projects already rehydrated from Postgres in this process, so the
   // rehydration read happens at most once per project per process.
   private static hydratedProjects = new Set<string>();
 
@@ -67,17 +67,18 @@ export class RagRetriever {
   private static readonly MIN_CANDIDATE_POOL = 10;
 
   /**
-   * The vector store is in-process and resets on restart, but project files
-   * have their extracted text persisted in Firestore (see
-   * ProjectService.addFile). This pulls that text back into the store the
-   * first time a project is used in this process, so project knowledge
-   * survives a redeploy even though the personal knowledge base does not.
+   * The vector store is now persisted in Postgres (see vector-db.ts), so
+   * this rehydration is only needed once per process lifetime per project -
+   * `hydratedProjects` just avoids a redundant hasProjectDocuments() round
+   * trip on every single retrieval within the same warm instance, not a
+   * correctness requirement the way it was when the store itself was
+   * in-memory and reset on every restart.
    */
   private async ensureProjectHydrated(ownerId: string, projectId: string): Promise<void> {
     if (RagRetriever.hydratedProjects.has(projectId)) return;
     RagRetriever.hydratedProjects.add(projectId);
 
-    if (RagRetriever.store.hasProjectDocuments(projectId)) return;
+    if (await RagRetriever.store.hasProjectDocuments(projectId)) return;
 
     try {
       const files = await ProjectService.listFileContents(projectId);
@@ -110,7 +111,7 @@ export class RagRetriever {
     }
 
     const scope: SearchScope = { ownerId, projectId: projectId ?? null };
-    if (RagRetriever.store.size(scope) === 0) {
+    if ((await RagRetriever.store.size(scope)) === 0) {
       return [];
     }
 

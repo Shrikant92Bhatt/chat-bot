@@ -1,17 +1,18 @@
-import { firestore } from '../db/firestore';
 import { RateLimitUsageEntry } from '@chat-monorepo/shared';
+import { query, withTransaction } from '../db/postgres';
 import { SystemLimitsService } from './system-limits.service';
 import { ModelConfigService } from './model-config.service';
 
 /**
- * Firestore-backed persistent rate limiter, following the same
- * collection-per-service pattern as ThreadService/UserRegistryService.
+ * Postgres-backed persistent rate limiter, following the same
+ * per-table pattern as ThreadService/UserRegistryService.
  *
- * Replaces the old in-memory `Map<ip, count>` counter, which reset on every
- * redeploy/restart and was inconsistent across Cloud Run's multiple
- * concurrent instances (each instance had its own Map). A Firestore
- * transaction gives an atomic check-and-increment that's correct even when
- * two instances handle requests for the same key at the same moment.
+ * Uses a transaction + `SELECT ... FOR UPDATE` row lock for the atomic
+ * check-and-increment - the Postgres equivalent of the Firestore
+ * transaction this replaces, with the same correctness guarantee: two
+ * concurrent requests for the same key (e.g. two Vercel function
+ * invocations handling the same user's rapid double-click) never both read
+ * the same pre-increment count and both get allowed past a limit of one.
  *
  * Three independent uses, three key shapes:
  *  - Anonymous pre-sign-in trial, keyed `anon:{ip}` - see
@@ -25,10 +26,9 @@ import { ModelConfigService } from './model-config.service';
  *    429s (see chat.routes.ts POST /stream).
  */
 
-interface RateLimitDoc {
+interface RateLimitRow {
   count: number;
-  windowStart: number;
-  updatedAt: number;
+  window_start: number;
 }
 
 export interface RateLimitResult {
@@ -38,24 +38,13 @@ export interface RateLimitResult {
   resetAt: number;
 }
 
-/** Firestore document IDs may not contain "/"; IP addresses/uids don't
- *  normally contain one, but encode defensively so a malformed key can
- *  never throw instead of just being rate-limited under a safe bucket. */
-function sanitizeKey(key: string): string {
-  return encodeURIComponent(key);
-}
-
-function effectiveCount(data: RateLimitDoc | undefined, now: number, windowMs: number): { count: number; windowStart: number } {
-  const windowStart = data?.windowStart ?? now;
+function effectiveCount(data: RateLimitRow | undefined, now: number, windowMs: number): { count: number; windowStart: number } {
+  const windowStart = data?.window_start ?? now;
   const windowExpired = now - windowStart >= windowMs;
   return { count: windowExpired ? 0 : data?.count ?? 0, windowStart: windowExpired ? now : windowStart };
 }
 
 export class AnonUsageService {
-  private static rateLimitsCollection() {
-    return firestore.collection('rateLimits');
-  }
-
   /** Builds the per-user, per-model rate-limit key - the one shared spot
    *  that defines this shape, so graph.ts, chat.routes.ts (the /models
    *  enrichment), and the admin usage snapshot below can never drift apart
@@ -70,11 +59,7 @@ export class AnonUsageService {
 
   public static async checkAuthDaily(uid: string): Promise<RateLimitResult> {
     const limits = await SystemLimitsService.getLimits();
-    return this.checkAndConsume(
-      this.globalUsageKey(uid),
-      limits.authDailyMessageLimit,
-      limits.rateLimitWindowHours * 60 * 60 * 1000
-    );
+    return this.checkAndConsume(this.globalUsageKey(uid), limits.authDailyMessageLimit, limits.rateLimitWindowHours * 60 * 60 * 1000);
   }
 
   /**
@@ -84,37 +69,35 @@ export class AnonUsageService {
    * rather than rejected.
    */
   public static async checkAndConsume(key: string, limit: number, windowMs: number): Promise<RateLimitResult> {
-    const docRef = this.rateLimitsCollection().doc(sanitizeKey(key));
     const now = Date.now();
 
-    return firestore.runTransaction(async (tx) => {
-      const snap = await tx.get(docRef);
-      const data = snap.exists ? (snap.data() as RateLimitDoc) : undefined;
-      const { count: currentCount, windowStart } = effectiveCount(data, now, windowMs);
+    return withTransaction(async (client) => {
+      // Ensure a row exists before locking it - a plain SELECT ... FOR
+      // UPDATE on zero rows locks nothing, so the very first request for a
+      // brand new key needs a row to exist first. ON CONFLICT DO NOTHING
+      // means two concurrent first-ever requests for the same key both
+      // land here safely; only one actually inserts.
+      await client.query(
+        'INSERT INTO rate_limits (key, count, window_start, updated_at) VALUES ($1, 0, $2, $2) ON CONFLICT (key) DO NOTHING',
+        [key, now]
+      );
+
+      const result = await client.query<RateLimitRow>('SELECT count, window_start FROM rate_limits WHERE key = $1 FOR UPDATE', [key]);
+      const { count: currentCount, windowStart } = effectiveCount(result.rows[0], now, windowMs);
 
       if (currentCount >= limit) {
-        return {
-          allowed: false,
-          remaining: 0,
-          limit,
-          resetAt: windowStart + windowMs,
-        };
+        return { allowed: false, remaining: 0, limit, resetAt: windowStart + windowMs };
       }
 
       const newCount = currentCount + 1;
-
-      tx.set(docRef, {
-        count: newCount,
+      await client.query('UPDATE rate_limits SET count = $2, window_start = $3, updated_at = $4 WHERE key = $1', [
+        key,
+        newCount,
         windowStart,
-        updatedAt: now,
-      } as RateLimitDoc);
+        now,
+      ]);
 
-      return {
-        allowed: true,
-        remaining: Math.max(0, limit - newCount),
-        limit,
-        resetAt: windowStart + windowMs,
-      };
+      return { allowed: true, remaining: Math.max(0, limit - newCount), limit, resetAt: windowStart + windowMs };
     });
   }
 
@@ -130,10 +113,9 @@ export class AnonUsageService {
    * /models) WITHOUT counting as a use of it.
    */
   public static async peek(key: string, windowMs: number): Promise<{ count: number; resetAt: number }> {
-    const doc = await this.rateLimitsCollection().doc(sanitizeKey(key)).get();
+    const rows = await query<RateLimitRow>('SELECT count, window_start FROM rate_limits WHERE key = $1', [key]);
     const now = Date.now();
-    const data = doc.exists ? (doc.data() as RateLimitDoc) : undefined;
-    const { count, windowStart } = effectiveCount(data, now, windowMs);
+    const { count, windowStart } = effectiveCount(rows[0], now, windowMs);
     return { count, resetAt: windowStart + windowMs };
   }
 
@@ -145,12 +127,6 @@ export class AnonUsageService {
    * stale-but-still-counted. A per-model key whose model no longer has a
    * configured cap (admin removed it) is skipped - it isn't "occupying"
    * anything real any more.
-   *
-   * Bounded full-collection scan, same scale assumption as
-   * AnalyticsService's usage-collection reads - fine at this app's size
-   * (one doc per active user-model pair per window), not intended to
-   * survive unbounded growth without a follow-up (e.g. TTL-deleting expired
-   * docs).
    */
   public static async listUsageSnapshot(): Promise<RateLimitUsageEntry[]> {
     const [limits, modelConfig] = await Promise.all([SystemLimitsService.getLimits(), ModelConfigService.getModelConfig()]);
@@ -158,19 +134,16 @@ export class AnonUsageService {
     const modelLimits = new Map(modelConfig.models.map((m) => [m.id, m.dailyLimitPerUser]));
     const now = Date.now();
 
-    const snapshot = await this.rateLimitsCollection().get();
+    const rows = await query<{ key: string } & RateLimitRow>('SELECT key, count, window_start FROM rate_limits');
 
     const entries: RateLimitUsageEntry[] = [];
-    for (const doc of snapshot.docs) {
-      const data = doc.data() as RateLimitDoc;
-      const { count, windowStart } = effectiveCount(data, now, windowMs);
+    for (const row of rows) {
+      const { count, windowStart } = effectiveCount(row, now, windowMs);
       if (count <= 0) continue; // expired/empty windows aren't "occupying" anything right now
 
-      const decodedKey = decodeURIComponent(doc.id);
-
-      if (decodedKey.startsWith('anon:')) {
+      if (row.key.startsWith('anon:')) {
         entries.push({
-          key: decodedKey.slice('anon:'.length),
+          key: row.key.slice('anon:'.length),
           kind: 'anon',
           count,
           limit: limits.anonTrialMessageLimit,
@@ -180,7 +153,7 @@ export class AnonUsageService {
         continue;
       }
 
-      const globalMatch = decodedKey.match(/^user:(.+):global$/);
+      const globalMatch = row.key.match(/^user:(.+):global$/);
       if (globalMatch) {
         const uid = globalMatch[1];
         const limit = limits.authDailyMessageLimit;
@@ -196,7 +169,7 @@ export class AnonUsageService {
         continue;
       }
 
-      const modelMatch = decodedKey.match(/^user:(.+):model:(.+)$/);
+      const modelMatch = row.key.match(/^user:(.+):model:(.+)$/);
       if (modelMatch) {
         const [, uid, modelId] = modelMatch;
         const limit = modelLimits.get(modelId);

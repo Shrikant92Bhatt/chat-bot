@@ -29,7 +29,7 @@ router.post('/session', async (req, res: Response) => {
 
     // role is display/UX only from here on (e.g. showing the Admin entry
     // point) - the JWT itself never carries it, and every admin API call
-    // re-reads the role fresh from Firestore regardless of this response.
+    // re-reads the role fresh from Postgres regardless of this response.
     let role: 'user' | 'admin' = 'user';
     try {
       const registered = await UserRegistryService.registerOrUpdateUser(user);

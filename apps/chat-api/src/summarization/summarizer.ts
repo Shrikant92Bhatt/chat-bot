@@ -37,7 +37,7 @@ function toTranscript(messages: SimpleMessage[]): string {
 
 /**
  * Process-level cache of summaries, keyed by user+thread. Covers the two
- * cases where Firestore can't be the source of truth: anonymous/trial users
+ * cases where Postgres can't be the source of truth: anonymous/trial users
  * (no uid) and clients that don't send a threadId. Bounded so a long-running
  * process can't grow it without limit.
  */
@@ -103,7 +103,7 @@ export class SummarizationService {
    * in rather than re-summarizing from scratch), and only
    * `summary + recent turns` is sent.
    *
-   * The summary is persisted onto the thread document in Firestore when a
+   * The summary is persisted onto the thread row in Postgres when a
    * uid + threadId are available, and always mirrored into a process-level
    * cache so anonymous/threadless sessions don't pay for a fresh
    * summarization call on every message.

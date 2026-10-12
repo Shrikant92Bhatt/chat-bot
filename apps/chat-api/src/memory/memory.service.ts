@@ -1,9 +1,7 @@
 import { MemoryEntry } from '@chat-monorepo/shared';
-import { firestore } from '../db/firestore';
+import { query } from '../db/postgres';
 import { extractMemoryCandidates } from './extractor';
 import { UsageService } from '../services/usage.service';
-
-const MEMORIES_COLLECTION = 'memories';
 
 /** Hard cap per user so retrieval stays a cheap in-process scan. */
 const MAX_MEMORIES_PER_USER = 200;
@@ -23,6 +21,28 @@ function tokenize(text: string): string[] {
   return (text.toLowerCase().match(/[a-z0-9]+/g) || []).filter((t) => t.length > 2 && !STOP_WORDS.has(t));
 }
 
+interface MemoryRow {
+  id: string;
+  user_id: string;
+  content: string;
+  kind: MemoryEntry['kind'];
+  created_at: number;
+  updated_at: number;
+  source_thread_id: string | null;
+}
+
+function toMemoryEntry(row: MemoryRow): MemoryEntry {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    content: row.content,
+    kind: row.kind,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    sourceThreadId: row.source_thread_id,
+  };
+}
+
 /**
  * Long-term, user-level memory — durable facts and preferences that should
  * survive across conversations.
@@ -32,26 +52,18 @@ function tokenize(text: string): string[] {
  *  - Conversation history/summary is scoped to a *single thread*.
  *  - Memory is small, user-scoped, and cross-thread.
  *
- * Storage: top-level Firestore `memories` collection, one doc per memory,
- * filtered by a `userId` field. Deliberately a single-field `where` query
- * (sorting/scoring happen in process) so it needs no composite index.
+ * Storage: the `memories` table, filtered by a `user_id` column.
  *
- * Every method is best-effort: Firestore being unavailable degrades chat to
+ * Every method is best-effort: Postgres being unavailable degrades chat to
  * "no memories injected" rather than failing the turn.
  */
 export class MemoryService {
-  private static collection() {
-    return firestore.collection(MEMORIES_COLLECTION);
-  }
-
   /** All memories for a user, newest first. */
   static async listMemories(userId: string): Promise<MemoryEntry[]> {
     if (!userId) return [];
     try {
-      const snapshot = await this.collection().where('userId', '==', userId).get();
-      return snapshot.docs
-        .map((doc) => doc.data() as MemoryEntry)
-        .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+      const rows = await query<MemoryRow>('SELECT * FROM memories WHERE user_id = $1 ORDER BY updated_at DESC', [userId]);
+      return rows.map(toMemoryEntry);
     } catch (error) {
       console.error('[MemoryService] Failed to list memories:', error);
       return [];
@@ -70,7 +82,7 @@ export class MemoryService {
    */
   static async getRelevantMemories(
     userId: string | undefined,
-    query: string,
+    query_: string,
     limit = DEFAULT_RETRIEVAL_LIMIT
   ): Promise<string[]> {
     if (!userId) return [];
@@ -78,7 +90,7 @@ export class MemoryService {
     const memories = await this.listMemories(userId);
     if (memories.length === 0) return [];
 
-    const queryTokens = new Set(tokenize(query || ''));
+    const queryTokens = new Set(tokenize(query_ || ''));
 
     const standing = memories.filter((m) => m.kind === 'instruction' || m.kind === 'identity');
     const scored = memories
@@ -148,7 +160,7 @@ export class MemoryService {
       for (const candidate of candidates) {
         const duplicate = existingByContent.get(normalise(candidate.content));
         if (duplicate) {
-          await this.collection().doc(duplicate.id).set({ ...duplicate, updatedAt: now }, { merge: true });
+          await query('UPDATE memories SET updated_at = $2 WHERE id = $1', [duplicate.id, now]);
           continue;
         }
 
@@ -162,7 +174,10 @@ export class MemoryService {
           updatedAt: now,
           sourceThreadId: sourceThreadId ?? null,
         };
-        await this.collection().doc(id).set(entry);
+        await query(
+          'INSERT INTO memories (id, user_id, content, kind, created_at, updated_at, source_thread_id) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+          [entry.id, entry.userId, entry.content, entry.kind, entry.createdAt, entry.updatedAt, entry.sourceThreadId]
+        );
         written.push(entry);
       }
 
@@ -176,7 +191,7 @@ export class MemoryService {
   /**
    * The explicit, user-authored "About you" profile (ChatGPT calls this
    * Custom Instructions) - distinct from the auto-extracted memories above:
-   * one fixed doc per user rather than a growing list, and it is never
+   * one fixed row per user rather than a growing list, and it is never
    * written by `rememberFromMessage`, only by the user themselves via the
    * Settings screen. Stored as an ordinary `identity`-kind MemoryEntry with
    * a deterministic id so it's already included unconditionally by
@@ -191,9 +206,8 @@ export class MemoryService {
   static async getProfile(userId: string): Promise<string> {
     if (!userId) return '';
     try {
-      const doc = await this.collection().doc(this.profileId(userId)).get();
-      if (!doc.exists) return '';
-      return (doc.data() as MemoryEntry).content || '';
+      const rows = await query<{ content: string }>('SELECT content FROM memories WHERE id = $1', [this.profileId(userId)]);
+      return rows[0]?.content || '';
     } catch (error) {
       console.error('[MemoryService] Failed to load profile:', error);
       return '';
@@ -208,19 +222,17 @@ export class MemoryService {
 
     try {
       if (!content) {
-        await this.collection().doc(id).delete();
+        await query('DELETE FROM memories WHERE id = $1', [id]);
         return;
       }
-      const entry: MemoryEntry = {
-        id,
-        userId,
-        content,
-        kind: 'identity',
-        createdAt: now,
-        updatedAt: now,
-        sourceThreadId: null,
-      };
-      await this.collection().doc(id).set(entry, { merge: true });
+      await query(
+        `
+        INSERT INTO memories (id, user_id, content, kind, created_at, updated_at, source_thread_id)
+        VALUES ($1, $2, $3, 'identity', $4, $4, NULL)
+        ON CONFLICT (id) DO UPDATE SET content = $3, updated_at = $4
+        `,
+        [id, userId, content, now]
+      );
     } catch (error) {
       console.error('[MemoryService] Failed to save profile:', error);
       throw error;
@@ -229,12 +241,9 @@ export class MemoryService {
 
   static async deleteMemory(userId: string, memoryId: string): Promise<boolean> {
     try {
-      const docRef = this.collection().doc(memoryId);
-      const snapshot = await docRef.get();
-      if (!snapshot.exists || (snapshot.data() as MemoryEntry).userId !== userId) {
-        return false;
-      }
-      await docRef.delete();
+      const rows = await query<{ user_id: string }>('SELECT user_id FROM memories WHERE id = $1', [memoryId]);
+      if (!rows[0] || rows[0].user_id !== userId) return false;
+      await query('DELETE FROM memories WHERE id = $1', [memoryId]);
       return true;
     } catch (error) {
       console.error('[MemoryService] Failed to delete memory:', error);

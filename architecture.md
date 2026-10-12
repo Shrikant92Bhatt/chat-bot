@@ -10,8 +10,10 @@ document is the narrative version of the same system.
 > [`VERCEL_MIGRATION.md`](VERCEL_MIGRATION.md)), both deploy together as one Vercel project instead —
 > same code, same request flow, different host. Only the `isolated-vm` code sandbox still runs on a
 > Cloud Run-style container host, now as the standalone [`infra/sandbox-service`](infra/sandbox-service).
-> Everything else in this document (RAG, memory, rate limiting, the admin console's auth model, etc.)
-> is unchanged.
+> Data persistence has also moved: every "Firestore" mention below is now Postgres (`apps/chat-api/src/db/postgres.ts`),
+> including the RAG vector store, which moved from an in-memory array to a `pgvector`-backed table in the same
+> migration - see `VERCEL_MIGRATION.md` again for both changes. The request flow, the RAG/memory/rate-limiting
+> *logic*, and the admin console's auth model are otherwise unchanged - only where the data lives moved.
 
 ## 1. System overview
 

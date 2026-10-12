@@ -1,5 +1,5 @@
 import { MessageFeedbackRating, ThreadFeedbackMap } from '@chat-monorepo/shared';
-import { firestore } from '../db/firestore';
+import { query } from '../db/postgres';
 
 /**
  * Thumbs up/down feedback on individual assistant messages.
@@ -18,29 +18,16 @@ import { firestore } from '../db/firestore';
  * verify: { userId (from the verified session token, never client-supplied),
  * threadId, messageId }.
  *
- * Firestore layout: a single top-level `messageFeedback` collection, doc id
- * `${uid}_${threadId}_${messageId}` - a natural idempotency key, so
- * resubmitting or changing a rating overwrites the same doc in place
+ * Storage: the `message_feedback` table, primary key
+ * (user_id, thread_id, message_id) - a natural idempotency key, so
+ * resubmitting or changing a rating overwrites the same row in place
  * instead of accumulating duplicates, and the common single-message
- * read/write path (setRating) is doc-id addressed - no query needed at all.
- * Reading every rated message in a thread (getFeedbackForThread) uses a
- * single-field `where('threadId', '==', ...)` query per the Firestore query
- * rules (AGENTS.md §2b - no composite index), then filters to the caller's
- * own rows in process (matches the MemoryService/ProjectService pattern).
+ * read/write path (setRating) is PK-addressed - no query needed at all.
+ * Reading every rated message in a thread (getFeedbackForThread) queries by
+ * `thread_id`, then filters to the caller's own rows in process (matches
+ * the MemoryService/ProjectService pattern).
  */
 export class MessageFeedbackService {
-  private static collection() {
-    return firestore.collection('messageFeedback');
-  }
-
-  /** Firestore doc ids can't contain "/" - none of this app's client-generated
-   *  thread/message ids (`thread-<ts>`, `msg-<ts>`, `msg-ai-<ts>`) should ever
-   *  have one, but stripped defensively rather than letting a stray value throw. */
-  private static docId(userId: string, threadId: string, messageId: string): string {
-    const clean = (value: string) => value.replace(/\//g, '_');
-    return `${clean(userId)}_${clean(threadId)}_${clean(messageId)}`;
-  }
-
   /**
    * Sets, changes, or clears (`rating === null`) the caller's rating on one
    * message. Callers must verify ownership of `threadId` themselves before
@@ -54,23 +41,34 @@ export class MessageFeedbackService {
     messageId: string,
     rating: MessageFeedbackRating | null
   ): Promise<void> {
-    const ref = this.collection().doc(this.docId(userId, threadId, messageId));
     if (rating === null) {
-      await ref.delete();
+      await query('DELETE FROM message_feedback WHERE user_id = $1 AND thread_id = $2 AND message_id = $3', [
+        userId,
+        threadId,
+        messageId,
+      ]);
       return;
     }
-    await ref.set({ userId, threadId, messageId, rating, updatedAt: Date.now() });
+
+    await query(
+      `
+      INSERT INTO message_feedback (user_id, thread_id, message_id, rating, updated_at)
+      VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (user_id, thread_id, message_id) DO UPDATE SET rating = $4, updated_at = $5
+      `,
+      [userId, threadId, messageId, rating, Date.now()]
+    );
   }
 
   /** { messageId: rating } for every message in this thread the caller has rated. */
   public static async getFeedbackForThread(userId: string, threadId: string): Promise<ThreadFeedbackMap> {
-    const snapshot = await this.collection().where('threadId', '==', threadId).get();
+    const rows = await query<{ message_id: string; rating: MessageFeedbackRating }>(
+      'SELECT message_id, rating FROM message_feedback WHERE thread_id = $1 AND user_id = $2',
+      [threadId, userId]
+    );
     const result: ThreadFeedbackMap = {};
-    snapshot.docs.forEach((doc) => {
-      const data = doc.data() as { userId: string; messageId: string; rating: MessageFeedbackRating };
-      if (data.userId === userId) {
-        result[data.messageId] = data.rating;
-      }
+    rows.forEach((row) => {
+      result[row.message_id] = row.rating;
     });
     return result;
   }

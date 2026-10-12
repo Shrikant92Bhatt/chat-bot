@@ -1,7 +1,7 @@
-import { firestore } from '../db/firestore';
+import { query } from '../db/postgres';
 
 /** Application role. Authorization for the admin analytics app is decided
- *  by a FRESH Firestore read of this field on every request (see
+ *  by a FRESH Postgres read of this field on every request (see
  *  middleware/admin.middleware.ts) - it is deliberately NOT baked into the
  *  7-day session JWT, so a demotion takes effect immediately. */
 export type UserRole = 'user' | 'admin';
@@ -11,14 +11,29 @@ export interface RegisteredUser {
   email?: string;
   name?: string;
   picture?: string;
-  /** Optional because documents written before the role migration
-   *  (scripts/migrate-add-user-roles.ts) may predate the field; any user
-   *  without an explicit role is treated as 'user'. */
   role?: UserRole;
   lastLogin: number;
 }
 
-const usersCollection = () => firestore.collection('users');
+interface UserRow {
+  uid: string;
+  email: string | null;
+  name: string | null;
+  picture: string | null;
+  role: UserRole;
+  last_login: number;
+}
+
+function toRegisteredUser(row: UserRow): RegisteredUser {
+  return {
+    uid: row.uid,
+    email: row.email ?? undefined,
+    name: row.name ?? undefined,
+    picture: row.picture ?? undefined,
+    role: row.role,
+    lastLogin: row.last_login,
+  };
+}
 
 export class UserRegistryService {
   /**
@@ -35,67 +50,64 @@ export class UserRegistryService {
   }): Promise<RegisteredUser> {
     const now = Date.now();
     const defaultPicture = 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + user.uid;
-    const docRef = usersCollection().doc(user.uid);
 
-    const existing = await docRef.get();
-    const existingData = existing.exists ? (existing.data() as Partial<RegisteredUser>) : undefined;
+    // One round trip: INSERT a brand new row with the given/default values,
+    // or on conflict UPDATE - COALESCE-ing each field against the row that's
+    // already there so a partial update never clobbers a value the caller
+    // didn't supply. `role` is deliberately excluded from the UPDATE SET
+    // list entirely (not even COALESCE'd) - this runs on every login, and
+    // an admin signing in must stay an admin, so the column simply isn't
+    // touched by this statement at all, same as the Firestore version
+    // reading existingData.role first and re-writing the same value back.
+    const rows = await query<UserRow>(
+      `
+      INSERT INTO users (uid, email, name, picture, role, last_login)
+      VALUES ($1, $2, $3, $4, 'user', $5)
+      ON CONFLICT (uid) DO UPDATE SET
+        email = COALESCE($2, users.email),
+        name = COALESCE($3, users.name),
+        picture = COALESCE($4, users.picture),
+        last_login = $5
+      RETURNING uid, email, name, picture, role, last_login
+      `,
+      [user.uid, user.email ?? null, user.name ?? null, user.picture ?? defaultPicture, now]
+    );
 
-    const merged: RegisteredUser = {
-      uid: user.uid,
-      email: user.email ?? existingData?.email ?? 'user@example.com',
-      name: user.name ?? existingData?.name ?? 'Authenticated User',
-      picture: user.picture ?? existingData?.picture ?? defaultPicture,
-      // Only DEFAULT a role - never overwrite one that's already stored.
-      // An admin signing in must stay an admin; this write happens on every
-      // single login, so clobbering here would silently self-demote them.
-      role: existingData?.role ?? 'user',
-      lastLogin: now,
-    };
-
-    await docRef.set(merged);
-    return merged;
+    return toRegisteredUser(rows[0]);
   }
 
   /**
-   * Returns list of all registered application users, including their role
-   * (users stored before the role migration read back as 'user').
+   * Returns list of all registered application users, including their role.
    */
   public static async getAllUsers(): Promise<RegisteredUser[]> {
-    const snapshot = await usersCollection().orderBy('lastLogin', 'desc').get();
-    return snapshot.docs.map((doc) => {
-      const data = doc.data() as RegisteredUser;
-      return { ...data, uid: data.uid ?? doc.id, role: data.role ?? 'user' };
-    });
+    const rows = await query<UserRow>('SELECT uid, email, name, picture, role, last_login FROM users ORDER BY last_login DESC');
+    return rows.map(toRegisteredUser);
   }
 
   /**
-   * Reads the CURRENT role straight from Firestore. Used by requireAdmin on
+   * Reads the CURRENT role straight from Postgres. Used by requireAdmin on
    * every admin request rather than trusting a claim in the long-lived JWT.
    */
   public static async getUserRole(uid: string): Promise<UserRole> {
-    const doc = await usersCollection().doc(uid).get();
-    if (!doc.exists) return 'user';
-    const role = (doc.data() as RegisteredUser | undefined)?.role;
-    return role === 'admin' ? 'admin' : 'user';
+    const rows = await query<{ role: UserRole }>('SELECT role FROM users WHERE uid = $1', [uid]);
+    return rows[0]?.role === 'admin' ? 'admin' : 'user';
   }
 
   /** Number of users currently holding the admin role. */
   public static async countAdmins(): Promise<number> {
-    const snapshot = await usersCollection().where('role', '==', 'admin').get();
-    return snapshot.size;
+    const rows = await query<{ count: number }>("SELECT COUNT(*)::int AS count FROM users WHERE role = 'admin'");
+    return rows[0]?.count ?? 0;
   }
 
   /**
    * Sets a user's role. Returns null when the user doesn't exist, so the
-   * caller can 404 rather than creating a phantom user document.
+   * caller can 404 rather than creating a phantom user row.
    */
   public static async setUserRole(uid: string, role: UserRole): Promise<RegisteredUser | null> {
-    const docRef = usersCollection().doc(uid);
-    const doc = await docRef.get();
-    if (!doc.exists) return null;
-
-    await docRef.set({ role }, { merge: true });
-    const data = doc.data() as RegisteredUser;
-    return { ...data, uid: data.uid ?? doc.id, role };
+    const rows = await query<UserRow>(
+      'UPDATE users SET role = $2 WHERE uid = $1 RETURNING uid, email, name, picture, role, last_login',
+      [uid, role]
+    );
+    return rows[0] ? toRegisteredUser(rows[0]) : null;
   }
 }

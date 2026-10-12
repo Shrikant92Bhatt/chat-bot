@@ -6,7 +6,7 @@
 [![Open PRs](https://img.shields.io/github/issues-pr/Shrikant92Bhatt/chat-bot)](https://github.com/Shrikant92Bhatt/chat-bot/pulls)
 [![Last Commit](https://img.shields.io/github/last-commit/Shrikant92Bhatt/chat-bot)](https://github.com/Shrikant92Bhatt/chat-bot/commits/main)
 
-An Nx monorepo AI chat application: an Angular standalone-component frontend with a glassmorphism UI, and an Express backend built around a real LangGraph agent loop — multi-LLM streaming (Gemini/GPT/Claude/Llama via OpenRouter), Projects with custom instructions and scoped knowledge bases, RAG with hybrid reranking, long-term user memory, conversation summarization, real tool calling (calculator, sandboxed code execution, image generation, web search), Firestore-backed rate limiting and usage/cost tracking, and a role-gated admin analytics console. chat-client and chat-api deploy together as one [Vercel](https://vercel.com) project (see [`VERCEL_MIGRATION.md`](VERCEL_MIGRATION.md)); only the isolated-vm code sandbox still runs on a small container host. Google Sign-In and Firestore/GCS remain unchanged.
+An Nx monorepo AI chat application: an Angular standalone-component frontend with a glassmorphism UI, and an Express backend built around a real LangGraph agent loop — multi-LLM streaming (Gemini/GPT/Claude/Llama via OpenRouter), Projects with custom instructions and scoped knowledge bases, RAG with hybrid reranking, long-term user memory, conversation summarization, real tool calling (calculator, sandboxed code execution, image generation, web search), Postgres-backed rate limiting and usage/cost tracking, and a role-gated admin analytics console. chat-client and chat-api deploy together as one [Vercel](https://vercel.com) project (see [`VERCEL_MIGRATION.md`](VERCEL_MIGRATION.md)); only the isolated-vm code sandbox still runs on a small container host. Google Sign-In stays as-is; data persistence moved from Firestore to Postgres (`pgvector` for RAG) — see [`VERCEL_MIGRATION.md`](VERCEL_MIGRATION.md). Generated-image storage (GCS) is unchanged.
 
 **Live:** see `VERCEL_MIGRATION.md` for the current deployment URL (previously https://nexusai-gcp.duckdns.org on Cloud Run).
 
@@ -80,7 +80,7 @@ All four are gathered in parallel by a single context-assembly step (`apps/chat-
 **Platform**
 - Google Sign-In, with one free anonymous message per IP before sign-in is required.
 - **Role-based admin console** — a usage/cost analytics dashboard (per-user and per-model breakdowns, session-level drill-down, storage metrics, user role management) visible only to admin accounts. See [Admin Console](#admin-console) below.
-- Firestore-backed rate limiting and usage/cost tracking — correct under multi-instance concurrency, unlike a simple in-memory counter.
+- Postgres-backed rate limiting and usage/cost tracking — correct under multi-instance concurrency, unlike a simple in-memory counter.
 - Same-origin deployment — chat-client and chat-api ship as one Vercel project, so API calls need no CORS or hardcoded backend URL (see `apps/chat-client/src/app/core/runtime-config.ts`).
 - Automated CI/CD — every push runs a full build/lint check; Vercel's own GitHub integration deploys chat-client + chat-api on merges to `main` (previews on PRs), while GitHub Actions only handles the separate sandbox microservice.
 
@@ -104,11 +104,17 @@ See [`.env.example`](.env.example) for the full list with inline explanations. A
 |---|---|
 | `GEMINI_API_KEY` | Chat responses, memory extraction, summarization — get one at [aistudio.google.com/apikey](https://aistudio.google.com/apikey) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google Sign-In — from [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials) |
-| `GOOGLE_APPLICATION_CREDENTIALS` or `FIREBASE_SERVICE_ACCOUNT_KEY` | Firestore access (threads, projects, memory, usage, roles) |
+| `DATABASE_URL` | Postgres access (threads, projects, memory, usage, roles, RAG). Local dev: `docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres pgvector/pgvector:pg16`, then `DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres` |
 
 Everything else (OpenRouter, GCS, code sandbox limits, rate limit tuning) is optional with sensible defaults — the app degrades gracefully rather than failing when unset.
 
-### 3. Run
+### 3. Set up the database
+```bash
+npm run migrate:db
+```
+Applies every migration in [`apps/chat-api/src/db/migrations`](apps/chat-api/src/db/migrations) (idempotent — safe to re-run). Needs `DATABASE_URL` set first, pointing at a Postgres instance with the `pgvector` extension available (the Docker image above already has it).
+
+### 4. Run
 ```bash
 npm start
 ```
@@ -122,16 +128,15 @@ Without sign-in, one message per session works via the free-trial path; further 
 
 ## Admin Console
 
-A usage/cost analytics dashboard — total tokens/cost, per-user and per-model breakdowns with session-level drill-down, storage metrics, and user role management — visible only to accounts with `role: 'admin'` on their `users` Firestore document. It's not a separate app: it's a library (`libs/frontend/admin-analytics`) built directly into chat-client, opened via a navbar icon that only appears for admins.
+A usage/cost analytics dashboard — total tokens/cost, per-user and per-model breakdowns with session-level drill-down, storage metrics, and user role management — visible only to accounts with `role = 'admin'` in the Postgres `users` table. It's not a separate app: it's a library (`libs/frontend/admin-analytics`) built directly into chat-client, opened via a navbar icon that only appears for admins.
 
-**Getting the first admin account:** roles don't exist until someone has one, so a one-time script bootstraps it:
+**Getting the first admin account:** sign in at least once with the Google account you want as admin (this creates its `users` row), then:
 ```bash
-npx nx build chat-api
-node dist/apps/chat-api/apps/chat-api/src/scripts/migrate-add-user-roles.js
+npm run bootstrap:admin
 ```
 Edit the `INITIAL_ADMIN_EMAILS` allowlist at the top of [`apps/chat-api/src/scripts/migrate-add-user-roles.ts`](apps/chat-api/src/scripts/migrate-add-user-roles.ts) first. It's idempotent — safe to re-run, and it never overwrites a role that's already set. Once you have one admin, promote everyone else from the console itself (Admin console → user management) — no need to run the script again.
 
-The role shown to the frontend is display-only (it decides whether to show the nav icon); the real authorization boundary is server-side — every admin API call re-reads the role fresh from Firestore, so a demotion takes effect on the very next request, not after a session expires.
+The role shown to the frontend is display-only (it decides whether to show the nav icon); the real authorization boundary is server-side — every admin API call re-reads the role fresh from Postgres, so a demotion takes effect on the very next request, not after a session expires.
 
 ---
 
@@ -141,7 +146,7 @@ chat-client (static Angular build) and chat-api (as a serverless function at [`a
 
 The `code_interpreter` tool's `isolated-vm` sandbox is the one piece that can't run in a Vercel function (it's a native addon), so it stays on a small container host as [`infra/sandbox-service`](infra/sandbox-service), deployed via [`cloudbuild-sandbox.yaml`](cloudbuild-sandbox.yaml). chat-api reaches it over HTTP via `CODE_SANDBOX_SERVICE_URL` (see [`apps/chat-api/src/tools/code-sandbox.ts`](apps/chat-api/src/tools/code-sandbox.ts)).
 
-Firestore and Cloud Storage (GCS) are unaffected by this migration and continue to run as-is (they're pay-per-use, not the source of Cloud Run's cost).
+Data persistence (threads, users, projects, memory, usage, rate limits, RAG) runs on Postgres - see [`VERCEL_MIGRATION.md`](VERCEL_MIGRATION.md) for the Neon/Vercel Storage setup. Cloud Storage (GCS, generated images) is unaffected by either migration and continues to run as-is.
 
 There's no Terraform/IaC layer — the sandbox service's infrastructure is created and managed directly via the `gcloud` commands in `cloudbuild-sandbox.yaml` and `.github/workflows/ci-cd.yml`; the Vercel project's settings live in the Vercel dashboard.
 

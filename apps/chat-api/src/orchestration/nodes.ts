@@ -13,7 +13,7 @@ const mcpAdapter = new McpAdapter();
  *
  * This is the one place where the four context sources — project
  * instructions, long-term memory, RAG excerpts and the conversation summary
- * — are turned into what the LLM actually sees. The gathering (Firestore
+ * — are turned into what the LLM actually sees. The gathering (Postgres
  * reads, retrieval, the summarization call) happens once per request in
  * context/context-builder.ts and lands in `state.assembledContext`; this
  * function is pure and cheap, so re-running it on every pass of the

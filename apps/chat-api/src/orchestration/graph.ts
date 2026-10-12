@@ -461,7 +461,7 @@ export async function streamGraphResponse(
   );
   res.end();
 
-  // Logged after res.end() so a Firestore hiccup never delays or breaks the
+  // Logged after res.end() so a Postgres hiccup never delays or breaks the
   // chat response itself; failures here are swallowed (logged) rather than
   // surfaced, since usage/cost logging is diagnostic, not user-facing.
   try {

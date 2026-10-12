@@ -1,4 +1,4 @@
-import { firestore } from '../db/firestore';
+import { query } from '../db/postgres';
 import {
   ModelConfigDto,
   OpenRouterModelCatalogItem,
@@ -67,8 +67,7 @@ export function isModelServableByGateway(modelId: string, usingOpenRouter: boole
 }
 
 export class ModelConfigService {
-  private static readonly SETTINGS_COLLECTION = 'settings';
-  private static readonly MODEL_CONFIG_DOC = 'model_config';
+  private static readonly SETTINGS_KEY = 'model_config';
 
   // In-memory cache for fast read during LLM streaming turns
   private static cachedConfig: ModelConfigDto | null = null;
@@ -82,7 +81,7 @@ export class ModelConfigService {
 
   /**
    * Returns the active model configuration.
-   * Reads from Firestore (with in-memory caching), or returns seeded default config if not yet created.
+   * Reads from Postgres (with in-memory caching), or returns seeded default config if not yet created.
    */
   public static async getModelConfig(): Promise<ModelConfigDto> {
     const now = Date.now();
@@ -91,17 +90,15 @@ export class ModelConfigService {
     }
 
     try {
-      const doc = await firestore.collection(this.SETTINGS_COLLECTION).doc(this.MODEL_CONFIG_DOC).get();
-      if (doc.exists) {
-        const data = doc.data() as ModelConfigDto;
-        if (data && Array.isArray(data.models) && data.models.length > 0) {
-          this.cachedConfig = data;
-          this.cachedConfigTimestamp = now;
-          return data;
-        }
+      const rows = await query<{ value: ModelConfigDto }>('SELECT value FROM settings WHERE key = $1', [this.SETTINGS_KEY]);
+      const data = rows[0]?.value;
+      if (data && Array.isArray(data.models) && data.models.length > 0) {
+        this.cachedConfig = data;
+        this.cachedConfigTimestamp = now;
+        return data;
       }
     } catch (error) {
-      console.warn('[ModelConfigService] Failed to read model config from Firestore, using default:', error);
+      console.warn('[ModelConfigService] Failed to read model config from Postgres, using default:', error);
     }
 
     // Default seeded configuration
@@ -130,7 +127,7 @@ export class ModelConfigService {
   }
 
   /**
-   * Saves updated model configuration to Firestore and refreshes cache.
+   * Saves updated model configuration to Postgres and refreshes cache.
    */
   public static async saveModelConfig(config: Partial<ModelConfigDto>): Promise<ModelConfigDto> {
     const existing = await this.getModelConfig();
@@ -164,7 +161,10 @@ export class ModelConfigService {
       updatedAt: Date.now(),
     };
 
-    await firestore.collection(this.SETTINGS_COLLECTION).doc(this.MODEL_CONFIG_DOC).set(fullConfig);
+    await query('INSERT INTO settings (key, value) VALUES ($1, $2::jsonb) ON CONFLICT (key) DO UPDATE SET value = $2::jsonb', [
+      this.SETTINGS_KEY,
+      JSON.stringify(fullConfig),
+    ]);
 
     this.cachedConfig = fullConfig;
     this.cachedConfigTimestamp = Date.now();

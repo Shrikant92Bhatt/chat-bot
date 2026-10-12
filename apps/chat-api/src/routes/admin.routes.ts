@@ -14,7 +14,7 @@ import { runEmulatedPipeline } from '../emulator/emulator.service';
  * apps/admin-analytics Angular app.
  *
  * EVERY route here is behind `authenticateToken` (valid app session token)
- * then `requireAdmin` (fresh Firestore role read - never a JWT claim). The
+ * then `requireAdmin` (fresh Postgres role read - never a JWT claim). The
  * router-level `use` below is what enforces that, so a route added later
  * can't accidentally be left unguarded.
  */
@@ -52,7 +52,7 @@ router.get('/users', async (req: AuthenticatedRequest, res: Response) => {
  *
  * Guards against demoting the LAST remaining admin - there is currently
  * exactly one, and letting it demote itself would lock every human out of
- * this API permanently (the only recovery would be editing Firestore by
+ * this API permanently (the only recovery would be editing Postgres by
  * hand or re-running the migration script).
  */
 router.patch('/users/:uid/role', async (req: AuthenticatedRequest, res: Response) => {
@@ -109,21 +109,19 @@ router.patch('/users/:uid/role', async (req: AuthenticatedRequest, res: Response
  * GET /api/v1/admin/usage/summary?days=30
  * Headline KPIs + the dense daily series the dashboard chart plots.
  *
- * Aggregated in-app because Firestore has no server-side GROUP BY - see the
- * scaling caveat at the top of services/analytics.service.ts (short version:
- * this is one document read per logged chat request, fine at app scale,
- * and a scheduled BigQuery export is the intended path at real volume).
+ * Both are real SQL GROUP BY/SUM queries (see services/analytics.service.ts) -
+ * no in-app scanning, no truncation risk, regardless of table size.
  */
 router.get('/usage/summary', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const days = parseWindowDays(req.query.days);
-    const { records, truncated } = await AnalyticsService.getUsageWindow(days);
+    const [summary, daily, users] = await Promise.all([
+      AnalyticsService.getUsageSummary(days),
+      AnalyticsService.aggregateDaily(days),
+      UserRegistryService.getAllUsers(),
+    ]);
 
-    res.json({
-      summary: AnalyticsService.summarize(records, days, truncated),
-      daily: AnalyticsService.aggregateDaily(records, days),
-      totalUsers: (await UserRegistryService.getAllUsers()).length,
-    });
+    res.json({ summary, daily, totalUsers: users.length });
   } catch (error) {
     console.error('[Admin Route] Failed to build usage summary:', error);
     res.status(500).json({ error: 'Failed to load usage summary.' });
@@ -138,13 +136,10 @@ router.get('/usage/summary', async (req: AuthenticatedRequest, res: Response) =>
 router.get('/usage/by-user', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const days = parseWindowDays(req.query.days);
-    const [{ records, truncated }, users] = await Promise.all([
-      AnalyticsService.getUsageWindow(days),
-      UserRegistryService.getAllUsers(),
-    ]);
+    const [aggregates, users] = await Promise.all([AnalyticsService.aggregateByUser(days), UserRegistryService.getAllUsers()]);
 
     const byUid = new Map(users.map((user) => [user.uid, user]));
-    const aggregates = AnalyticsService.aggregateByUser(records).map((entry) => {
+    const enriched = aggregates.map((entry) => {
       const user = byUid.get(entry.userId);
       return {
         ...entry,
@@ -154,7 +149,7 @@ router.get('/usage/by-user', async (req: AuthenticatedRequest, res: Response) =>
       };
     });
 
-    res.json({ windowDays: days, truncated, users: aggregates, count: aggregates.length });
+    res.json({ windowDays: days, truncated: false, users: enriched, count: enriched.length });
   } catch (error) {
     console.error('[Admin Route] Failed to build per-user usage:', error);
     res.status(500).json({ error: 'Failed to load per-user usage.' });
@@ -167,10 +162,9 @@ router.get('/usage/by-user', async (req: AuthenticatedRequest, res: Response) =>
 router.get('/usage/by-model', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const days = parseWindowDays(req.query.days);
-    const { records, truncated } = await AnalyticsService.getUsageWindow(days);
-    const models = AnalyticsService.aggregateByModel(records);
+    const models = await AnalyticsService.aggregateByModel(days);
 
-    res.json({ windowDays: days, truncated, models, count: models.length });
+    res.json({ windowDays: days, truncated: false, models, count: models.length });
   } catch (error) {
     console.error('[Admin Route] Failed to build per-model usage:', error);
     res.status(500).json({ error: 'Failed to load per-model usage.' });
@@ -186,10 +180,9 @@ router.get('/usage/by-model', async (req: AuthenticatedRequest, res: Response) =
 router.get('/usage/by-purpose', async (req: AuthenticatedRequest, res: Response) => {
   try {
     const days = parseWindowDays(req.query.days);
-    const { records, truncated } = await AnalyticsService.getUsageWindow(days);
-    const purposes = AnalyticsService.aggregateByPurpose(records);
+    const purposes = await AnalyticsService.aggregateByPurpose(days);
 
-    res.json({ windowDays: days, truncated, purposes, count: purposes.length });
+    res.json({ windowDays: days, truncated: false, purposes, count: purposes.length });
   } catch (error) {
     console.error('[Admin Route] Failed to build per-purpose usage:', error);
     res.status(500).json({ error: 'Failed to load per-purpose usage.' });
@@ -199,12 +192,8 @@ router.get('/usage/by-purpose', async (req: AuthenticatedRequest, res: Response)
 /**
  * GET /api/v1/admin/usage/records?userId=&limit=&days=
  * Session-level drill-down: the individual logged requests behind the
- * aggregates above.
- *
- * `userId` is applied in process rather than as a second `where()` clause on
- * purpose - `where('userId','==',x).orderBy('timestamp')` needs a composite
- * index that isn't provisioned in this repo (see PROJECT_CONTEXT.md's known
- * gaps), whereas the timestamp-only query here needs none.
+ * aggregates above. `truncated` is now an exact COUNT(*), not a scan-cap
+ * guess (see AnalyticsService.getUsageRecords).
  */
 router.get('/usage/records', async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -212,19 +201,15 @@ router.get('/usage/records', async (req: AuthenticatedRequest, res: Response) =>
     const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 500);
     const userId = typeof req.query.userId === 'string' && req.query.userId ? req.query.userId : null;
 
-    const { records, truncated } = await AnalyticsService.getUsageWindow(days);
-
-    const filtered = userId
-      ? records.filter((record) => (record.userId ?? 'anonymous') === userId)
-      : records;
+    const { records, totalMatching, truncated } = await AnalyticsService.getUsageRecords(days, userId, limit);
 
     res.json({
       windowDays: days,
       userId,
       truncated,
-      records: filtered.slice(0, limit),
-      count: Math.min(filtered.length, limit),
-      totalMatching: filtered.length,
+      records,
+      count: records.length,
+      totalMatching,
     });
   } catch (error) {
     console.error('[Admin Route] Failed to load usage records:', error);
@@ -265,7 +250,7 @@ router.get('/models/catalog', async (req: AuthenticatedRequest, res: Response) =
 
 /**
  * GET /api/v1/admin/models/config
- * Reads the active dynamic model configuration from Firestore.
+ * Reads the active dynamic model configuration from Postgres.
  */
 router.get('/models/config', async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -279,7 +264,7 @@ router.get('/models/config', async (req: AuthenticatedRequest, res: Response) =>
 
 /**
  * PUT /api/v1/admin/models/config
- * Updates the active model configuration (enabled models, default model) in Firestore.
+ * Updates the active model configuration (enabled models, default model) in Postgres.
  */
 router.put('/models/config', async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -300,7 +285,7 @@ router.put('/models/config', async (req: AuthenticatedRequest, res: Response) =>
 /**
  * GET /api/v1/admin/limits
  * Reads the active operational limits (rate limits + upload size/count
- * caps) from Firestore - see services/system-limits.service.ts.
+ * caps) from Postgres - see services/system-limits.service.ts.
  */
 router.get('/limits', async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -314,7 +299,7 @@ router.get('/limits', async (req: AuthenticatedRequest, res: Response) => {
 
 /**
  * PUT /api/v1/admin/limits
- * Updates the operational limits in Firestore. Every field is clamped to a
+ * Updates the operational limits in Postgres. Every field is clamped to a
  * hard safety range by SystemLimitsService.saveLimits() itself, so a
  * malformed/out-of-range value here can't lock everyone out or open an
  * unbounded upload hole - it's silently clamped rather than rejected.

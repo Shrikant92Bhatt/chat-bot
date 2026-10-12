@@ -17,7 +17,7 @@ describe('VectorDbAdapter Unit Tests', () => {
     await adapter.addDocument('doc-1', 'user-123', 'TypeScript monorepo architecture and Angular signals');
     await adapter.addDocument('doc-2', 'user-999', 'Unrelated Python machine learning document');
 
-    expect(adapter.size(scope)).toBe(1);
+    expect(await adapter.size(scope)).toBe(1);
 
     const queryVector = await adapter.embedText('Angular signals architecture');
     const results = await adapter.similaritySearch(scope, queryVector, 5);

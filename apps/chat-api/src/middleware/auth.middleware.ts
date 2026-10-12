@@ -170,7 +170,7 @@ export async function authenticateToken(
 
 /**
  * Allows a limited number of anonymous messages per IP per day (tracked
- * server-side via Firestore so it survives a page reload, cleared browser
+ * server-side via Postgres so it survives a page reload, cleared browser
  * storage, a redeploy, AND is consistent across Cloud Run's multiple
  * concurrent instances), then requires Google Sign-In. A valid Bearer token
  * bypasses the anonymous trial. Signed-in users still have a global daily

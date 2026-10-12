@@ -37,7 +37,7 @@ export interface BuiltContext {
  * These four used to be four separate would-be rewrites of the same code
  * path; keeping them here means the ordering, the token budget, and the
  * failure behaviour are decided once. Every sub-step fails soft: a broken
- * Firestore or a missing LLM key degrades the answer, it does not break the
+ * database or a missing LLM key degrades the answer, it does not break the
  * turn.
  */
 export async function buildContext(request: ContextRequest): Promise<BuiltContext> {

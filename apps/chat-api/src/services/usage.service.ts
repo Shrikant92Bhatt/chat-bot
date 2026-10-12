@@ -1,14 +1,11 @@
 import * as crypto from 'crypto';
-import { firestore } from '../db/firestore';
+import { query } from '../db/postgres';
 import { ModelConfigService } from './model-config.service';
 
 /**
- * Per-request token/cost logging, one record per completed chat request.
- * Firestore-backed, following the same collection-per-service pattern as
- * ThreadService/UserRegistryService. There was no usage/cost tracking
- * anywhere in the codebase before this - see orchestration/graph.ts
- * (streamGraphResponse) for where this gets called, once the token usage
- * data for the turn is known.
+ * Per-request token/cost logging, one row per completed chat request. See
+ * orchestration/graph.ts (streamGraphResponse) for where this gets called,
+ * once the token usage data for the turn is known.
  */
 
 /**
@@ -75,11 +72,37 @@ export function estimateCostUsd(model: string, inputTokens: number | null, outpu
   return Math.round(cost * 1e8) / 1e8; // keep sub-cent precision, avoid float noise
 }
 
-export class UsageService {
-  private static usageCollection() {
-    return firestore.collection('usage');
-  }
+interface UsageRow {
+  request_id: string;
+  user_id: string | null;
+  tenant_id: string | null;
+  conversation_id: string | null;
+  model: string;
+  purpose: UsagePurpose;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  latency_ms: number;
+  estimated_cost_usd: number | null;
+  created_at: number;
+}
 
+function toUsageRecord(row: UsageRow): UsageRecord {
+  return {
+    requestId: row.request_id,
+    userId: row.user_id,
+    tenantId: row.tenant_id,
+    conversationId: row.conversation_id,
+    model: row.model,
+    purpose: row.purpose,
+    inputTokens: row.input_tokens,
+    outputTokens: row.output_tokens,
+    latencyMs: row.latency_ms,
+    estimatedCostUsd: row.estimated_cost_usd,
+    timestamp: row.created_at,
+  };
+}
+
+export class UsageService {
   /**
    * Logs one usage record. Fire-and-forget from the caller's perspective is
    * NOT used here - callers await this, but a logging failure must never
@@ -93,7 +116,27 @@ export class UsageService {
     const timestamp = Date.now();
     const estimatedCostUsd = estimateCostUsd(record.model, record.inputTokens, record.outputTokens);
 
-    const fullRecord: UsageRecord = {
+    await query(
+      `
+      INSERT INTO usage (request_id, user_id, tenant_id, conversation_id, model, purpose, input_tokens, output_tokens, latency_ms, estimated_cost_usd, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `,
+      [
+        requestId,
+        record.userId,
+        record.tenantId ?? null,
+        record.conversationId,
+        record.model,
+        record.purpose,
+        record.inputTokens,
+        record.outputTokens,
+        record.latencyMs,
+        estimatedCostUsd,
+        timestamp,
+      ]
+    );
+
+    return {
       requestId,
       userId: record.userId,
       tenantId: record.tenantId ?? null,
@@ -106,19 +149,11 @@ export class UsageService {
       estimatedCostUsd,
       timestamp,
     };
-
-    await this.usageCollection().doc(requestId).set(fullRecord);
-    return fullRecord;
   }
 
   /** Returns the most recent usage records for a given user, newest first. */
   public static async getRecentUsageForUser(uid: string, limit = 50): Promise<UsageRecord[]> {
-    const snapshot = await this.usageCollection()
-      .where('userId', '==', uid)
-      .orderBy('timestamp', 'desc')
-      .limit(limit)
-      .get();
-
-    return snapshot.docs.map((doc) => doc.data() as UsageRecord);
+    const rows = await query<UsageRow>('SELECT * FROM usage WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2', [uid, limit]);
+    return rows.map(toUsageRecord);
   }
 }

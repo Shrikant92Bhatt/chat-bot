@@ -1,12 +1,12 @@
-import { firestore } from '../db/firestore';
+import { query } from '../db/postgres';
 import { SystemLimitsDto } from '@chat-monorepo/shared';
 
 /**
- * Firestore-backed, admin-editable operational limits — mirrors
- * ModelConfigService's pattern exactly (single `settings/{doc}` document +
- * in-memory TTL cache) so every hot-path read (rate-limit checks on every
- * chat turn, upload-size checks on every upload) stays a cache hit instead
- * of a Firestore round trip.
+ * Postgres-backed, admin-editable operational limits — mirrors
+ * ModelConfigService's pattern exactly (single `settings` row + in-memory
+ * TTL cache) so every hot-path read (rate-limit checks on every chat turn,
+ * upload-size checks on every upload) stays a cache hit instead of a
+ * database round trip.
  *
  * DEFAULT_LIMITS preserves the exact values these used to be hardcoded/
  * env-only at, so an app that's never had an admin touch this screen
@@ -40,8 +40,7 @@ function clamp(value: unknown, fallback: number, bounds: { min: number; max: num
 }
 
 export class SystemLimitsService {
-  private static readonly SETTINGS_COLLECTION = 'settings';
-  private static readonly LIMITS_DOC = 'system_limits';
+  private static readonly SETTINGS_KEY = 'system_limits';
 
   private static cached: SystemLimitsDto | null = null;
   private static cachedAt = 0;
@@ -54,16 +53,15 @@ export class SystemLimitsService {
     }
 
     try {
-      const doc = await firestore.collection(this.SETTINGS_COLLECTION).doc(this.LIMITS_DOC).get();
-      if (doc.exists) {
-        const data = doc.data() as Partial<SystemLimitsDto>;
-        const merged: SystemLimitsDto = { ...DEFAULT_LIMITS, ...data };
+      const rows = await query<{ value: Partial<SystemLimitsDto> }>('SELECT value FROM settings WHERE key = $1', [this.SETTINGS_KEY]);
+      if (rows[0]) {
+        const merged: SystemLimitsDto = { ...DEFAULT_LIMITS, ...rows[0].value };
         this.cached = merged;
         this.cachedAt = now;
         return merged;
       }
     } catch (error) {
-      console.warn('[SystemLimitsService] Failed to read limits from Firestore, using defaults:', error);
+      console.warn('[SystemLimitsService] Failed to read limits from Postgres, using defaults:', error);
     }
 
     this.cached = DEFAULT_LIMITS;
@@ -86,7 +84,10 @@ export class SystemLimitsService {
       updatedAt: Date.now(),
     };
 
-    await firestore.collection(this.SETTINGS_COLLECTION).doc(this.LIMITS_DOC).set(merged);
+    await query(
+      'INSERT INTO settings (key, value) VALUES ($1, $2::jsonb) ON CONFLICT (key) DO UPDATE SET value = $2::jsonb',
+      [this.SETTINGS_KEY, JSON.stringify(merged)]
+    );
 
     this.cached = merged;
     this.cachedAt = Date.now();

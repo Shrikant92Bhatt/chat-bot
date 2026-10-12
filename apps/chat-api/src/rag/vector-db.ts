@@ -1,21 +1,9 @@
+import { query } from '../db/postgres';
+
 export interface VectorQueryResult {
   id: string;
   score: number;
   content: string;
-  metadata?: Record<string, unknown>;
-}
-
-interface StoredDocument {
-  id: string;
-  ownerId: string;
-  /**
-   * Project this document belongs to, or null for the user's personal
-   * knowledge base. Project documents are only ever retrievable from a
-   * conversation scoped to that same project (see similaritySearch).
-   */
-  projectId: string | null;
-  content: string;
-  vector: number[];
   metadata?: Record<string, unknown>;
 }
 
@@ -27,27 +15,42 @@ export interface SearchScope {
 
 const EMBEDDING_DIMS = 256;
 
+interface RagDocumentRow {
+  id: string;
+  content: string;
+  metadata: Record<string, unknown> | null;
+  score: number;
+}
+
+/** pgvector has no native JS binding - `vector` columns are written/read as
+ *  the literal text form `[0.1,0.2,...]`, cast with `::vector` in SQL. */
+function toVectorLiteral(vector: number[]): string {
+  return `[${vector.join(',')}]`;
+}
+
 /**
- * In-memory vector store with a lightweight, dependency-free hashing
- * embedding (bag-of-words hashed into a fixed-size vector, L2-normalized).
- * This is a real, working similarity search — just not backed by an
- * external vector database (no Pinecone/Weaviate/etc. credentials are
- * configured for this project). Swap embedText()/similaritySearch() for a
- * managed vector DB client if one is provisioned later.
+ * Persisted vector store, backed by Postgres + pgvector.
+ *
+ * Replaces a per-process, in-memory store that had a documented limitation:
+ * lost on every restart/redeploy, and inconsistent across multiple
+ * concurrent instances. That was already a real gap on Cloud Run; on
+ * Vercel's serverless functions - which recycle instances far more
+ * aggressively, with no guarantee two requests even hit the same warm
+ * instance - it meant uploaded knowledge bases could vanish mid-session.
+ * Persisting to Postgres fixes that outright, independent of which compute
+ * platform runs the API.
+ *
+ * The embedding itself is UNCHANGED: still the lightweight, dependency-free
+ * hashing embedding below (bag-of-words hashed into a fixed-size vector,
+ * L2-normalized) - captures word overlap, not real semantic similarity.
+ * Swapping in a real embeddings model is a separate, bigger change; this
+ * pass is about making whatever embedding exists actually survive a
+ * restart, not about embedding quality.
  *
  * Documents are scoped by ownerId (the uploading user's uid) so one user's
  * uploaded knowledge never leaks into another user's chat context.
- *
- * KNOWN LIMITATION: this is per-process, in-memory state. On Cloud Run
- * with more than one instance/replica, a document uploaded to one instance
- * won't be visible to a chat request served by a different instance, and
- * everything is lost on restart/redeploy. Fine for a single-instance dev
- * setup; move to a persisted store (Firestore + a real embeddings model)
- * before relying on this for production knowledge bases.
  */
 export class VectorDbAdapter {
-  private documents: StoredDocument[] = [];
-
   async embedText(text: string): Promise<number[]> {
     const vector = new Array(EMBEDDING_DIMS).fill(0);
     const tokens = text.toLowerCase().match(/[a-z0-9]+/g) || [];
@@ -74,56 +77,65 @@ export class VectorDbAdapter {
     const vector = await this.embedText(content);
     // Re-ingesting the same id (e.g. after a project rehydration) replaces
     // rather than duplicates the document.
-    this.documents = this.documents.filter((d) => d.id !== id);
-    this.documents.push({ id, ownerId, projectId, content, vector, metadata });
+    await query(
+      `
+      INSERT INTO rag_documents (id, owner_id, project_id, content, embedding, metadata, created_at)
+      VALUES ($1, $2, $3, $4, $5::vector, $6::jsonb, $7)
+      ON CONFLICT (id) DO UPDATE SET
+        owner_id = $2, project_id = $3, content = $4, embedding = $5::vector, metadata = $6::jsonb, created_at = $7
+      `,
+      [id, ownerId, projectId, content, toVectorLiteral(vector), metadata ? JSON.stringify(metadata) : null, Date.now()]
+    );
   }
 
   /**
    * Visibility rule: a document is searchable when the requester owns it AND
-   * it is either personal (projectId === null) or belongs to the project the
+   * it is either personal (project_id IS NULL) or belongs to the project the
    * conversation is scoped to. A project's files therefore never surface in
-   * a conversation outside that project, nor in another project.
+   * a conversation outside that project, nor in another project. Expressed
+   * directly in SQL below - `project_id = $3` is never true when $3 is NULL,
+   * so an unscoped search (no projectId) naturally only matches personal docs.
    */
-  private inScope(doc: StoredDocument, scope: SearchScope): boolean {
-    if (doc.ownerId !== scope.ownerId) return false;
-    if (doc.projectId === null) return true;
-    return !!scope.projectId && doc.projectId === scope.projectId;
-  }
-
   async similaritySearch(scope: SearchScope, queryVector: number[], topK = 5): Promise<VectorQueryResult[]> {
-    const visible = this.documents.filter((doc) => this.inScope(doc, scope));
-    if (visible.length === 0) {
-      return [];
-    }
+    const rows = await query<RagDocumentRow>(
+      `
+      SELECT id, content, metadata, 1 - (embedding <=> $1::vector) AS score
+      FROM rag_documents
+      WHERE owner_id = $2 AND (project_id IS NULL OR project_id = $3)
+      ORDER BY embedding <=> $1::vector ASC
+      LIMIT $4
+      `,
+      [toVectorLiteral(queryVector), scope.ownerId, scope.projectId ?? null, topK]
+    );
 
-    const scored = visible.map((doc) => ({
-      id: doc.id,
-      content: doc.content,
-      metadata: doc.metadata,
-      score: cosineSimilarity(queryVector, doc.vector),
+    return rows.map((row) => ({
+      id: row.id,
+      content: row.content,
+      metadata: row.metadata ?? undefined,
+      score: row.score,
     }));
-
-    return scored.sort((a, b) => b.score - a.score).slice(0, topK);
   }
 
   isConnected(): boolean {
     return true;
   }
 
-  size(scope?: SearchScope): number {
-    if (!scope) return this.documents.length;
-    return this.documents.filter((d) => this.inScope(d, scope)).length;
+  async size(scope?: SearchScope): Promise<number> {
+    if (!scope) {
+      const rows = await query<{ count: number }>('SELECT COUNT(*)::int AS count FROM rag_documents');
+      return rows[0]?.count ?? 0;
+    }
+    const rows = await query<{ count: number }>(
+      'SELECT COUNT(*)::int AS count FROM rag_documents WHERE owner_id = $1 AND (project_id IS NULL OR project_id = $2)',
+      [scope.ownerId, scope.projectId ?? null]
+    );
+    return rows[0]?.count ?? 0;
   }
 
-  hasProjectDocuments(projectId: string): boolean {
-    return this.documents.some((d) => d.projectId === projectId);
+  async hasProjectDocuments(projectId: string): Promise<boolean> {
+    const rows = await query<{ exists: boolean }>('SELECT EXISTS(SELECT 1 FROM rag_documents WHERE project_id = $1) AS exists', [
+      projectId,
+    ]);
+    return rows[0]?.exists ?? false;
   }
-}
-
-function cosineSimilarity(a: number[], b: number[]): number {
-  let dot = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-  }
-  return dot;
 }
