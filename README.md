@@ -139,11 +139,11 @@ The role shown to the frontend is display-only (it decides whether to show the n
 
 chat-client (static Angular build) and chat-api (as a serverless function at [`api/index.ts`](api/index.ts)) deploy together as **one Vercel project** — see [`vercel.json`](vercel.json) and [`VERCEL_MIGRATION.md`](VERCEL_MIGRATION.md) for the one-time setup (env vars, secrets, connecting the repo). Once connected, Vercel's own GitHub integration builds and deploys on every push — no GitHub Actions step required for either app.
 
-The `code_interpreter` tool's `isolated-vm` sandbox is the one piece that can't run in a Vercel function (it's a native addon), so it stays on a small container host as [`infra/sandbox-service`](infra/sandbox-service), deployed via [`cloudbuild-sandbox.yaml`](cloudbuild-sandbox.yaml). chat-api reaches it over HTTP via `CODE_SANDBOX_SERVICE_URL` (see [`apps/chat-api/src/tools/code-sandbox.ts`](apps/chat-api/src/tools/code-sandbox.ts)).
+The `code_interpreter` tool's `isolated-vm` sandbox is the one piece that can't run in a Vercel function (it's a native addon), so it runs as a container: [`infra/sandbox-service`](infra/sandbox-service) is the internal `sandbox` service in [`vercel.json`](vercel.json), deployed by Vercel alongside the `web` and `api` services. chat-api reaches it over HTTP via `CODE_SANDBOX_SERVICE_URL`, which the `api` service's binding injects (see [`apps/chat-api/src/tools/code-sandbox.ts`](apps/chat-api/src/tools/code-sandbox.ts)).
 
 Firestore and Cloud Storage (GCS) are unaffected by this migration and continue to run as-is (they're pay-per-use, not the source of Cloud Run's cost).
 
-There's no Terraform/IaC layer — the sandbox service's infrastructure is created and managed directly via the `gcloud` commands in `cloudbuild-sandbox.yaml` and `.github/workflows/ci-cd.yml`; the Vercel project's settings live in the Vercel dashboard.
+There's no Terraform/IaC layer — all three services are defined in `vercel.json`; the remaining project settings (env vars, domains) live in the Vercel dashboard.
 
 ---
 

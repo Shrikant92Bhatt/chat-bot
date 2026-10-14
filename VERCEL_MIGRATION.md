@@ -69,22 +69,7 @@ Treat this file like any other credential — don't commit it, don't paste it an
 
 ### 4. The sandbox microservice
 
-**On Vercel this is now automatic:** `infra/sandbox-service` deploys as the internal `sandbox` service with `runtime: "container"`, built from its own Dockerfile (isolated-vm is a native addon, so it can't be a regular function, but it runs fine in a container). It has no public route; only `api` can reach it, through the binding. Skip the rest of this step unless you want to keep running it on Cloud Run instead, as below:
-
-1. Generate a shared secret: `openssl rand -hex 32`.
-2. Add it to GCP Secret Manager as `CODE_SANDBOX_SERVICE_SECRET` (the CI workflow already expects a secret by that name, using your existing `GCP_SA_KEY` GitHub Actions credential).
-3. Trigger the deploy — either push a no-op change under `infra/sandbox-service/` to let `.github/workflows/ci-cd.yml`'s `deploy-sandbox-service` job run, or do it manually once:
-   ```bash
-   gcloud builds submit --config=cloudbuild-sandbox.yaml
-   gcloud run deploy sandbox-service \
-     --image=asia-south1-docker.pkg.dev/<project>/chat-repo/sandbox-service:latest \
-     --region=asia-south1 --platform=managed --allow-unauthenticated \
-     --memory=512Mi --cpu=1 --concurrency=10 --min-instances=0 --max-instances=5 --timeout=30 \
-     --set-secrets="CODE_SANDBOX_SERVICE_SECRET=CODE_SANDBOX_SERVICE_SECRET:latest"
-   ```
-4. Copy the deployed service's URL into Vercel's `CODE_SANDBOX_SERVICE_URL`, and the same secret value into Vercel's `CODE_SANDBOX_SERVICE_SECRET`.
-
-`--min-instances=0` means it scales to zero and costs ~nothing when nobody's running code — this should be a small fraction of what the two full-time Cloud Run services cost today.
+Nothing to do: `infra/sandbox-service` deploys as the internal `sandbox` service with `runtime: "container"`, built from its own Dockerfile (isolated-vm is a native addon, so it can't be a regular function, but it runs fine in a container). It has no public route; only `api` can reach it, through the binding that injects `CODE_SANDBOX_SERVICE_URL`. The old Cloud Run deploy of it (`cloudbuild-sandbox.yaml` and its CI job) has been removed; if a `sandbox-service` Cloud Run service is still running, delete it in step 7.
 
 ### 5. Update Google OAuth allowed origins
 
@@ -101,8 +86,8 @@ Once the first deploy succeeds:
 
 Only after step 6 passes:
 1. Vercel → Project → Domains → add your custom domain (or keep using the free `*.vercel.app` one), update DNS as Vercel instructs.
-2. Delete the old Cloud Run services — this is what actually stops the Cloud Run billing: `gcloud run services delete chat-api --region=asia-south1` and `gcloud run services delete chat-client --region=asia-south1`.
+2. Delete the old Cloud Run services — this is what actually stops the Cloud Run billing: `gcloud run services delete chat-api --region=asia-south1`, `gcloud run services delete chat-client --region=asia-south1`, and `gcloud run services delete sandbox-service --region=asia-south1` if it was ever deployed.
 3. Delete the external HTTPS load balancer + static IP + forwarding rules that fronted them (mentioned in the old README) — this fixed monthly cost often exceeds Cloud Run's own usage-based cost, and it has no equivalent needed on Vercel (custom domains + HTTPS are included).
-4. Optionally clean up the old `chat-api`/`chat-client` images in Artifact Registry to stop storage charges (the `sandbox-service` image stays, in the same `chat-repo` repository).
+4. Optionally clean up the old `chat-api`/`chat-client`/`sandbox-service` images in Artifact Registry to stop storage charges.
 
 I can't perform any of steps 1–7 myself — I don't have access to your Vercel account or GCP console from here. Everything in this repo is ready for you to point at once you've done the account-side setup above.

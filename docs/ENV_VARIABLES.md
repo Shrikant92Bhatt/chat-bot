@@ -63,7 +63,6 @@ Every variable `chat-api` reads, generated from the code (`process.env.*`). Past
 | Secret | Used by |
 |---|---|
 | `VERSION_BUMP_TOKEN` | Fine-grained PAT, this repo, Contents: read & write. Lets version-bump commits trigger CI without manual approval |
-| `GCP_SA_KEY` | Sandbox-service deploy job (already set) |
 
 ## Where to get each external credential
 
