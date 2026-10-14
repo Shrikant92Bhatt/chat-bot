@@ -6,7 +6,9 @@ import { ChatWindowComponent } from './components/chat-window/chat-window.compon
 import { MessageInputComponent } from './components/message-input/message-input.component';
 import { SessionExpiredModalComponent } from './components/session-expired-modal/session-expired-modal.component';
 import { LoginErrorToastComponent } from './components/login-error-toast/login-error-toast.component';
-import { SettingsModalComponent } from './components/settings-modal/settings-modal.component';
+import { SettingsModalComponent, SettingsTab } from './components/settings-modal/settings-modal.component';
+import { McpConsentModalComponent } from './components/mcp-consent-modal/mcp-consent-modal.component';
+import { connectorErrorMessage } from './services/connector.service';
 import { ProjectsModalComponent } from './components/projects-modal/projects-modal.component';
 import { AdminDashboardComponent } from '@chat-monorepo/admin-analytics';
 import { AuthService } from './services/auth.service';
@@ -23,6 +25,7 @@ import { AuthService } from './services/auth.service';
     SessionExpiredModalComponent,
     LoginErrorToastComponent,
     SettingsModalComponent,
+    McpConsentModalComponent,
     ProjectsModalComponent,
     AdminDashboardComponent,
   ],
@@ -31,6 +34,10 @@ import { AuthService } from './services/auth.service';
 })
 export class AppComponent implements OnInit, OnDestroy {
   public isSettingsOpen = false;
+  public settingsTab: SettingsTab = 'general';
+  public connectorNotice: { kind: 'success' | 'error'; message: string } | null = null;
+  /** Signed MCP consent request when an external client (ChatGPT) sent the user here. */
+  public mcpConsentRequest: string | null = null;
   public isProjectsOpen = false;
   public isAdminViewOpen = false;
   public initialAdminView = 'overview';
@@ -40,6 +47,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    this.consumeConnectorRedirect();
     const path = window.location.pathname;
     if (path.startsWith('/admin')) {
       this.isAdminViewOpen = true;
@@ -76,11 +84,41 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   public openSettings() {
+    this.settingsTab = 'general';
+    this.connectorNotice = null;
     this.isSettingsOpen = true;
   }
 
   public closeSettings() {
     this.isSettingsOpen = false;
+  }
+
+  /**
+   * Handles the two ways the browser lands back here from an external flow:
+   * the connector OAuth callback (`?connectorStatus=...`, opens Settings →
+   * Connectors with the result) and an MCP client's authorization request
+   * (`?mcpConsent=...`, opens the consent dialog). The query is stripped
+   * from the URL right away so a reload doesn't replay it.
+   */
+  private consumeConnectorRedirect(): void {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get('connectorStatus');
+    const consent = params.get('mcpConsent');
+    if (!status && !consent) return;
+
+    if (status) {
+      this.settingsTab = 'connectors';
+      this.connectorNotice =
+        status === 'connected'
+          ? { kind: 'success', message: `${params.get('connector') ?? 'Account'} connected.` }
+          : { kind: 'error', message: connectorErrorMessage(params.get('connectorError')) };
+      this.isSettingsOpen = true;
+    }
+    if (consent) this.mcpConsentRequest = consent;
+
+    for (const key of ['connectorStatus', 'connector', 'connectorError', 'mcpConsent']) params.delete(key);
+    const query = params.toString();
+    this.location.replaceState(window.location.pathname + (query ? `?${query}` : ''));
   }
 
   public openProjects() {

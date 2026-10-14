@@ -15,6 +15,8 @@ import {
   CodeBlockData,
   ErrorCardData,
   ConfirmationCardData,
+  ConnectorResultCardData,
+  ApprovalSummary,
 } from '@chat-monorepo/shared';
 
 /**
@@ -192,6 +194,34 @@ export class ResponseRendererService {
   }
 
   /**
+   * Type guard: Is this data a valid CONNECTOR_RESULT payload? (Server-built only.)
+   */
+  isConnectorResultData(data: unknown): data is ConnectorResultCardData {
+    if (!data || typeof data !== 'object') return false;
+    const obj = data as Record<string, unknown>;
+    return (
+      typeof obj.connectorId === 'string' &&
+      typeof obj.toolName === 'string' &&
+      ['success', 'empty', 'partial', 'error'].includes(obj.status as string)
+    );
+  }
+
+  /**
+   * Type guard: Is this data a valid APPROVAL_REQUEST payload? (Server-built only.)
+   */
+  isApprovalRequestData(data: unknown): data is ApprovalSummary {
+    if (!data || typeof data !== 'object') return false;
+    const obj = data as Record<string, unknown>;
+    return (
+      typeof obj.id === 'string' &&
+      typeof obj.summary === 'string' &&
+      typeof obj.state === 'string' &&
+      typeof obj.expiresAt === 'number' &&
+      Array.isArray(obj.details)
+    );
+  }
+
+  /**
    * Auto-detects the UIComponentType for a given data object.
    * Uses a priority-based detection strategy:
    * 1. Check for specific field combinations that identify a type
@@ -250,6 +280,10 @@ export class ResponseRendererService {
         return this.isErrorCardData(component.data);
       case 'CONFIRMATION_CARD':
         return this.isConfirmationCardData(component.data);
+      case 'CONNECTOR_RESULT':
+        return this.isConnectorResultData(component.data);
+      case 'APPROVAL_REQUEST':
+        return this.isApprovalRequestData(component.data);
       case 'TEXT':
       case 'MARKDOWN':
         // TEXT/MARKDOWN accept any object with a 'text' field

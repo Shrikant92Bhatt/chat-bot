@@ -5,6 +5,7 @@ import { createOmniRouteChatModel } from '../llm/client';
 import { McpAdapter } from '../mcp/adapter';
 import { buildSystemPrompt } from '../prompt/prompt-manager';
 import { normalizeToolResultForUi } from './ui-tool-adapter';
+import { ConnectorConfig } from '../connectors/connector-config';
 
 const mcpAdapter = new McpAdapter();
 
@@ -24,7 +25,10 @@ const mcpAdapter = new McpAdapter();
  * no inline prompt strings here.
  */
 export function assembleAgentMessages(state: AgentState): BaseMessage[] {
-  const systemPrompt = buildSystemPrompt(state.assembledContext ?? {}, { mcpEnabled: state.mcpEnabled });
+  const systemPrompt = buildSystemPrompt(state.assembledContext ?? {}, {
+    mcpEnabled: state.mcpEnabled,
+    connectorsEnabled: Boolean(state.userId) && ConnectorConfig.enabled(),
+  });
 
   // Drop any SystemMessages already in the history: the Prompt Manager owns
   // the system layer now, and a client-supplied one would silently compete
@@ -41,7 +45,7 @@ export function assembleAgentMessages(state: AgentState): BaseMessage[] {
  */
 export async function agentNode(state: AgentState): Promise<AgentStateUpdate> {
   const model = createOmniRouteChatModel(state.model, state.temperature);
-  const modelWithTools = state.mcpEnabled ? model.bindTools(await mcpAdapter.getTools()) : model;
+  const modelWithTools = state.mcpEnabled ? model.bindTools(await mcpAdapter.getTools({ userId: state.userId })) : model;
 
   const response = await modelWithTools.invoke(assembleAgentMessages(state));
   return { messages: [response] };
@@ -61,7 +65,7 @@ export async function toolsNode(state: AgentState): Promise<AgentStateUpdate> {
   const pendingUiEvents: UIStreamEvent[] = [];
 
   for (const call of toolCalls) {
-    const result = await mcpAdapter.executeTool(call.name, call.args as Record<string, unknown>);
+    const result = await mcpAdapter.executeTool(call.name, call.args as Record<string, unknown>, { userId: state.userId });
 
     if (call.name === 'generate_image') {
       try {

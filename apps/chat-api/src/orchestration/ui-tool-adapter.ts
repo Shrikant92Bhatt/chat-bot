@@ -1,5 +1,12 @@
-import { StockCardData, UIComponentType, WeatherCardData } from '@chat-monorepo/shared';
+import {
+  ConnectorResultCardData,
+  ConnectorToolResult,
+  StockCardData,
+  UIComponentType,
+  WeatherCardData,
+} from '@chat-monorepo/shared';
 import { isWeatherCardData, isStockCardData } from './response-discriminator';
+import { getConnectorPlatform } from '../connectors/connector-platform';
 
 /**
  * Normalizes a raw MCP tool result into an approved UI component shape.
@@ -80,6 +87,9 @@ export function normalizeToolResultForUi(
   toolName: string,
   rawResult: string
 ): { componentType: UIComponentType; data: unknown } | { componentType: UIComponentType; error: string } | null {
+  if (!TOOL_UI_COMPONENT_MAP[toolName] && getConnectorPlatform().registry.isConnectorTool(toolName)) {
+    return normalizeConnectorResult(toolName, rawResult);
+  }
   const componentType = TOOL_UI_COMPONENT_MAP[toolName];
   if (!componentType) return null;
 
@@ -115,4 +125,55 @@ export function normalizeToolResultForUi(
   if (!data) return { componentType, error: 'The tool returned data in an unexpected shape.' };
 
   return { componentType, data };
+}
+
+/**
+ * Component type a tool's call streams as, or undefined for none. Connector
+ * tools are resolved from the registry: writes always render as an approval
+ * card (they never execute from a model call), reads as a CONNECTOR_RESULT.
+ */
+export function uiComponentTypeForTool(toolName: string): UIComponentType | undefined {
+  if (TOOL_UI_COMPONENT_MAP[toolName]) return TOOL_UI_COMPONENT_MAP[toolName];
+  const entry = getConnectorPlatform().registry.getTool(toolName);
+  if (!entry) return undefined;
+  return entry.tool.requiresApproval ? 'APPROVAL_REQUEST' : 'CONNECTOR_RESULT';
+}
+
+/**
+ * Connector results arrive as the executor's own validated envelope
+ * (connectors/tool-executor.ts toModelContent), so this only re-shapes - it
+ * never trusts free-form provider HTML. An approval request becomes an
+ * APPROVAL_REQUEST built from the server's stored approval record, which is
+ * the only way that component type is ever produced.
+ */
+function normalizeConnectorResult(
+  toolName: string,
+  rawResult: string
+): { componentType: UIComponentType; data: unknown } | { componentType: UIComponentType; error: string } {
+  const fallbackType = uiComponentTypeForTool(toolName) ?? 'CONNECTOR_RESULT';
+  let parsed: ConnectorToolResult;
+  try {
+    parsed = JSON.parse(rawResult) as ConnectorToolResult;
+  } catch {
+    return { componentType: fallbackType, error: 'The connector returned a response that could not be read.' };
+  }
+
+  if (parsed.approval) {
+    return { componentType: 'APPROVAL_REQUEST', data: parsed.approval };
+  }
+
+  const items = parsed.display?.items?.length ?? 0;
+  const rows = parsed.display?.table?.rows?.length ?? 0;
+  const data: ConnectorResultCardData = {
+    connectorId: parsed.connectorId,
+    toolName: parsed.toolName ?? toolName,
+    status: !parsed.ok ? 'error' : parsed.metadata?.truncated ? 'partial' : items + rows === 0 ? 'empty' : 'success',
+    ...(parsed.display ? { display: parsed.display } : {}),
+    ...(parsed.sources?.length ? { sources: parsed.sources } : {}),
+    ...(parsed.error ? { error: { code: parsed.error.code, message: parsed.error.message } } : {}),
+    ...(parsed.metadata?.truncated ? { truncated: true } : {}),
+  };
+  // Errors still render as a CONNECTOR_RESULT (with a reconnect hint), not a
+  // generic error state, so the user sees which connector and why.
+  return { componentType: 'CONNECTOR_RESULT', data };
 }

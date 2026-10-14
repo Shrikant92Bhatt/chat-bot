@@ -1,0 +1,43 @@
+<div class="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+  <div class="modal-enter bg-slate-900 border border-white/10 rounded-2xl w-full max-w-md shadow-2xl p-6" role="dialog" aria-modal="true" aria-labelledby="mcpConsentTitle">
+    <h2 id="mcpConsentTitle" class="text-lg font-semibold text-slate-100">Allow access to NexusAI?</h2>
+
+    <div *ngIf="!authService.userSignal()" class="mt-3 text-sm text-slate-400">
+      Sign in to NexusAI first, then reopen the link from the app that asked for access.
+    </div>
+
+    <div *ngIf="error()" class="mt-3 text-sm text-accentRose" role="alert">{{ error() }}</div>
+
+    <ng-container *ngIf="details() as d">
+      <p class="mt-3 text-sm text-slate-300">
+        <span class="font-semibold text-white">{{ d.clientName }}</span>
+        (returning to <span class="font-mono text-slate-200">{{ d.redirectHost }}</span>) wants to:
+      </p>
+      <ul class="mt-2 text-sm text-slate-300 list-disc pl-5 space-y-1">
+        <li>Read data from the accounts you connected in NexusAI (GitHub, Gmail, …) using read-only tools.</li>
+      </ul>
+      <p class="mt-3 text-xs text-slate-500">
+        It cannot send, post, create or trade anything, and it cannot see your NexusAI conversations or memories. You can revoke access any
+        time in Settings → Connectors → ChatGPT.
+      </p>
+      <div class="flex gap-3 mt-5">
+        <button
+          (click)="decide('approve')"
+          [disabled]="busy()"
+          class="flex-1 px-4 py-2.5 rounded-lg text-sm font-semibold bg-accentCyan text-white hover:bg-cyan-400 disabled:opacity-50"
+        >
+          Allow
+        </button>
+        <button
+          (click)="decide('deny')"
+          [disabled]="busy()"
+          class="flex-1 px-4 py-2.5 rounded-lg text-sm font-semibold bg-white/10 text-slate-300 hover:bg-white/20 disabled:opacity-50"
+        >
+          Deny
+        </button>
+      </div>
+    </ng-container>
+
+    <button (click)="closed.emit()" class="mt-4 w-full text-xs text-slate-500 hover:text-slate-300">Close</button>
+  </div>
+</div>

@@ -6,6 +6,8 @@ import chatRoutes from './routes/chat.routes';
 import authRoutes from './routes/auth.routes';
 import projectRoutes from './routes/project.routes';
 import adminRoutes from './routes/admin.routes';
+import connectorRoutes from './connectors/connector.routes';
+import { mcpAccountRouter, mcpPublicRouter, mcpStatus } from './mcp-server/mcp.routes';
 
 const app = express();
 
@@ -22,6 +24,14 @@ app.use(
 // balancer so req.ip reflects the real client IP (used for the anonymous
 // free-trial limit).
 app.set('trust proxy', true);
+
+// Remote MCP server + its OAuth endpoints (docs/MULTI_CONNECTOR_PLATFORM_PLAN.md
+// §9). Registered BEFORE the app-wide CORS below: MCP clients call these
+// cross-origin with bearer tokens only, so they carry their own open,
+// credential-less CORS policy. JSON parsing is scoped to them here because
+// they sit ahead of the global express.json().
+app.use(['/api/mcp', '/api/oauth'], express.json({ limit: '1mb' }));
+app.use(mcpPublicRouter);
 
 // Enable CORS for frontend application.
 // Only needed when chat-client is served from a different origin than
@@ -61,5 +71,10 @@ app.use('/api/v1/projects', projectRoutes);
 // Admin analytics API. Every route inside is behind authenticateToken +
 // requireAdmin (router-level, see routes/admin.routes.ts).
 app.use('/api/v1/admin', adminRoutes);
+// Multi-connector platform (docs/MULTI_CONNECTOR_PLATFORM_PLAN.md). Every route
+// except the provider OAuth callback is behind authenticateToken.
+app.use('/api/v1/connectors', connectorRoutes);
+app.get('/api/v1/mcp-oauth/status', (_req, res) => res.json(mcpStatus()));
+app.use('/api/v1/mcp-oauth', mcpAccountRouter);
 
 export default app;

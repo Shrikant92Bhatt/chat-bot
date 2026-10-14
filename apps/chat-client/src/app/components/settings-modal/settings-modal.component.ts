@@ -1,8 +1,11 @@
-import { Component, EventEmitter, Output, signal, ChangeDetectionStrategy } from '@angular/core';
+import { Component, EventEmitter, Input, OnInit, Output, signal, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ChatService } from '../../services/chat.service';
 import { AuthService } from '../../services/auth.service';
+import { ConnectorsPanelComponent } from '../connectors-panel/connectors-panel.component';
+
+export type SettingsTab = 'general' | 'personalize' | 'connectors' | 'diagnostics';
 
 /**
  * The "Storage" tab (GCS bucket size/cost) was removed from here - that view
@@ -17,14 +20,18 @@ import { AuthService } from '../../services/auth.service';
 @Component({
   selector: 'app-settings-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, ConnectorsPanelComponent],
   changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './settings-modal.component.html',
 })
-export class SettingsModalComponent {
+export class SettingsModalComponent implements OnInit {
   @Output() closeModal = new EventEmitter<void>();
+  /** Tab to open on (e.g. 'connectors' after an OAuth round-trip). */
+  @Input() initialTab: SettingsTab = 'general';
+  /** One-off message for the Connectors tab (OAuth result). */
+  @Input() connectorNotice: { kind: 'success' | 'error'; message: string } | null = null;
 
-  public activeTab = signal<'general' | 'personalize' | 'diagnostics'>('general');
+  public activeTab = signal<SettingsTab>('general');
 
   // Draft text for the "About you" textarea ([(ngModel)] needs a plain
   // property, not a signal) - kept separate from chatService.aboutMe (the
@@ -41,7 +48,11 @@ export class SettingsModalComponent {
     this.aboutMeDraft = this.chatService.aboutMe();
   }
 
-  setTab(tab: 'general' | 'personalize' | 'diagnostics') {
+  ngOnInit(): void {
+    this.activeTab.set(this.initialTab);
+  }
+
+  setTab(tab: SettingsTab) {
     this.activeTab.set(tab);
     if (tab === 'personalize') {
       this.aboutMeDraft = this.chatService.aboutMe();
