@@ -13,6 +13,8 @@ export default defineConfig(() => ({
   //   plugins: () => [ nxViteTsPaths() ],
   // },
   test: {
+    // No specs yet - an empty suite must not fail CI.
+    passWithNoTests: true,
     name: 'admin-analytics',
     watch: false,
     globals: true,

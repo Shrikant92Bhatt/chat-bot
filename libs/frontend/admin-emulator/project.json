@@ -6,13 +6,6 @@
   "projectType": "library",
   "tags": [],
   "targets": {
-    "test": {
-      "executor": "@nx/vitest:test",
-      "outputs": ["{options.reportsDirectory}"],
-      "options": {
-        "reportsDirectory": "coverage/libs/frontend/admin-emulator"
-      }
-    },
     "lint": {
       "executor": "@nx/eslint:lint"
     }
