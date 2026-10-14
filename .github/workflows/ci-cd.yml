@@ -1,16 +1,20 @@
 name: Enterprise CI/CD Pipeline
 
+# Feature branches are covered by their pull_request run; push runs only on
+# main (where the sandbox deploy job lives). The old `push: ["*"]` filter also
+# never matched branch names containing "/" (e.g. feat/x), and on branches it
+# did match it duplicated every PR run.
 on:
   push:
-    branches: ["*"]
+    branches: [main]
   pull_request:
-    branches: ["*"]
     types: [opened, synchronize, reopened]
+  workflow_dispatch:
 
-# Security Permissions Standard
+# Least privilege: nothing here uses OIDC (GCP auth is a JSON key), so no
+# id-token. Jobs that push widen this themselves.
 permissions:
   contents: read
-  id-token: write
 
 # Prevent wasteful concurrent pipeline runs on duplicate branch pushes
 concurrency:
@@ -26,7 +30,8 @@ jobs:
   version-bump:
     name: Version Bump Check
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'pull_request' }}
+    # Fork PRs can't be pushed to with this repo's token - skip rather than fail.
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
     permissions:
       contents: write
     steps:
@@ -35,6 +40,14 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
+          # A commit pushed with the default GITHUB_TOKEN is authored by
+          # github-actions[bot], and GitHub holds the CI run it triggers until
+          # someone clicks "Approve and run" - which is why PRs sat waiting
+          # after every version bump. Pushing with VERSION_BUMP_TOKEN (a
+          # fine-grained PAT or GitHub App token with Contents: read & write
+          # on this repo) makes the follow-up run start on its own. Falls back
+          # to GITHUB_TOKEN when the secret isn't set.
+          token: ${{ secrets.VERSION_BUMP_TOKEN || github.token }}
 
       - name: Bump minor version if not already ahead of main
         run: |
@@ -120,6 +133,12 @@ jobs:
 
       - name: Build Affected Projects
         run: npx nx affected -t build
+
+      # chat-api, chat-client and admin-analytics unit tests (vitest). Lint is
+      # not run yet: admin-analytics and admin-emulator import each other,
+      # which @nx/enforce-module-boundaries rejects on main as well.
+      - name: Test Affected Projects
+        run: npx nx affected -t test
 
   # Job 2: Build & deploy the sandbox microservice only (the one piece that
   # stays on a container host post-migration). Gated on push to main and on
