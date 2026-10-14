@@ -1,3 +1,5 @@
+import type { ApprovalSummary, ConnectorResultCardData } from './connector.interface';
+
 /**
  * The UI-aware orchestrator's structured response contract.
  *
@@ -28,7 +30,12 @@ export type UIComponentType =
   | 'DOCUMENT_PREVIEW'
   | 'CODE_BLOCK'
   | 'ERROR_CARD'
-  | 'CONFIRMATION_CARD';
+  | 'CONFIRMATION_CARD'
+  // Server-generated only (never accepted from the model's ```ui block - see
+  // apps/chat-api/src/orchestration/ui-schema.ts): a connector tool's
+  // normalized result, and a pending server-side approval for a write.
+  | 'CONNECTOR_RESULT'
+  | 'APPROVAL_REQUEST';
 
 export interface TextOrMarkdownData {
   text: string;
@@ -197,7 +204,9 @@ export type UIComponent =
   | { type: 'DOCUMENT_PREVIEW'; id: string; data: DocumentPreviewData }
   | { type: 'CODE_BLOCK'; id: string; data: CodeBlockData }
   | { type: 'ERROR_CARD'; id: string; data: ErrorCardData }
-  | { type: 'CONFIRMATION_CARD'; id: string; data: ConfirmationCardData };
+  | { type: 'CONFIRMATION_CARD'; id: string; data: ConfirmationCardData }
+  | { type: 'CONNECTOR_RESULT'; id: string; data: ConnectorResultCardData }
+  | { type: 'APPROVAL_REQUEST'; id: string; data: ApprovalSummary };
 
 export interface OrchestratorSource {
   title?: string;

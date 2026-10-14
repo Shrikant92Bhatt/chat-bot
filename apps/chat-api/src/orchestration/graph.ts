@@ -23,7 +23,8 @@ import { UsageService } from '../services/usage.service';
 import { UiBlockStreamFilter } from './ui-stream-filter';
 import { ToolResultLeakStreamFilter } from './tool-leak-stream-filter';
 import { extractOrchestratorUiBlock } from './ui-schema';
-import { TOOL_UI_COMPONENT_MAP } from './ui-tool-adapter';
+import { uiComponentTypeForTool } from './ui-tool-adapter';
+import { getConnectorPlatform } from '../connectors/connector-platform';
 import { ModelConfigService } from '../services/model-config.service';
 import { SystemLimitsService } from '../services/system-limits.service';
 import { AnonUsageService } from '../services/anon-usage.service';
@@ -331,7 +332,7 @@ export async function streamGraphResponse(
             const url = (call.args as { url?: string })?.url;
             if (url) emitResearch({ type: 'research_browse_start', url });
           }
-          const componentType = TOOL_UI_COMPONENT_MAP[call.name];
+          const componentType = uiComponentTypeForTool(call.name);
           if (componentType) {
             // Same id fallback as toolsNode/nodes.ts uses for this same
             // call once it resolves - see the comment there.
@@ -340,7 +341,9 @@ export async function streamGraphResponse(
         }
 
         if (toolCalls.length > 0) {
-          const labels = toolCalls.map((call) => TOOL_ACTIVITY_LABELS[call.name] ?? call.name);
+          const labels = toolCalls.map(
+            (call) => TOOL_ACTIVITY_LABELS[call.name] ?? getConnectorPlatform().registry.getTool(call.name)?.tool.title ?? call.name
+          );
           emitResearch({
             type: 'research_status',
             phase: toolCalls.some((c) => c.name === 'browse_page') ? 'browsing' : 'searching',

@@ -8,6 +8,7 @@
   },
   "rewrites": [
     { "source": "/health", "destination": "/api" },
+    { "source": "/.well-known/:path*", "destination": "/api" },
     { "source": "/api/:path*", "destination": "/api" },
     { "source": "/((?!api/|assets/|.*\\..*).*)", "destination": "/index.html" }
   ]

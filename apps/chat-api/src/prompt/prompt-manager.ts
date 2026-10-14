@@ -84,11 +84,15 @@ export const EMPTY_CONTEXT: AssembledContext = {};
  * Returns null when there is nothing at all to say (never happens today,
  * since system:v1 is unconditional, but keeps callers honest).
  */
-export function buildSystemPrompt(context: AssembledContext, options: { mcpEnabled?: boolean } = {}): string | null {
+export function buildSystemPrompt(
+  context: AssembledContext,
+  options: { mcpEnabled?: boolean; connectorsEnabled?: boolean } = {}
+): string | null {
   const blocks: string[] = [renderPrompt('system:v1'), renderPrompt('ui_orchestrator:v2')];
 
   if (options.mcpEnabled) {
     blocks.push(renderPrompt('tool_selection:v2'));
+    if (options.connectorsEnabled) blocks.push(renderPrompt('connector_policy:v1'));
   }
 
   // Anonymous users have neither field - nothing to say here, memories/

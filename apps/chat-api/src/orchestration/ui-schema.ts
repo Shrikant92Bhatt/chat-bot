@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { OrchestratorAction, OrchestratorSource, UIComponent } from '@chat-monorepo/shared';
+import { CONNECTOR_APPROVAL_ACTION_PREFIX, OrchestratorAction, OrchestratorSource, UIComponent } from '@chat-monorepo/shared';
 
 /**
  * Runtime contract for the orchestrator's structured UI payload.
@@ -166,7 +166,14 @@ const confirmationCardData = z.object({
   description: z.string().optional(),
   confirmLabel: z.string().optional(),
   cancelLabel: z.string().optional(),
-  actionId: z.string().optional(),
+  // A model-authored card must never be able to pose as a server-side
+  // connector approval (see connectors/approval-service.ts) - those are only
+  // ever rendered from APPROVAL_REQUEST components the server itself emits,
+  // which this union deliberately does not accept from the model at all.
+  actionId: z
+    .string()
+    .refine((v) => !v.startsWith(CONNECTOR_APPROVAL_ACTION_PREFIX), 'reserved action id prefix')
+    .optional(),
 });
 
 const idField = z.string().min(1).max(80);
@@ -196,7 +203,7 @@ const sourceSchema = z.object({
 });
 
 const actionSchema = z.object({
-  id: idField,
+  id: idField.refine((v) => !v.startsWith(CONNECTOR_APPROVAL_ACTION_PREFIX), 'reserved action id prefix'),
   label: z.string(),
   type: z.string().optional(),
 });
