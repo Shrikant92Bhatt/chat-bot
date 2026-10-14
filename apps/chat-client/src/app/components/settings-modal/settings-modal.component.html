@@ -11,7 +11,7 @@
     </div>
 
     <!-- Layout -->
-    <div class="flex flex-col sm:flex-row h-[400px]">
+    <div class="flex flex-col sm:flex-row h-[520px] max-h-[80vh]">
       <!-- Sidebar / Tabs -->
       <div class="w-full sm:w-48 border-b sm:border-b-0 sm:border-r border-white/5 p-2 flex flex-row sm:flex-col gap-1 overflow-x-auto sm:overflow-x-visible">
         <button 
@@ -28,6 +28,14 @@
           class="px-4 py-2 rounded-lg text-sm font-medium text-left transition-colors whitespace-nowrap"
         >
           Personalize
+        </button>
+        <button
+          *ngIf="authService.userSignal()"
+          (click)="setTab('connectors')"
+          [ngClass]="activeTab() === 'connectors' ? 'bg-white/10 text-white' : 'text-slate-400 hover:bg-white/5 hover:text-slate-300'"
+          class="px-4 py-2 rounded-lg text-sm font-medium text-left transition-colors whitespace-nowrap"
+        >
+          Connectors
         </button>
         <button
           (click)="setTab('diagnostics')"
@@ -101,6 +109,11 @@
               </div>
             </div>
           </div>
+        </div>
+
+        <!-- Connectors Tab -->
+        <div *ngIf="activeTab() === 'connectors'">
+          <app-connectors-panel [notice]="connectorNotice"></app-connectors-panel>
         </div>
 
         <!-- Diagnostics Tab -->

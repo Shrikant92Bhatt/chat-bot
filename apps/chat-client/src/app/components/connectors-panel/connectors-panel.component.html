@@ -1,0 +1,158 @@
+<div class="space-y-4">
+  <div
+    *ngIf="notice"
+    class="text-xs rounded-xl px-3 py-2"
+    [ngClass]="notice.kind === 'success' ? 'bg-emerald-500/10 text-emerald-300' : 'bg-accentRose/10 text-accentRose'"
+    role="status"
+  >
+    {{ notice.message }}
+  </div>
+  <div *ngIf="connectorService.error()" class="text-xs rounded-xl px-3 py-2 bg-accentRose/10 text-accentRose" role="alert">
+    {{ connectorService.error() }}
+  </div>
+
+  <div *ngIf="!connectorService.enabled() && !connectorService.isLoading()" class="text-sm text-slate-400 p-3 bg-white/5 rounded-xl">
+    Connectors are turned off on this server.
+  </div>
+
+  <!-- Section switcher -->
+  <div class="flex gap-1 text-xs overflow-x-auto">
+    <button
+      *ngFor="let s of ['accounts', 'approvals', 'history', 'chatgpt']"
+      (click)="section.set($any(s))"
+      [ngClass]="section() === s ? 'bg-white/10 text-white' : 'text-slate-400 hover:bg-white/5'"
+      class="px-3 py-1.5 rounded-lg whitespace-nowrap"
+    >
+      {{ s === 'accounts' ? 'Accounts' : s === 'approvals' ? 'Approvals (' + connectorService.pendingApprovals().length + ')' : s === 'history' ? 'History' : 'ChatGPT' }}
+    </button>
+  </div>
+
+  <div *ngIf="connectorService.isLoading()" class="text-xs text-slate-500">Loading…</div>
+
+  <!-- Accounts -->
+  <div *ngIf="section() === 'accounts'" class="space-y-3">
+    <div *ngFor="let provider of connectorService.providers()" class="p-3 bg-white/5 rounded-xl border border-white/5">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <div class="text-sm text-slate-200 font-medium">{{ provider.name }}</div>
+          <div class="text-xs text-slate-400">{{ provider.description }}</div>
+          <div *ngIf="!provider.available" class="text-xs text-amber-300 mt-1">{{ provider.unavailableReason }}</div>
+        </div>
+        <ng-container *ngIf="connection(provider) as conn; else notConnected">
+          <span class="text-xs font-medium shrink-0" [ngClass]="statusClass(conn.status)">{{ conn.status }}</span>
+        </ng-container>
+        <ng-template #notConnected>
+          <button
+            *ngIf="provider.available"
+            (click)="connectorService.connect(provider.id)"
+            [disabled]="connectorService.busyProvider() === provider.id"
+            class="shrink-0 px-3 py-1.5 rounded-lg bg-accentCyan/90 hover:bg-accentCyan text-white text-xs font-semibold disabled:opacity-50"
+          >
+            {{ connectorService.busyProvider() === provider.id ? 'Connecting…' : 'Connect' }}
+          </button>
+        </ng-template>
+      </div>
+
+      <div *ngIf="connection(provider) as conn" class="mt-3 space-y-2">
+        <div class="text-xs text-slate-400">
+          <span *ngIf="conn.accountLabel">Account: <span class="text-slate-200">{{ conn.accountLabel }}</span> · </span>
+          <span *ngIf="conn.lastCheckedAt">Checked {{ conn.lastCheckedAt | date: 'short' }}</span>
+          <span *ngIf="conn.lastUsedAt"> · Last used {{ conn.lastUsedAt | date: 'short' }}</span>
+        </div>
+        <div *ngIf="conn.lastError" class="text-xs text-amber-300">{{ conn.lastError }}</div>
+        <div *ngIf="conn.grantedScopes.length" class="text-[11px] text-slate-500 break-words">Granted: {{ conn.grantedScopes.join(', ') }}</div>
+
+        <div class="flex flex-wrap items-center gap-3">
+          <label *ngFor="let cap of provider.capabilities" class="flex items-center gap-1.5 text-xs text-slate-300 cursor-pointer">
+            <input
+              type="checkbox"
+              [checked]="hasCapability(conn, cap)"
+              [disabled]="connectorService.busyProvider() === provider.id || (cap === 'write' && !connectorService.writesEnabled() && provider.requiresOAuth)"
+              (change)="toggleCapability(conn, cap)"
+            />
+            {{ cap === 'read' ? 'Read' : 'Write (each action needs approval)' }}
+          </label>
+        </div>
+
+        <div class="flex flex-wrap gap-2">
+          <button
+            *ngIf="conn.status !== 'active' && provider.available"
+            (click)="connectorService.connect(provider.id, conn.enabledCapabilities)"
+            class="px-3 py-1 rounded-lg bg-accentCyan/90 text-white text-xs"
+          >
+            Reconnect
+          </button>
+          <button (click)="connectorService.check(conn)" class="px-3 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-slate-200 text-xs">Check</button>
+          <button (click)="toggleExpanded(provider.id)" class="px-3 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-slate-200 text-xs">
+            {{ expanded() === provider.id ? 'Hide tools' : 'Tools' }}
+          </button>
+          <button (click)="connectorService.disconnect(conn)" class="px-3 py-1 rounded-lg bg-accentRose/10 hover:bg-accentRose/20 text-accentRose text-xs">
+            Disconnect
+          </button>
+        </div>
+      </div>
+
+      <ul *ngIf="expanded() === provider.id" class="mt-3 space-y-1">
+        <li *ngFor="let tool of provider.tools" class="text-xs text-slate-400">
+          <span class="text-slate-200">{{ tool.title }}</span> · {{ tierLabel(tool.riskTier) }}
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Pending approvals -->
+  <div *ngIf="section() === 'approvals'" class="space-y-3">
+    <div *ngIf="!connectorService.pendingApprovals().length" class="text-sm text-slate-400">No actions are waiting for approval.</div>
+    <div *ngFor="let a of connectorService.pendingApprovals()" class="p-3 bg-white/5 rounded-xl border border-amber-400/20">
+      <div class="text-sm text-slate-200 font-medium break-words">{{ a.summary }}</div>
+      <dl class="mt-2 space-y-1">
+        <div *ngFor="let d of a.details">
+          <dt class="text-[11px] uppercase text-slate-500">{{ d.label }}</dt>
+          <dd class="text-xs text-slate-300 whitespace-pre-wrap break-words max-h-32 overflow-y-auto">{{ d.value }}</dd>
+        </div>
+      </dl>
+      <div class="flex gap-2 mt-3">
+        <button (click)="decide(a.id, 'approve')" class="px-3 py-1 rounded-lg bg-accentCyan text-white text-xs font-semibold">Approve</button>
+        <button (click)="decide(a.id, 'reject')" class="px-3 py-1 rounded-lg bg-white/10 text-slate-300 text-xs">Reject</button>
+        <span class="text-[11px] text-slate-500 self-center">Expires {{ a.expiresAt | date: 'shortTime' }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- History -->
+  <div *ngIf="section() === 'history'" class="space-y-1">
+    <div *ngIf="!connectorService.audit().length" class="text-sm text-slate-400">No connector activity yet.</div>
+    <div *ngFor="let e of connectorService.audit()" class="flex items-center justify-between gap-3 text-xs py-1.5 border-b border-white/5">
+      <span class="text-slate-300 truncate">{{ e.toolName }}</span>
+      <span class="text-slate-500 shrink-0">{{ e.client }}</span>
+      <span
+        class="shrink-0"
+        [ngClass]="e.outcome === 'success' || e.outcome === 'approved' ? 'text-emerald-400' : e.outcome === 'error' || e.outcome === 'denied' ? 'text-accentRose' : 'text-slate-400'"
+        >{{ e.outcome }}<span *ngIf="e.errorCode"> ({{ e.errorCode }})</span></span
+      >
+      <span class="text-slate-500 shrink-0">{{ e.createdAt | date: 'short' }}</span>
+    </div>
+  </div>
+
+  <!-- ChatGPT / MCP -->
+  <div *ngIf="section() === 'chatgpt'" class="space-y-3">
+    <div *ngIf="!connectorService.mcpStatus()?.enabled" class="text-sm text-slate-400">
+      ChatGPT access is not enabled on this server.
+    </div>
+    <ng-container *ngIf="connectorService.mcpStatus()?.enabled">
+      <div class="text-xs text-slate-400">
+        Add this MCP server URL in ChatGPT (Developer Mode → Connectors):
+        <div class="mt-1 font-mono text-slate-200 break-all bg-white/5 rounded-lg px-2 py-1">{{ connectorService.mcpStatus()?.endpoint }}</div>
+        ChatGPT gets read-only access to the accounts you connected here. It never sees your NexusAI conversations or memories.
+      </div>
+      <div *ngIf="!connectorService.mcpGrants().length" class="text-sm text-slate-400">No apps have access yet.</div>
+      <div *ngFor="let g of connectorService.mcpGrants()" class="flex items-center justify-between p-3 bg-white/5 rounded-xl">
+        <div class="text-xs">
+          <div class="text-slate-200">{{ g.clientName }}</div>
+          <div class="text-slate-500">Granted {{ g.createdAt | date: 'short' }}<span *ngIf="g.lastUsedAt"> · used {{ g.lastUsedAt | date: 'short' }}</span></div>
+        </div>
+        <button (click)="revokeGrant(g.id)" class="px-3 py-1 rounded-lg bg-accentRose/10 hover:bg-accentRose/20 text-accentRose text-xs">Revoke</button>
+      </div>
+    </ng-container>
+  </div>
+</div>

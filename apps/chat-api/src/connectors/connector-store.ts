@@ -96,7 +96,6 @@ export class FirestoreConnectorStore implements ConnectorStore {
   // Imported lazily so unit tests that use MemoryConnectorStore never
   // initialise firebase-admin.
   private get db() {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     return (require('../db/firestore') as typeof import('../db/firestore')).firestore;
   }
 

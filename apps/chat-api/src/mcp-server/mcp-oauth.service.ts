@@ -249,7 +249,7 @@ export class McpOAuthService {
     const secret = mcpSigningSecret();
     if (!secret) throw new OAuthError(503, 'temporarily_unavailable', 'The MCP server is not configured.');
     try {
-      const payload = jwt.verify(token, secret, { audience: 'mcp-consent' }) as { typ?: string; req?: ConsentRequest };
+      const payload = jwt.verify(token, secret, { audience: 'mcp-consent', algorithms: ['HS256'] }) as { typ?: string; req?: ConsentRequest };
       if (payload.typ !== 'mcp_consent' || !payload.req) throw new Error('bad type');
       return payload.req;
     } catch {

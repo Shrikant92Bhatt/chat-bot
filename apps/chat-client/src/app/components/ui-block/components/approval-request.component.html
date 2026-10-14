@@ -1,0 +1,52 @@
+<div *ngIf="approval() as a" class="rounded-2xl border border-amber-400/30 bg-amber-400/[0.04] p-5">
+  <div class="flex items-center justify-between gap-3">
+    <span class="text-[11px] uppercase tracking-wide text-amber-300">{{ tierLabel }} · needs your approval</span>
+    <span class="text-[11px] px-2 py-0.5 rounded-full bg-white/5 text-slate-400">{{ a.state }}</span>
+  </div>
+  <h3 class="text-base font-semibold text-white mt-2 break-words">{{ a.summary }}</h3>
+
+  <dl class="mt-3 space-y-2">
+    <div *ngFor="let d of a.details">
+      <dt class="text-[11px] uppercase tracking-wide text-slate-500">{{ d.label }}</dt>
+      <dd class="text-sm text-slate-200 whitespace-pre-wrap break-words max-h-48 overflow-y-auto">{{ d.value }}</dd>
+    </div>
+  </dl>
+
+  <div *ngIf="isPending" class="flex flex-col sm:flex-row gap-3 mt-5">
+    <button
+      type="button"
+      (click)="decide('approve')"
+      [disabled]="busy()"
+      class="flex-1 px-4 py-2.5 rounded-lg text-sm font-semibold bg-accentCyan text-white hover:bg-cyan-400 disabled:opacity-50 transition-all"
+    >
+      {{ busy() ? 'Working…' : 'Approve' }}
+    </button>
+    <button
+      type="button"
+      (click)="decide('reject')"
+      [disabled]="busy()"
+      class="flex-1 px-4 py-2.5 rounded-lg text-sm font-semibold bg-white/10 text-slate-300 hover:bg-white/20 disabled:opacity-50 transition-all"
+    >
+      Reject
+    </button>
+  </div>
+  <p *ngIf="isPending" class="text-[11px] text-slate-500 mt-2">Nothing happens until you approve. Expires {{ a.expiresAt | date: 'shortTime' }}.</p>
+
+  <div *ngIf="!isPending" class="mt-4 text-sm" role="status">
+    <span *ngIf="a.state === 'executed'" class="text-emerald-400">Done.</span>
+    <span *ngIf="a.state === 'rejected'" class="text-slate-400">Rejected - nothing was done.</span>
+    <span *ngIf="a.state === 'failed'" class="text-accentRose">Approved, but it failed.</span>
+    <span *ngIf="a.state === 'expired' || (a.state === 'pending' && !isPending)" class="text-slate-400">Expired - ask again to get a fresh request.</span>
+    <span *ngIf="a.state === 'approved'" class="text-slate-400">Approved - running.</span>
+    <span *ngIf="a.outcome?.message" class="text-slate-400"> {{ a.outcome?.message }}</span>
+    <a
+      *ngIf="safeUrl(a.outcome?.url) as href"
+      [href]="href"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="ml-1 text-accentCyan hover:underline"
+      >Open</a
+    >
+  </div>
+  <p *ngIf="error()" class="text-xs text-accentRose mt-2" role="alert">{{ error() }}</p>
+</div>

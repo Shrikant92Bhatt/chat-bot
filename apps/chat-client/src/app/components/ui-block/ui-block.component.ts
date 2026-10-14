@@ -24,6 +24,8 @@ import { DocumentPreviewComponent } from './components/document-preview.componen
 import { CodeBlockComponent } from './components/code-block.component';
 import { ErrorCardComponent } from './components/error-card.component';
 import { ConfirmationCardComponent } from './components/confirmation-card.component';
+import { ConnectorResultComponent } from './components/connector-result.component';
+import { ApprovalRequestComponent } from './components/approval-request.component';
 
 /** UIComponentType -> the standalone component that renders it. Every approved orchestrator type must have an entry. */
 const UI_COMPONENT_REGISTRY: Record<UIComponentType, Type<object>> = {
@@ -43,9 +45,11 @@ const UI_COMPONENT_REGISTRY: Record<UIComponentType, Type<object>> = {
   CODE_BLOCK: CodeBlockComponent,
   ERROR_CARD: ErrorCardComponent,
   CONFIRMATION_CARD: ConfirmationCardComponent,
+  CONNECTOR_RESULT: ConnectorResultComponent,
+  APPROVAL_REQUEST: ApprovalRequestComponent,
 };
 
-/** A dynamically-rendered component that can bubble an action back up (currently only ConfirmationCardComponent). */
+/** A dynamically-rendered component that can bubble an action back up (ConfirmationCardComponent, ApprovalRequestComponent). */
 interface EmitsActionSelected {
   actionSelected: EventEmitter<OrchestratorAction>;
 }
@@ -114,6 +118,8 @@ export class UiBlockComponent implements AfterViewChecked, OnDestroy {
     MAP: 'map',
     TABLE: 'table',
     CHART: 'chart',
+    CONNECTOR_RESULT: 'connected account',
+    APPROVAL_REQUEST: 'approval request',
   };
 
   /** Human-readable noun for a component type, for loading/error copy. */

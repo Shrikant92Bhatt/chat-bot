@@ -35,7 +35,13 @@
   <!-- Modals and Overlays -->
   <app-session-expired-modal *ngIf="authService.sessionExpired()"></app-session-expired-modal>
   <app-login-error-toast *ngIf="authService.loginError()"></app-login-error-toast>
-  <app-settings-modal *ngIf="isSettingsOpen" (closeModal)="closeSettings()"></app-settings-modal>
+  <app-settings-modal
+    *ngIf="isSettingsOpen"
+    [initialTab]="settingsTab"
+    [connectorNotice]="connectorNotice"
+    (closeModal)="closeSettings()"
+  ></app-settings-modal>
+  <app-mcp-consent-modal *ngIf="mcpConsentRequest" [request]="mcpConsentRequest" (closed)="mcpConsentRequest = null"></app-mcp-consent-modal>
   <app-projects-modal *ngIf="isProjectsOpen" (closeModal)="closeProjects()"></app-projects-modal>
 
   <!-- Admin View Overlay -->

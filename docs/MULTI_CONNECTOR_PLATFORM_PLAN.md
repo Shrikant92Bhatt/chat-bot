@@ -1,6 +1,6 @@
 # NexusAI Multi-Connector Platform & ChatGPT App — Implementation Plan
 
-**Status:** Proposed  
+**Status:** Implemented — phases 0–5 (live trading intentionally excluded). Setup, data model and remaining decisions: [CONNECTORS_SETUP.md](./CONNECTORS_SETUP.md)  
 **Repository:** Shrikant92Bhatt/chat-bot  
 **Branch:** docs/multi-connector-platform-plan  
 **Goal:** Evolve NexusAI into a secure multi-service AI agent platform, then expose selected capabilities through a ChatGPT app using MCP and the OpenAI Apps SDK.

@@ -10,7 +10,6 @@ export interface RateLimiter {
 /** Production limiter: the existing Firestore-backed counter, so quotas hold across instances. */
 export class FirestoreRateLimiter implements RateLimiter {
   async consume(key: string, limit: number, windowMs: number) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { AnonUsageService } = require('../services/anon-usage.service') as typeof import('../services/anon-usage.service');
     const result = await AnonUsageService.checkAndConsume(key, limit, windowMs);
     return { allowed: result.allowed, resetAt: result.resetAt };
