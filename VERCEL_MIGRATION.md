@@ -42,6 +42,20 @@ Only the **compute/hosting** layer moved (what Cloud Run + Cloud Build + the loa
 
 `ALLOWED_ORIGIN` and `API_URL` are no longer needed (client and API are same-origin now).
 
+#### 2b. Connectors (GitHub, Gmail, …) and the ChatGPT app
+
+Without these, Settings → Connectors shows every connector as "not configured" and there is no Connect button. Full details: [docs/CONNECTORS_SETUP.md](docs/CONNECTORS_SETUP.md).
+
+| Variable | Value |
+|---|---|
+| `CONNECTORS_ENABLED` | `true` |
+| `PUBLIC_BASE_URL` | Your Vercel URL, e.g. `https://<project>.vercel.app` (no trailing slash) |
+| `CONNECTOR_ENCRYPTION_KEY` | `openssl rand -base64 32` (encrypts users' GitHub/Gmail tokens) |
+| `GITHUB_CONNECTOR_CLIENT_ID` / `GITHUB_CONNECTOR_CLIENT_SECRET` | From your GitHub App; callback URL `${PUBLIC_BASE_URL}/api/v1/connectors/oauth/callback` |
+| `GMAIL_CONNECTOR_CLIENT_ID` / `GMAIL_CONNECTOR_CLIENT_SECRET` | A separate Google OAuth client with the Gmail API enabled; same callback URL |
+| `CONNECTOR_WRITES_ENABLED` | Optional, `true` to allow approval-gated writes |
+| `MCP_SERVER_ENABLED` / `MCP_OAUTH_SIGNING_SECRET` | Optional, for the ChatGPT app; the secret must differ from `APP_SESSION_SECRET` |
+
 ### 3. Generate a Firebase/GCP service-account key (new requirement)
 
 On Cloud Run, Firestore/GCS auth was automatic (the service's own identity via Application Default Credentials). Vercel has no equivalent, so `chat-api` needs an explicit key:
