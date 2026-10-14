@@ -7,10 +7,19 @@
  * (chat-api's runtime since the GCP -> Vercel migration). This module just
  * forwards the request to that service over HTTP.
  *
- * CODE_SANDBOX_SERVICE_URL must point at a running infra/sandbox-service
- * instance (e.g. a small scale-to-zero Cloud Run service). If unset, the
- * tool is disabled by returning a clear error rather than silently no-op'ing.
+ * On Vercel, infra/sandbox-service is the internal `sandbox` service
+ * (runtime "container", see vercel.json) and CODE_SANDBOX_SERVICE_URL is
+ * injected by the `api` service's binding to it - never set it by hand
+ * there. Bindings resolve at runtime inside functions only. Elsewhere (local
+ * dev, another container host) set it to the service's base URL. If unset,
+ * the tool is disabled by returning a clear error rather than silently
+ * no-op'ing.
  */
+
+/** `/execute` resolved against the service's base URL, which may carry a path of its own. */
+function executeUrl(baseUrl: string): URL {
+  return new URL('execute', baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`);
+}
 
 export type SandboxLanguage = 'javascript' | 'typescript';
 
@@ -58,7 +67,8 @@ export async function executeSandboxedCode(
       result: null,
       error:
         'Code execution is not configured on this deployment (CODE_SANDBOX_SERVICE_URL is unset). ' +
-        'Deploy infra/sandbox-service and set that env var to enable the code_interpreter tool.',
+        'On Vercel it comes from the api service\'s binding to the sandbox service (vercel.json); ' +
+        'elsewhere, set it to a running infra/sandbox-service URL.',
       exitReason: 'runtime_error',
       durationMs: Date.now() - start,
     };
@@ -68,7 +78,7 @@ export async function executeSandboxedCode(
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    const response = await fetch(`${serviceUrl.replace(/\/$/, '')}/execute`, {
+    const response = await fetch(executeUrl(serviceUrl), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

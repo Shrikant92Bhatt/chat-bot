@@ -1,7 +1,7 @@
 # Small, standalone image for the code_interpreter sandbox only. isolated-vm
 # is a native addon that cannot run inside a Vercel serverless function, so
-# this one piece stays on a container host (Cloud Run works well - deploy
-# with --min-instances=0 so it costs ~nothing while idle).
+# this runs as a container: the internal `sandbox` service in vercel.json
+# (runtime "container"), or any other container host such as Cloud Run.
 FROM node:24-alpine AS builder
 
 WORKDIR /app

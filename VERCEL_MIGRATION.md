@@ -21,7 +21,7 @@ Only the **compute/hosting** layer moved (what Cloud Run + Cloud Build + the loa
 
 ### 1. Create the Vercel project
 1. In the Vercel dashboard, **Add New → Project**, import `Shrikant92Bhatt/chat-bot` from GitHub.
-2. Framework Preset: **Other**. Leave Root Directory as the repo root — `vercel.json` already sets the build command (`npm run build:vercel`) and output directory (`dist/apps/chat-client/browser`); you shouldn't need to override anything in the dashboard.
+2. Framework Preset: **Services**. Leave Root Directory as the repo root. `vercel.json` defines three services in one project: `web` (the Angular app, public at `/`), `api` (the Express app as a function, public at `/api/*`, `/.well-known/*` and `/health`) and `sandbox` (`infra/sandbox-service` as an internal container, reachable only from `api`). Build commands and output directories live on each service, so nothing needs overriding in the dashboard.
 3. Project Settings → General → Node.js Version: set to **20.x or later** (the repo targets Node 24 elsewhere, but any current Vercel-supported version works fine here since the sandbox's native dependency no longer lives in this project).
 
 ### 2. Set environment variables (Project Settings → Environment Variables, for Production at minimum)
@@ -37,8 +37,8 @@ Only the **compute/hosting** layer moved (what Cloud Run + Cloud Build + the loa
 | `FIRESTORE_DATABASE_ID` | `nexus-ai` |
 | `GCS_BUCKET_NAME` | `nexusai-generated-images` |
 | `FIREBASE_SERVICE_ACCOUNT_KEY` | **New requirement** — see step 3 below |
-| `CODE_SANDBOX_SERVICE_URL` | The sandbox-service URL from step 4 below |
-| `CODE_SANDBOX_SERVICE_SECRET` | A secret you generate — see step 4 below |
+| `CODE_SANDBOX_SERVICE_URL` | **Don't set it.** Injected at runtime by the `api` service's binding to the `sandbox` service |
+| `CODE_SANDBOX_SERVICE_SECRET` | Optional, `openssl rand -hex 32` |
 
 `ALLOWED_ORIGIN` and `API_URL` are no longer needed (client and API are same-origin now).
 
@@ -67,9 +67,9 @@ On Cloud Run, Firestore/GCS auth was automatic (the service's own identity via A
 
 Treat this file like any other credential — don't commit it, don't paste it anywhere but Vercel's env var UI.
 
-### 4. Deploy the sandbox microservice
+### 4. The sandbox microservice
 
-This is the one piece still on a container host (isolated-vm can't run on Vercel):
+**On Vercel this is now automatic:** `infra/sandbox-service` deploys as the internal `sandbox` service with `runtime: "container"`, built from its own Dockerfile (isolated-vm is a native addon, so it can't be a regular function, but it runs fine in a container). It has no public route; only `api` can reach it, through the binding. Skip the rest of this step unless you want to keep running it on Cloud Run instead, as below:
 
 1. Generate a shared secret: `openssl rand -hex 32`.
 2. Add it to GCP Secret Manager as `CODE_SANDBOX_SERVICE_SECRET` (the CI workflow already expects a secret by that name, using your existing `GCP_SA_KEY` GitHub Actions credential).
