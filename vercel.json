@@ -8,7 +8,7 @@
       "outputDirectory": "dist/apps/chat-client/browser",
       "rewrites": [
         {
-          "source": "/((?!assets/|.*\\\\..*).*)",
+          "source": "/((?!assets/|.*\\..*).*)",
           "destination": "/index.html"
         }
       ]
