@@ -1,24 +1,49 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "npm run build:vercel",
-  "outputDirectory": "dist/apps/chat-client/browser",
-  "functions": {
-    "api/index.ts": {
-      "maxDuration": 60
+  "services": {
+    "chat-client": {
+      "root": ".",
+      "framework": "angular",
+      "buildCommand": "npm run build:vercel",
+      "outputDirectory": "dist/apps/chat-client/browser"
+    },
+    "chat-api": {
+      "root": ".",
+      "framework": "express",
+      "entrypoint": "api/index.ts",
+      "maxDuration": 60,
+      "bindings": [
+        {
+          "type": "service",
+          "service": "sandbox-service",
+          "format": "url",
+          "env": "CODE_SANDBOX_SERVICE_URL"
+        }
+      ]
+    },
+    "sandbox-service": {
+      "root": "infra/sandbox-service",
+      "runtime": "container"
     }
   },
   "rewrites": [
     {
-      "source": "/health",
-      "destination": "/api"
-    },
-    {
       "source": "/api/:path*",
-      "destination": "/api"
+      "destination": {
+        "service": "chat-api"
+      }
     },
     {
-      "source": "/((?!api/|assets/|.*\\..*).*)",
-      "destination": "/index.html"
+      "source": "/health",
+      "destination": {
+        "service": "chat-api"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "chat-client"
+      }
     }
   ]
 }
