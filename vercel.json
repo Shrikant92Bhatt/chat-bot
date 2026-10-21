@@ -5,7 +5,13 @@
       "root": ".",
       "framework": "angular",
       "buildCommand": "npm run build:vercel",
-      "outputDirectory": "dist/apps/chat-client/browser"
+      "outputDirectory": "dist/apps/chat-client/browser",
+      "rewrites": [
+        {
+          "source": "/((?!assets/|.*\\\\..*).*)",
+          "destination": "/index.html"
+        }
+      ]
     },
     "chat-api": {
       "root": ".",
@@ -27,6 +33,12 @@
     }
   },
   "rewrites": [
+    {
+      "source": "/api",
+      "destination": {
+        "service": "chat-api"
+      }
+    },
     {
       "source": "/api/:path*",
       "destination": {
