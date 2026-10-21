@@ -1,15 +1,10 @@
 /**
  * HTTP client for the `code_interpreter` MCP tool's execution backend.
  *
- * The actual isolated-vm sandbox lives in its own standalone microservice
- * (infra/sandbox-service) rather than in-process here, because isolated-vm
- * is a native addon that cannot run inside a Vercel serverless function
- * (chat-api's runtime since the GCP -> Vercel migration). This module just
- * forwards the request to that service over HTTP.
- *
- * CODE_SANDBOX_SERVICE_URL must point at a running infra/sandbox-service
- * instance (e.g. a small scale-to-zero Cloud Run service). If unset, the
- * tool is disabled by returning a clear error rather than silently no-op'ing.
+ * The isolated-vm sandbox runs as the private Vercel container service
+ * infra/sandbox-service. Vercel injects CODE_SANDBOX_SERVICE_URL at runtime
+ * through the chat-api service binding. For local development or an external
+ * sandbox host, set the variable explicitly; it is not needed at build time.
  */
 
 export type SandboxLanguage = 'javascript' | 'typescript';
@@ -58,7 +53,7 @@ export async function executeSandboxedCode(
       result: null,
       error:
         'Code execution is not configured on this deployment (CODE_SANDBOX_SERVICE_URL is unset). ' +
-        'Deploy infra/sandbox-service and set that env var to enable the code_interpreter tool.',
+        'Confirm the chat-api -> sandbox-service Vercel binding, or set the URL for local/external development.',
       exitReason: 'runtime_error',
       durationMs: Date.now() - start,
     };
@@ -68,7 +63,9 @@ export async function executeSandboxedCode(
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    const response = await fetch(`${serviceUrl.replace(/\/$/, '')}/execute`, {
+    const serviceBaseUrl = serviceUrl.endsWith('/') ? serviceUrl : `${serviceUrl}/`;
+    const executeUrl = new URL('execute', serviceBaseUrl);
+    const response = await fetch(executeUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -2,7 +2,7 @@
   "name": "sandbox-service",
   "version": "1.0.0",
   "private": true,
-  "description": "Standalone isolated-vm code execution service for the chat-api code_interpreter tool. Deployed separately from chat-api because isolated-vm is a native addon that cannot run inside a Vercel serverless function.",
+  "description": "Private isolated-vm code execution service for chat-api, deployed as a Vercel container service.",
   "main": "dist/server.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
