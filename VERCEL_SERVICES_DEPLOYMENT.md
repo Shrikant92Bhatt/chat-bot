@@ -6,7 +6,7 @@ This repository is configured for one Vercel deployment with three services:
 | --- | --- | --- | --- |
 | `chat-client` | `.` | Angular build via `npm run build:vercel` | `/` and SPA routes |
 | `chat-api` | `.` | Express entrypoint `api/index.ts` | `/api`, `/api/*`, `/health` |
-| `sandbox-service` | `infra/sandbox-service` | Docker container (Node 24 + native `isolated-vm`) | None; internal only |
+| `sandbox-service` | `infra/sandbox-service` | Docker container (`entrypoint: Dockerfile`, Node 24 + native `isolated-vm`) | None; internal only |
 
 ## Vercel project setup
 
@@ -17,7 +17,7 @@ This repository is configured for one Vercel deployment with three services:
 
 ## Service binding and environment variables
 
-The `chat-api` service declares a binding to `sandbox-service`. Vercel injects `CODE_SANDBOX_SERVICE_URL` at runtime. Do not create or hardcode this variable in Vercel project settings; the binding owns it.
+The `chat-api` service declares a binding to `sandbox-service`. Vercel injects `CODE_SANDBOX_SERVICE_URL` at runtime. Do not create or hardcode this variable in Vercel project settings; the binding owns it. The API's `maxDuration` is configured under the service-level `functions` map, and the container service explicitly points to its `Dockerfile` entrypoint.
 
 Set `CODE_SANDBOX_SERVICE_SECRET` as a secure environment variable for both `chat-api` and `sandbox-service` (use the same generated random value for both). The sandbox endpoint returns HTTP 503 in production if the secret is missing, and HTTP 401 when the supplied secret does not match. Do not commit the secret or put it in a frontend-visible variable.
 
