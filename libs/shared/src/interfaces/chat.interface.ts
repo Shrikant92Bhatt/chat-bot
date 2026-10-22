@@ -1,6 +1,6 @@
-import { UIComponent, OrchestratorSource, OrchestratorAction } from './orchestrator.interface';
-import { ResearchTrace } from './research.interface';
-import { PendingUIBlock } from './ui-stream.interface';
+import type { UIComponent, OrchestratorSource, OrchestratorAction } from './orchestrator.interface';
+import type { ResearchTrace } from './research.interface';
+import type { PendingUIBlock } from './ui-stream.interface';
 
 export type AIModelType = string;
 
