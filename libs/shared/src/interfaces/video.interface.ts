@@ -1,4 +1,4 @@
-import { AttachmentKind } from './chat.interface';
+import type { AttachmentKind } from './chat.interface';
 
 /**
  * Canonical MIME-to-kind classification, shared verbatim between the

@@ -1,4 +1,4 @@
-import { UIComponentType } from './orchestrator.interface';
+import type { UIComponentType } from './orchestrator.interface';
 
 /**
  * Progressive UI streaming: lets a tool-backed structured component (a
