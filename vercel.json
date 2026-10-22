@@ -17,6 +17,7 @@
       "root": ".",
       "framework": "express",
       "entrypoint": "api/index.ts",
+      "buildCommand": "echo 'chat-api: no build step needed - api/index.ts is bundled directly from source by the function builder'",
       "bindings": [
         {
           "type": "service",
