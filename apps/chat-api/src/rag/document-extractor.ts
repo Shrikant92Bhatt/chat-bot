@@ -1,5 +1,3 @@
-import { PDFParse } from 'pdf-parse';
-
 const TEXT_EXTENSIONS = ['.txt', '.md', '.csv', '.json'];
 const MAX_CONTENT_CHARS = 200_000; // keeps a single upload from blowing up the in-memory store / prompt context
 
@@ -7,6 +5,12 @@ const MAX_CONTENT_CHARS = 200_000; // keeps a single upload from blowing up the 
  * Extracts plain text from an uploaded file buffer for RAG ingestion.
  * Supports plain-text formats directly and PDFs via pdf-parse (verified
  * live: PDFParse.getText() returns { pages: [{text, num}], text, total }).
+ *
+ * pdf-parse is imported dynamically, on the .pdf branch only: its pdfjs-dist
+ * dependency touches canvas-polyfill globals (DOMMatrix) as a module-load
+ * side effect, which throws in Vercel's Node function runtime (no
+ * @napi-rs/canvas there) - a top-level import crashed every request this
+ * module's import chain reached, not just PDF uploads.
  */
 export async function extractDocumentText(buffer: Buffer, fileName: string, mimeType: string): Promise<string> {
   const extension = fileName.slice(fileName.lastIndexOf('.')).toLowerCase();
@@ -14,6 +18,7 @@ export async function extractDocumentText(buffer: Buffer, fileName: string, mime
   let text: string;
 
   if (mimeType === 'application/pdf' || extension === '.pdf') {
+    const { PDFParse } = await import('pdf-parse');
     const parser = new PDFParse({ data: new Uint8Array(buffer) });
     try {
       const result = await parser.getText();

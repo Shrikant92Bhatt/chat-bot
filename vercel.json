@@ -17,7 +17,7 @@
       "root": ".",
       "framework": "express",
       "entrypoint": "api/index.ts",
-      "maxDuration": 60,
+      "buildCommand": "echo 'chat-api: no build step needed - api/index.ts is bundled directly from source by the function builder'",
       "bindings": [
         {
           "type": "service",
@@ -25,11 +25,17 @@
           "format": "url",
           "env": "CODE_SANDBOX_SERVICE_URL"
         }
-      ]
+      ],
+      "functions": {
+        "api/index.ts": {
+          "maxDuration": 60
+        }
+      }
     },
     "sandbox-service": {
       "root": "infra/sandbox-service",
-      "runtime": "container"
+      "runtime": "container",
+      "entrypoint": "Dockerfile"
     }
   },
   "rewrites": [
