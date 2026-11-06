@@ -8,7 +8,7 @@
 
 An Nx monorepo AI chat application: an Angular standalone-component frontend with a glassmorphism UI, and an Express backend built around a real LangGraph agent loop — multi-LLM streaming (Gemini/GPT/Claude/Llama via OpenRouter), Projects with custom instructions and scoped knowledge bases, RAG with hybrid reranking, long-term user memory, conversation summarization, real tool calling (calculator, sandboxed code execution, image generation, web search), Firestore-backed rate limiting and usage/cost tracking, and a role-gated admin analytics console. chat-client and chat-api deploy together as one [Vercel](https://vercel.com) project (see [`VERCEL_MIGRATION.md`](VERCEL_MIGRATION.md)); only the isolated-vm code sandbox still runs on a small container host. Google Sign-In and Firestore/GCS remain unchanged.
 
-**Live:** see `VERCEL_MIGRATION.md` for the current deployment URL (previously https://nexusai-gcp.duckdns.org on Cloud Run).
+**Live:** https://chat-bot-brv3.vercel.app (previously https://nexusai-gcp.duckdns.org on Cloud Run).
 
 For a deep dive into how the pieces fit together (diagrams of the context-assembly pipeline, RAG flow, code sandbox, rate limiting, and the admin console's authorization model), see **[architecture.md](architecture.md)**.
 
