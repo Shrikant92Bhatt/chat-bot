@@ -1,4 +1,5 @@
 import { Storage } from '@google-cloud/storage';
+import { storageClientOptions } from '../gcp-credentials';
 
 export interface StorageMetrics {
   bucketName: string;
@@ -38,7 +39,7 @@ export class StorageMetricsService {
     }
 
     try {
-      const storage = new Storage();
+      const storage = new Storage(storageClientOptions());
       const [files] = await storage.bucket(bucketName).getFiles();
       const totalBytes = files.reduce((sum, file) => sum + Number(file.metadata.size || 0), 0);
 

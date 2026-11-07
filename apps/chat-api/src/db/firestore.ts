@@ -1,5 +1,6 @@
 import * as admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
+import { getServiceAccount } from '../gcp-credentials';
 
 if (!admin.apps.length) {
   // FIREBASE_SERVICE_ACCOUNT_KEY: JSON-stringified service-account key,
@@ -9,10 +10,18 @@ if (!admin.apps.length) {
   // it the "Cloud Datastore User" IAM role) or, for local dev, a
   // downloaded key file pointed to by GOOGLE_APPLICATION_CREDENTIALS.
   // See .env.example / DEPLOY_COMMANDS.md.
-  const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
-  if (serviceAccountKey) {
-    admin.initializeApp({ credential: admin.credential.cert(JSON.parse(serviceAccountKey)) });
+  const serviceAccount = getServiceAccount();
+  if (serviceAccount) {
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
+      projectId: serviceAccount.project_id,
+    });
   } else {
+    if (process.env.VERCEL) {
+      console.error(
+        '[Firestore] FIREBASE_SERVICE_ACCOUNT_KEY is not set. Vercel has no GCP identity, so every database call will fail until it is added.'
+      );
+    }
     admin.initializeApp();
   }
 }
