@@ -78,11 +78,11 @@
     --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* Support for prefers-color-scheme if implemented in future */
-  @media (prefers-color-scheme: dark) {
-    :root {
-      color-scheme: dark;
-    }
+  /* The app is dark-only. Always tell the browser so, even when the OS is
+     in light mode - otherwise scrollbars, <select> menus and form controls
+     render light on the dark page. */
+  :root {
+    color-scheme: dark;
   }
 }
 
