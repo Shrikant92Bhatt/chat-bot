@@ -190,7 +190,20 @@ export async function authenticateOrAllowTrial(
   }
 
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
-  const result = await AnonUsageService.checkAnonTrial(ip);
+  // Express 4 doesn't catch async errors: an uncaught rejection here (e.g.
+  // Firestore unreachable) leaves the request hanging until the platform
+  // timeout. Answer fast instead.
+  let result: Awaited<ReturnType<typeof AnonUsageService.checkAnonTrial>>;
+  try {
+    result = await AnonUsageService.checkAnonTrial(ip);
+  } catch (error) {
+    console.error('[Auth Middleware] Anonymous trial check failed:', error);
+    res.status(503).json({
+      error: 'ServiceUnavailable',
+      message: 'The database is unavailable right now. Please try again shortly.',
+    });
+    return;
+  }
 
   if (!result.allowed) {
     res.status(401).json({

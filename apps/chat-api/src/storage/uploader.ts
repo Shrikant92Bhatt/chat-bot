@@ -1,5 +1,6 @@
 import * as dotenv from 'dotenv';
 import { Storage } from '@google-cloud/storage';
+import { storageClientOptions } from '../gcp-credentials';
 
 dotenv.config();
 
@@ -23,7 +24,7 @@ export class GcsUploader {
     this.isConfigured = !!process.env.GCS_BUCKET_NAME;
 
     if (this.isConfigured) {
-      this.storage = new Storage();
+      this.storage = new Storage(storageClientOptions());
     }
   }
 

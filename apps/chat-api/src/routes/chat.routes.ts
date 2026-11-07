@@ -118,7 +118,17 @@ router.post('/stream', authenticateOrAllowTrial, async (req: AuthenticatedReques
   // Hard ceiling across every model. Must run before SSE headers so the
   // client can parse a JSON 429 (see chat.service.ts).
   if (req.user?.uid) {
-    const daily = await AnonUsageService.checkAuthDaily(req.user.uid);
+    let daily: Awaited<ReturnType<typeof AnonUsageService.checkAuthDaily>>;
+    try {
+      daily = await AnonUsageService.checkAuthDaily(req.user.uid);
+    } catch (error) {
+      console.error('[Chat API Route] Daily limit check failed:', error);
+      res.status(503).json({
+        error: 'ServiceUnavailable',
+        message: 'The database is unavailable right now. Please try again shortly.',
+      });
+      return;
+    }
     if (!daily.allowed) {
       res.status(429).json({
         error: 'RateLimitExceeded',
