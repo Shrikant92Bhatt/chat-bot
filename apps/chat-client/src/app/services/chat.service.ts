@@ -1242,8 +1242,17 @@ export class ChatService {
         // explicit Sign In button rather than auto-triggering Google's flow here -
         // this fetch callback runs outside a direct user click, so calling it
         // straight away is liable to be blocked by the browser's popup blocker.
+        // A visitor who never signed in hits the free-trial limit
+        // (SignInRequired) - "your session has expired" would be wrong there.
+        let message = 'Your session has expired. Please sign in again to continue.';
+        try {
+          const data = await response.json();
+          if (data?.error === 'SignInRequired' && data?.message) message = data.message;
+        } catch {
+          // Non-JSON body - keep the session-expired message.
+        }
         this.authService.notifySessionExpired();
-        this.updateAssistantMessage(threadId, assistantMessageId, '🔒 Your session has expired. Please sign in again to continue.');
+        this.updateAssistantMessage(threadId, assistantMessageId, `🔒 ${message}`);
         return;
       }
 
