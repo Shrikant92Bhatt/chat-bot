@@ -10,36 +10,36 @@
   :root {
     /* ───────────────────────────────── Colors ────────────────────────────── */
     /* Backgrounds */
-    --color-bg-primary: #0a0d14;
-    --color-bg-secondary: #0f172a;
-    --color-bg-tertiary: #1a202c;
+    --color-bg-primary: #12110f;
+    --color-bg-secondary: #181613;
+    --color-bg-tertiary: #1f1c18;
 
     /* Surfaces */
-    --color-surface-primary: #1a1f2e;
-    --color-surface-secondary: #242b37;
-    --color-surface-hover: #2d3748;
-    --color-surface-active: #374151;
+    --color-surface-primary: #1d1a16;
+    --color-surface-secondary: #25221d;
+    --color-surface-hover: #2e2a24;
+    --color-surface-active: #38332c;
 
     /* Text */
-    --color-text-primary: #f1f5f9;
-    --color-text-secondary: #cbd5e1;
-    --color-text-tertiary: #94a3b8;
-    --color-text-muted: #64748b;
+    --color-text-primary: #ede7dd;
+    --color-text-secondary: #c9c1b4;
+    --color-text-tertiary: #a0978a;
+    --color-text-muted: #7d7569;
 
     /* Borders */
     --color-border-light: rgba(255, 255, 255, 0.08);
     --color-border-medium: rgba(255, 255, 255, 0.12);
 
     /* Semantic */
-    --color-accent-primary: #06b6d4;
-    --color-accent-secondary: #8b5cf6;
-    --color-accent-success: #10b981;
-    --color-accent-warning: #f59e0b;
-    --color-accent-danger: #f43f5e;
+    --color-accent-primary: #e2733a;
+    --color-accent-secondary: #c9a26b;
+    --color-accent-success: #86a97f;
+    --color-accent-warning: #d9a441;
+    --color-accent-danger: #d6584f;
 
     /* Messages */
-    --color-message-user-bg: rgba(99, 102, 241, 0.15);
-    --color-message-user-border: rgba(99, 102, 241, 0.2);
+    --color-message-user-bg: rgba(226, 115, 58, 0.15);
+    --color-message-user-border: rgba(226, 115, 58, 0.2);
 
     /* ───────────────────────────────── Spacing ───────────────────────────── */
     --space-xs: 4px;
@@ -89,7 +89,7 @@
 @layer utilities {
   /* Utility classes based on design tokens */
   .glass-card {
-    background: rgba(15, 23, 42, 0.55);
+    background: rgba(29, 26, 22, 0.55);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border: 1px solid var(--color-border-light);
@@ -121,19 +121,15 @@
 
   .glass-input:focus-within {
     border-color: var(--color-border-medium);
-    box-shadow: 0 0 15px rgba(6, 182, 212, 0.1);
+    box-shadow: 0 0 15px rgba(226, 115, 58, 0.1);
   }
 
   .gradient-text-gemini {
-    background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 50%, #8b5cf6 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: #e2733a;
   }
 
   .gradient-text-openai {
-    background: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: #86a97f;
   }
 
   /* Tabular figures. Columns of numbers only (table cells, axis ticks) - never
@@ -153,7 +149,7 @@
      physical pane) instead of a shadow. */
   .panel {
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.035) 0%, rgba(255, 255, 255, 0.012) 100%),
-      rgba(13, 19, 32, 0.72);
+      rgba(24, 22, 19, 0.72);
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
     border: 1px solid rgba(255, 255, 255, 0.07);
@@ -174,11 +170,16 @@
     border: 1px solid rgba(255, 255, 255, 0.05);
   }
 
+  .ambient-glow-1,
+  .ambient-glow-2 {
+    display: none;
+  }
+
   .ambient-glow-1 {
     position: absolute;
     width: 500px;
     height: 500px;
-    background: radial-gradient(circle, rgba(139, 92, 246, 0.15) 0%, rgba(0, 0, 0, 0) 70%);
+    background: radial-gradient(circle, rgba(201, 162, 107, 0.15) 0%, rgba(0, 0, 0, 0) 70%);
     top: -150px;
     left: -150px;
     pointer-events: none;
@@ -189,7 +190,7 @@
     position: absolute;
     width: 600px;
     height: 600px;
-    background: radial-gradient(circle, rgba(6, 182, 212, 0.12) 0%, rgba(0, 0, 0, 0) 70%);
+    background: radial-gradient(circle, rgba(226, 115, 58, 0.12) 0%, rgba(0, 0, 0, 0) 70%);
     bottom: -200px;
     right: -200px;
     pointer-events: none;
@@ -440,7 +441,7 @@
     left: 0;
     width: 2.25em;
     text-align: right;
-    color: rgba(148, 163, 184, 0.45);
+    color: rgba(160, 151, 138, 0.45);
     user-select: none;
   }
 
@@ -473,7 +474,7 @@
   }
   .hljs-type,
   .hljs-class .hljs-title {
-    @apply text-sky-300;
+    @apply text-cyan-300;
   }
   .hljs-attribute,
   .hljs-attr,
@@ -484,7 +485,7 @@
   }
   .hljs-built_in,
   .hljs-builtin-name {
-    @apply text-blue-300;
+    @apply text-cyan-200;
   }
   .hljs-variable,
   .hljs-template-variable,
@@ -548,7 +549,7 @@
      the highlight cutting off mid-transition. */
   .citation-source-highlight {
     @apply bg-accentCyan/25 text-slate-100;
-    box-shadow: 0 0 0 1px rgba(6, 182, 212, 0.5);
+    box-shadow: 0 0 0 1px rgba(226, 115, 58, 0.5);
     transition: background-color 0.2s ease, box-shadow 0.2s ease;
   }
 }
@@ -589,11 +590,11 @@
 .shimmer-text {
   background: linear-gradient(
     90deg,
-    rgba(148, 163, 184, 0.55) 0%,
-    rgba(148, 163, 184, 0.55) 35%,
-    rgba(226, 232, 240, 1) 50%,
-    rgba(148, 163, 184, 0.55) 65%,
-    rgba(148, 163, 184, 0.55) 100%
+    rgba(160, 151, 138, 0.55) 0%,
+    rgba(160, 151, 138, 0.55) 35%,
+    rgba(237, 231, 221, 1) 50%,
+    rgba(160, 151, 138, 0.55) 65%,
+    rgba(160, 151, 138, 0.55) 100%
   );
   background-size: 200% 100%;
   -webkit-background-clip: text;
@@ -604,7 +605,7 @@
 @media (prefers-reduced-motion: reduce) {
   .shimmer-text {
     animation: none;
-    -webkit-text-fill-color: rgba(148, 163, 184, 0.85);
+    -webkit-text-fill-color: rgba(160, 151, 138, 0.85);
   }
 }
 

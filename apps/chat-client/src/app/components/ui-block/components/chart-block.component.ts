@@ -67,7 +67,7 @@ export interface ChartHoverBand {
 export class ChartBlockComponent {
   @Input({ required: true }) data!: ChartData;
 
-  private readonly seriesPalette = ['#06b6d4', '#8b5cf6', '#10b981', '#f59e0b', '#f43f5e', '#38bdf8'];
+  private readonly seriesPalette = ['#e2733a', '#c9a26b', '#86a97f', '#d9a441', '#d6584f', '#38bdf8'];
 
   public seriesColor(index: number): string {
     return this.seriesPalette[index % this.seriesPalette.length];

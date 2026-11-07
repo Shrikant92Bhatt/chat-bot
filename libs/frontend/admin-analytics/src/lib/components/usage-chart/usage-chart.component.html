@@ -67,7 +67,7 @@
             [attr.y]="tick.y + 3.5"
             text-anchor="end"
             font-size="10.5"
-            fill="#64748b"
+            fill="#7d7569"
             style="font-variant-numeric: tabular-nums"
           >
             {{ tick.label }}
@@ -119,7 +119,7 @@
                   [attr.y]="peak.y - 24"
                   [attr.text-anchor]="peakLabelAnchor()"
                   font-size="9.5"
-                  fill="#64748b"
+                  fill="#7d7569"
                   letter-spacing="0.06em"
                 >
                   PEAK
@@ -153,7 +153,7 @@
             [attr.y]="plotBottom + 20"
             text-anchor="middle"
             font-size="10.5"
-            fill="#64748b"
+            fill="#7d7569"
           >
             {{ tick.label }}
           </text>
@@ -165,7 +165,7 @@
             [attr.y]="(plotTop + plotBottom) / 2"
             text-anchor="middle"
             font-size="12"
-            fill="#64748b"
+            fill="#7d7569"
           >
             No activity recorded in this window
           </text>
@@ -189,7 +189,7 @@
            series and wants the number. -->
       @if (activePoint(); as active) {
         <div
-          class="pointer-events-none absolute top-0 z-10 -translate-x-1/2 px-3 py-2 rounded-xl bg-[#0a0d14]/95 border border-white/[0.12] shadow-glass"
+          class="pointer-events-none absolute top-0 z-10 -translate-x-1/2 px-3 py-2 rounded-xl bg-[#12110f]/95 border border-white/[0.12] shadow-glass"
           [style.left.%]="tooltipLeftPct()"
           role="status"
           aria-live="polite"

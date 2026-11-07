@@ -61,7 +61,7 @@
         type="button"
         (click)="saveChanges()"
         [disabled]="isSaving() || !isDirty()"
-        class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-accentCyan to-accentViolet shadow-cyanGlow hover:shadow-glow transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+        class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-accentCyan shadow-cyanGlow hover:shadow-glow transition-all disabled:opacity-40 disabled:cursor-not-allowed"
       >
         @if (isSaving()) {
           <span class="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin"></span>

@@ -20,7 +20,7 @@
         [attr.y]="tick.y + 3"
         text-anchor="end"
         font-size="7.5"
-        fill="#64748b"
+        fill="#7d7569"
       >
         {{ tick.label }}
       </text>
@@ -30,7 +30,7 @@
         [attr.y]="chartH - 5"
         text-anchor="middle"
         font-size="7.5"
-        fill="#64748b"
+        fill="#7d7569"
       >
         {{ tick.label }}
       </text>
@@ -162,7 +162,7 @@
            it also works on tap (touch has no hover). -->
       <div
         *ngIf="tooltip() as t"
-        class="pointer-events-none absolute top-0 z-10 -translate-x-1/2 px-2.5 py-1.5 rounded-lg bg-[#0a0d14]/95 border border-white/[0.12] shadow-lg"
+        class="pointer-events-none absolute top-0 z-10 -translate-x-1/2 px-2.5 py-1.5 rounded-lg bg-[#12110f]/95 border border-white/[0.12] shadow-lg"
         [style.left.%]="t.xPct"
         role="status"
       >

@@ -33,16 +33,76 @@ module.exports = {
   ],
   theme: {
     extend: {
+      // "Graphite & Ember" theme: warm graphite neutrals with a single ember
+      // accent. The stock scales below are overridden on purpose so the
+      // existing `slate-*` / `cyan-*` / `emerald-*` classes across every
+      // template pick the theme up without touching each one. The accent*
+      // names are kept for the same reason - accentCyan is now the ember
+      // accent, not cyan.
       colors: {
-        obsidian: '#0a0d14',
-        slateBg: '#0f172a',
-        glassBg: 'rgba(255, 255, 255, 0.04)',
-        glassBorder: 'rgba(255, 255, 255, 0.08)',
-        accentCyan: '#06b6d4',
-        accentViolet: '#8b5cf6',
-        accentEmerald: '#10b981',
-        accentAmber: '#f59e0b',
-        accentRose: '#f43f5e',
+        obsidian: '#12110f',
+        abyss: '#12110f',
+        slateBg: '#181613',
+        glassBg: 'rgba(255, 245, 230, 0.035)',
+        glassBorder: 'rgba(255, 245, 230, 0.08)',
+        accentCyan: '#e2733a',
+        accentViolet: '#c9a26b',
+        accentEmerald: '#86a97f',
+        accentAmber: '#d9a441',
+        accentRose: '#d6584f',
+        brandEmerald: '#e2733a',
+        slate: {
+          50: '#f7f4ef',
+          100: '#ede7dd',
+          200: '#ddd5c8',
+          300: '#c9c1b4',
+          400: '#a0978a',
+          500: '#7d7569',
+          600: '#5e574d',
+          700: '#443f37',
+          800: '#2c2823',
+          900: '#1d1a16',
+          950: '#12110f',
+        },
+        cyan: {
+          50: '#fdf3ec',
+          100: '#fbe2d1',
+          200: '#f6c4a3',
+          300: '#f1a273',
+          400: '#ec8a52',
+          500: '#e2733a',
+          600: '#c85d27',
+          700: '#a4491f',
+          800: '#823b1c',
+          900: '#6a321a',
+          950: '#3a180b',
+        },
+        violet: {
+          50: '#faf6ef',
+          100: '#f2e8d6',
+          200: '#e6d3b1',
+          300: '#d9bc8c',
+          400: '#cfaa77',
+          500: '#c9a26b',
+          600: '#a9824f',
+          700: '#876640',
+          800: '#6a5135',
+          900: '#56432e',
+          950: '#2e2317',
+        },
+        emerald: {
+          50: '#f3f7f2',
+          100: '#e1ebdf',
+          200: '#c4d7c0',
+          300: '#a5c09f',
+          400: '#93b28c',
+          500: '#86a97f',
+          600: '#6b8b65',
+          700: '#566f51',
+          800: '#465a43',
+          900: '#3a4a38',
+          950: '#1e281d',
+        },
       },
       fontSize: {
         xs: '0.75rem', // 12px - labels, badges, small UI
@@ -66,14 +126,15 @@ module.exports = {
         // font stack (same one GitHub/Slack/etc. use) so it's consistent
         // everywhere across platforms.
         sans: [
-          'Plus Jakarta Sans',
-          'Inter',
+          'IBM Plex Sans',
+          'system-ui',
           'sans-serif',
           'Apple Color Emoji',
           'Segoe UI Emoji',
           'Segoe UI Symbol',
           'Noto Color Emoji',
         ],
+        mono: ['IBM Plex Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       backdropBlur: {
         xs: '2px',
@@ -90,8 +151,8 @@ module.exports = {
       },
       boxShadow: {
         glass: '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
-        glow: '0 0 20px rgba(139, 92, 246, 0.25)',
-        cyanGlow: '0 0 20px rgba(6, 182, 212, 0.25)',
+        glow: '0 1px 0 rgba(255, 245, 230, 0.06)',
+        cyanGlow: '0 1px 0 rgba(255, 245, 230, 0.06)',
       },
     },
   },
