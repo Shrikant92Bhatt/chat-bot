@@ -18,7 +18,7 @@ Every variable `chat-api` reads, generated from the code (`process.env.*`). Past
 | `GCS_BUCKET_NAME` | Recommended | `nexusai-generated-images` | Storing generated images/uploads (falls back to inline data) |
 | `OPENAI_API_KEY` | No | platform.openai.com | Legacy direct-OpenAI fallback only |
 | `OMNIROUTE_BASE_URL`, `OMNIROUTE_API_KEY` | No | Self-hosted gateway | Only when not using OpenRouter |
-| `CODE_SANDBOX_SERVICE_URL`, `CODE_SANDBOX_SERVICE_SECRET` | No | Deployed `infra/sandbox-service` | Code interpreter tool |
+| `CODE_SANDBOX_SERVICE_SECRET` | No | Generate; same value for chat-api and sandbox-service (`CODE_SANDBOX_SERVICE_URL` is injected by Vercel) | Code interpreter tool |
 | `ETF_SCREENER_MCP_URL`, `ETF_SCREENER_MCP_SECRET` | No | Your etf-screener deployment `/api/mcp` + its `MCP_API_SECRET` | ETF screener tools |
 | `ANON_TRIAL_MESSAGE_LIMIT`, `AUTH_DAILY_MESSAGE_LIMIT`, `RATE_LIMIT_WINDOW_HOURS` | No | Defaults 1 / 20 / 24 | Initial rate limits (admin console overrides) |
 | `RESEARCH_PLANNER_MODEL` | No | Default `gemini-flash-latest` | Deep-research planner model |
@@ -62,7 +62,6 @@ Every variable `chat-api` reads, generated from the code (`process.env.*`). Past
 | Secret | Used by |
 |---|---|
 | `VERSION_BUMP_TOKEN` | Fine-grained PAT, this repo, Contents: read & write. Lets version-bump commits trigger CI without manual approval |
-| `GCP_SA_KEY` | Sandbox-service deploy job (already set) |
 
 ## Where to get each external credential
 

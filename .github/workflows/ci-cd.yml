@@ -1,7 +1,7 @@
 name: Enterprise CI/CD Pipeline
 
 # Feature branches are covered by their pull_request run; push runs only on
-# main (where the sandbox deploy job lives). The old `push: ["*"]` filter also
+# main, so main itself is still built and tested after every merge. The old `push: ["*"]` filter also
 # never matched branch names containing "/" (e.g. feat/x), and on branches it
 # did match it duplicated every PR run.
 on:
@@ -11,8 +11,9 @@ on:
     types: [opened, synchronize, reopened]
   workflow_dispatch:
 
-# Least privilege: nothing here uses OIDC (GCP auth is a JSON key), so no
-# id-token. Jobs that push widen this themselves.
+# Least privilege. Nothing here deploys - Vercel's GitHub integration builds
+# and deploys chat-client, chat-api and sandbox-service (see vercel.json) -
+# so no cloud credentials are needed. Jobs that push widen this themselves.
 permissions:
   contents: read
 
@@ -88,16 +89,12 @@ jobs:
             git push origin "HEAD:${{ github.head_ref }}"
           fi
 
-  # Job 1: Nx Monorepo Compilation & Quality Check. chat-client and chat-api
-  # deploys themselves are handled by Vercel's own GitHub integration (see
-  # vercel.json at the repo root) once the Vercel project is connected to
-  # this repo in the Vercel dashboard - no build/deploy steps needed here
-  # for either app.
+  # Job 1: Nx Monorepo Compilation & Quality Check. Deploys are handled by
+  # Vercel's own GitHub integration (see vercel.json at the repo root),
+  # including the sandbox-service container - no deploy steps here.
   build-and-lint:
     name: Monorepo Build Check
     runs-on: ubuntu-latest
-    outputs:
-      sandbox_affected: ${{ steps.affected.outputs.sandbox }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -116,21 +113,6 @@ jobs:
       - name: Derive Nx base/head SHAs for affected detection
         uses: nrwl/nx-set-shas@v4
 
-      - name: Determine if the sandbox microservice changed
-        id: affected
-        run: |
-          # infra/sandbox-service is a standalone Node service (not an Nx
-          # project), deployed separately to a small always-on-but-cheap
-          # container host because it depends on isolated-vm, a native addon
-          # that can't run inside a Vercel serverless function.
-          CHANGED=$(git diff --name-only "$NX_BASE" "$NX_HEAD" -- infra/sandbox-service cloudbuild-sandbox.yaml .github/workflows/ci-cd.yml)
-          echo "Changed sandbox-service files: $CHANGED"
-          if [ -n "$CHANGED" ]; then
-            echo "sandbox=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "sandbox=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Build Affected Projects
         run: npx nx affected -t build
 
@@ -139,50 +121,3 @@ jobs:
       # which @nx/enforce-module-boundaries rejects on main as well.
       - name: Test Affected Projects
         run: npx nx affected -t test
-
-  # Job 2: Build & deploy the sandbox microservice only (the one piece that
-  # stays on a container host post-migration). Gated on push to main and on
-  # infra/sandbox-service actually having changed, so most pushes (which
-  # only touch chat-client/chat-api, now deployed via Vercel) skip this
-  # entirely.
-  deploy-sandbox-service:
-    name: Deploy Sandbox Service
-    runs-on: ubuntu-latest
-    needs: build-and-lint
-    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' && needs.build-and-lint.outputs.sandbox_affected == 'true' }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Set up GCP Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Submit sandbox-service to GCP Cloud Build
-        run: |
-          gcloud builds submit --config=cloudbuild-sandbox.yaml
-
-      - name: Deploy sandbox-service to Cloud Run
-        run: |
-          # --allow-unauthenticated: chat-api runs on Vercel, which has no
-          # GCP identity to mint an IAM auth token, so this endpoint is
-          # protected instead by the shared CODE_SANDBOX_SERVICE_SECRET
-          # header (see infra/sandbox-service/src/server.ts) - set the same
-          # value here and as CODE_SANDBOX_SERVICE_SECRET on the Vercel
-          # project.
-          gcloud run deploy sandbox-service \
-            --image=asia-south1-docker.pkg.dev/$(gcloud config get-value project)/chat-repo/sandbox-service:latest \
-            --region=asia-south1 \
-            --platform=managed \
-            --allow-unauthenticated \
-            --memory=512Mi \
-            --cpu=1 \
-            --concurrency=10 \
-            --min-instances=0 \
-            --max-instances=5 \
-            --timeout=30 \
-            --set-secrets="CODE_SANDBOX_SERVICE_SECRET=CODE_SANDBOX_SERVICE_SECRET:latest"

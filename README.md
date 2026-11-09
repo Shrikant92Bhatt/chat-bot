@@ -139,22 +139,24 @@ The role shown to the frontend is display-only (it decides whether to show the n
 
 chat-client (static Angular build) and chat-api (as a serverless function at [`api/index.ts`](api/index.ts)) deploy together as **one Vercel project** — see [`vercel.json`](vercel.json) and [`VERCEL_MIGRATION.md`](VERCEL_MIGRATION.md) for the one-time setup (env vars, secrets, connecting the repo). Once connected, Vercel's own GitHub integration builds and deploys on every push — no GitHub Actions step required for either app.
 
-The `code_interpreter` tool's `isolated-vm` sandbox is the one piece that can't run in a Vercel function (it's a native addon), so it stays on a small container host as [`infra/sandbox-service`](infra/sandbox-service), deployed via [`cloudbuild-sandbox.yaml`](cloudbuild-sandbox.yaml). chat-api reaches it over HTTP via `CODE_SANDBOX_SERVICE_URL` (see [`apps/chat-api/src/tools/code-sandbox.ts`](apps/chat-api/src/tools/code-sandbox.ts)).
+The `code_interpreter` tool's `isolated-vm` sandbox can't run in a Vercel function (it's a native addon), so it runs as a separate container service in the same Vercel project: [`infra/sandbox-service`](infra/sandbox-service), declared as `sandbox-service` in `vercel.json`. Vercel builds it from its Dockerfile on every deploy and injects its private URL into chat-api as `CODE_SANDBOX_SERVICE_URL` (see [`apps/chat-api/src/tools/code-sandbox.ts`](apps/chat-api/src/tools/code-sandbox.ts)).
 
-Firestore and Cloud Storage (GCS) are unaffected by this migration and continue to run as-is (they're pay-per-use, not the source of Cloud Run's cost).
+Only data stays on Google Cloud: Firestore (chats, users) and Cloud Storage (generated images), reached with the `FIREBASE_SERVICE_ACCOUNT_KEY` service-account key. Nothing is built or deployed to Google Cloud any more.
 
-There's no Terraform/IaC layer — the sandbox service's infrastructure is created and managed directly via the `gcloud` commands in `cloudbuild-sandbox.yaml` and `.github/workflows/ci-cd.yml`; the Vercel project's settings live in the Vercel dashboard.
+There's no Terraform/IaC layer — deploys are defined by `vercel.json`, and the Vercel project's settings live in the Vercel dashboard.
 
 ---
 
 ## CI/CD
 
-[`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml) runs on every push and pull request:
+[`.github/workflows/ci-cd.yml`](.github/workflows/ci-cd.yml) runs on every pull request and on pushes to `main`. It only checks code; it deploys nothing:
 
-1. **Monorepo Build Check** — installs dependencies, builds all projects (including a typecheck/build of chat-client and chat-api, even though their actual deploy is owned by Vercel).
-2. **Deploy Sandbox Service** — *main branch only, and only when `infra/sandbox-service` actually changed* — builds and deploys that one microservice to Cloud Run.
+1. **Version Bump Check** — *PRs only* — bumps the minor version in `package.json` if the PR hasn't already.
+2. **Monorepo Build Check** — installs dependencies, then builds and tests the projects the change affects.
 
-chat-client and chat-api deploys happen entirely inside Vercel (production deploy on push to `main`, a preview deploy per PR) once the Vercel project is connected to this repo - see `VERCEL_MIGRATION.md`.
+[`.github/workflows/delete-merged-branch.yml`](.github/workflows/delete-merged-branch.yml) deletes a PR's branch once it's merged.
+
+All deploys (chat-client, chat-api and sandbox-service) happen entirely inside Vercel (production deploy on push to `main`, a preview deploy per PR) once the Vercel project is connected to this repo - see `VERCEL_MIGRATION.md`.
 
 `main` is branch-protected: **Monorepo Build Check** must pass before a PR can merge, and force-pushes/deletions are blocked.
 

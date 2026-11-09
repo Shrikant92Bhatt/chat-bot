@@ -8,7 +8,7 @@
   - Because both are served from the same origin, the client now calls the API with relative paths (`/api/...`) instead of a hardcoded Cloud Run URL — no CORS needed. See `apps/chat-client/src/app/core/runtime-config.ts` and `scripts/generate-vercel-env.js`.
 - The `code_interpreter` tool's sandbox (`isolated-vm`) **cannot run inside a Vercel serverless function** (it's a native V8-isolate addon). It's been split into its own standalone microservice, [`infra/sandbox-service`](infra/sandbox-service), which still needs a container host. `apps/chat-api/src/tools/code-sandbox.ts` now calls it over HTTP.
 - Firestore and GCS are **unchanged** — they're pay-per-use, not what was driving Cloud Run's bill, so this migration leaves them alone (see "Scope" below).
-- `.github/workflows/ci-cd.yml` no longer builds/deploys Docker images for chat-api/chat-client — Vercel's own GitHub integration does that. CI now only builds/deploys `infra/sandbox-service` when it changes.
+- `.github/workflows/ci-cd.yml` no longer deploys anything — Vercel's own GitHub integration deploys chat-client, chat-api and the sandbox container. CI only builds and tests.
 - Removed (now unused): `Dockerfile`, `Dockerfile.api`, `Dockerfile.client`, `nginx.conf`, `docker-entrypoint.sh`, `cloudbuild.yaml`, `cloudbuild-api.yaml`, `cloudbuild-client.yaml`.
 
 ## Scope of this migration
@@ -37,7 +37,6 @@ Only the **compute/hosting** layer moved (what Cloud Run + Cloud Build + the loa
 | `FIRESTORE_DATABASE_ID` | `nexus-ai` |
 | `GCS_BUCKET_NAME` | `nexusai-generated-images` |
 | `FIREBASE_SERVICE_ACCOUNT_KEY` | **New requirement** — see step 3 below |
-| `CODE_SANDBOX_SERVICE_URL` | The sandbox-service URL from step 4 below |
 | `CODE_SANDBOX_SERVICE_SECRET` | A secret you generate — see step 4 below |
 
 `ALLOWED_ORIGIN` and `API_URL` are no longer needed (client and API are same-origin now).
@@ -67,24 +66,11 @@ On Cloud Run, Firestore/GCS auth was automatic (the service's own identity via A
 
 Treat this file like any other credential — don't commit it, don't paste it anywhere but Vercel's env var UI.
 
-### 4. Deploy the sandbox microservice
+### 4. The sandbox microservice
 
-This is the one piece still on a container host (isolated-vm can't run on Vercel):
+`infra/sandbox-service` runs as a container service inside the same Vercel project (`sandbox-service` in `vercel.json`) - Vercel builds it from its Dockerfile on every deploy, and injects its private URL into chat-api as `CODE_SANDBOX_SERVICE_URL`, so don't set that variable yourself. The only setup is the shared secret: generate one (`openssl rand -hex 32`) and set it as `CODE_SANDBOX_SERVICE_SECRET` in Vercel.
 
-1. Generate a shared secret: `openssl rand -hex 32`.
-2. Add it to GCP Secret Manager as `CODE_SANDBOX_SERVICE_SECRET` (the CI workflow already expects a secret by that name, using your existing `GCP_SA_KEY` GitHub Actions credential).
-3. Trigger the deploy — either push a no-op change under `infra/sandbox-service/` to let `.github/workflows/ci-cd.yml`'s `deploy-sandbox-service` job run, or do it manually once:
-   ```bash
-   gcloud builds submit --config=cloudbuild-sandbox.yaml
-   gcloud run deploy sandbox-service \
-     --image=asia-south1-docker.pkg.dev/<project>/chat-repo/sandbox-service:latest \
-     --region=asia-south1 --platform=managed --allow-unauthenticated \
-     --memory=512Mi --cpu=1 --concurrency=10 --min-instances=0 --max-instances=5 --timeout=30 \
-     --set-secrets="CODE_SANDBOX_SERVICE_SECRET=CODE_SANDBOX_SERVICE_SECRET:latest"
-   ```
-4. Copy the deployed service's URL into Vercel's `CODE_SANDBOX_SERVICE_URL`, and the same secret value into Vercel's `CODE_SANDBOX_SERVICE_SECRET`.
-
-`--min-instances=0` means it scales to zero and costs ~nothing when nobody's running code — this should be a small fraction of what the two full-time Cloud Run services cost today.
+Nothing is deployed to Google Cloud any more, so the old Cloud Run `sandbox-service`, its Artifact Registry image and the `GCP_SA_KEY` GitHub Actions secret are no longer used and can be deleted.
 
 ### 5. Update Google OAuth allowed origins
 

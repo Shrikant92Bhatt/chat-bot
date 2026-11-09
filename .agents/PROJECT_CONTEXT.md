@@ -306,9 +306,9 @@ npx nx test chat-client                 # chat-client unit tests
 
 ## Infrastructure
 No IaC (Terraform was scaffolded once, never applied, and removed to avoid maintaining unused code).
-Infrastructure is created/managed directly via `gcloud` commands in `.github/workflows/ci-cd.yml` and
-`cloudbuild.yaml` (region `asia-south1`, Artifact Registry repo `chat-repo`, Firestore DB `nexus-ai`,
-bucket `nexusai-generated-images` in prod).
+All compute (chat-client, chat-api, sandbox-service) deploys via Vercel from `vercel.json`; GitHub
+Actions only builds and tests. Google Cloud is used for data only: Firestore DB `nexus-ai` and bucket
+`nexusai-generated-images` (project `chat-bot-505613`).
 
 ### Building from a git worktree (gotcha)
 If `node_modules` in a worktree is a junction/symlink to the main checkout, Nx resolves its workspace root through the symlink's real path and **silently builds the main checkout's source instead of the worktree's**. Set `NX_WORKSPACE_ROOT_PATH=<absolute path to the worktree>` for the build to actually compile your changes. Sanity check: `dist/` should appear inside the worktree, not the main checkout.
