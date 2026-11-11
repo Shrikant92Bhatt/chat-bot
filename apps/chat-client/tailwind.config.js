@@ -34,12 +34,20 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        obsidian: '#0a0d14',
-        slateBg: '#0f172a',
+        obsidian: '#0b0b13',
+        slateBg: '#12121c',
         glassBg: 'rgba(255, 255, 255, 0.04)',
         glassBorder: 'rgba(255, 255, 255, 0.08)',
-        accentCyan: '#06b6d4',
-        accentViolet: '#8b5cf6',
+        // "Aurora" brand palette. `accentCyan` and the `cyan-*` scale keep their
+        // historical names (hundreds of call sites) but now resolve to the
+        // brand indigo-violet, so the whole app re-themes from this one file.
+        accentCyan: '#8b7bff',
+        accentViolet: '#a78bfa',
+        accentMint: '#5eead4',
+        cyan: {
+          50: '#f3f1ff', 100: '#e8e5ff', 200: '#d3ccff', 300: '#b8adff', 400: '#9d8fff',
+          500: '#8b7bff', 600: '#6d5dfc', 700: '#5848e0', 800: '#4838b5', 900: '#3a2f8f', 950: '#241d5c',
+        },
         accentEmerald: '#10b981',
         accentAmber: '#f59e0b',
         accentRose: '#f43f5e',
@@ -90,8 +98,8 @@ module.exports = {
       },
       boxShadow: {
         glass: '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
-        glow: '0 0 20px rgba(139, 92, 246, 0.25)',
-        cyanGlow: '0 0 20px rgba(6, 182, 212, 0.25)',
+        glow: '0 0 24px rgba(124, 108, 255, 0.3)',
+        cyanGlow: '0 0 24px rgba(139, 123, 255, 0.3)',
       },
     },
   },

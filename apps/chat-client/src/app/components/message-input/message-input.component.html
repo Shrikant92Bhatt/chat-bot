@@ -1,6 +1,6 @@
 <div class="px-2 sm:px-3 md:px-4 pb-[calc(0.5rem+env(safe-area-inset-bottom))] relative z-20 bg-[var(--color-bg-primary)]">
   <div class="max-w-4xl mx-auto">
-    <form (ngSubmit)="send()" class="relative flex flex-col bg-[var(--color-surface-primary)] border border-[var(--color-border-light)] rounded-lg sm:rounded-lg p-2 sm:p-3 shadow-md focus-within:border-[var(--color-accent-primary)] focus-within:shadow-lg transition-all">
+    <form (ngSubmit)="send()" class="relative flex flex-col bg-[var(--color-surface-primary)] border border-[var(--color-border-light)] rounded-2xl p-2 sm:p-3 shadow-md focus-within:border-[var(--color-accent-primary)] focus-within:shadow-lg transition-all">
       <!-- Top row: Chat/Image mode tabs + model selector, inside the same input box -->
       <div class="flex flex-row items-center justify-between px-1 pb-1.5 gap-2">
         <div class="flex items-center gap-1 sm:gap-2">
@@ -263,7 +263,7 @@
             type="submit"
             [disabled]="!messageText.trim() && chatService.stagedAttachments().length === 0"
             [attr.aria-label]="chatService.editingMessageId() ? 'Save edit and resend' : 'Send message'"
-            class="p-1.5 rounded-lg bg-[var(--color-accent-primary)] text-[var(--color-bg-primary)] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-cyan-400 transition-all flex items-center justify-center touch-target focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-primary)] font-medium"
+            class="p-1.5 rounded-lg bg-gradient-to-br from-[#8b7bff] to-[#6d5dfc] text-white shadow-glow disabled:opacity-40 disabled:shadow-none disabled:cursor-not-allowed hover:brightness-110 transition-all flex items-center justify-center touch-target focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-primary)] font-medium"
           >
             <svg class="w-4 h-4 transform rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />

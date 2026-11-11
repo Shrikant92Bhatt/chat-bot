@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { DomSanitizer } from '@angular/platform-browser';
 import { marked } from 'marked';
 import { ChatService } from '../../services/chat.service';
+import { NexusLogoComponent } from '../../shared/logo/nexus-logo.component';
 import { AuthService } from '../../services/auth.service';
 import { ActionDispatcherService } from '../../services/action-dispatcher.service';
 import { UiBlockComponent } from '../ui-block/ui-block.component';
@@ -26,7 +27,7 @@ interface CapabilityChip {
 @Component({
   selector: 'app-chat-window',
   standalone: true,
-  imports: [CommonModule, UiBlockComponent, ResearchPanelComponent],
+  imports: [CommonModule, UiBlockComponent, ResearchPanelComponent, NexusLogoComponent],
   changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './chat-window.component.html',
   // The host element sits inside a flex-col (<main>) alongside

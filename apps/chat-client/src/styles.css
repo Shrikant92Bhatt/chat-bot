@@ -10,36 +10,36 @@
   :root {
     /* ───────────────────────────────── Colors ────────────────────────────── */
     /* Backgrounds */
-    --color-bg-primary: #0a0d14;
-    --color-bg-secondary: #0f172a;
-    --color-bg-tertiary: #1a202c;
+    --color-bg-primary: #0b0b13;
+    --color-bg-secondary: #11111b;
+    --color-bg-tertiary: #181826;
 
     /* Surfaces */
-    --color-surface-primary: #1a1f2e;
-    --color-surface-secondary: #242b37;
-    --color-surface-hover: #2d3748;
-    --color-surface-active: #374151;
+    --color-surface-primary: #161622;
+    --color-surface-secondary: #1e1e2d;
+    --color-surface-hover: #292940;
+    --color-surface-active: #35354f;
 
     /* Text */
-    --color-text-primary: #f1f5f9;
-    --color-text-secondary: #cbd5e1;
-    --color-text-tertiary: #94a3b8;
-    --color-text-muted: #64748b;
+    --color-text-primary: #f4f4fb;
+    --color-text-secondary: #cfcfe3;
+    --color-text-tertiary: #9a9ab8;
+    --color-text-muted: #6c6c8c;
 
     /* Borders */
     --color-border-light: rgba(255, 255, 255, 0.08);
     --color-border-medium: rgba(255, 255, 255, 0.12);
 
     /* Semantic */
-    --color-accent-primary: #06b6d4;
-    --color-accent-secondary: #8b5cf6;
+    --color-accent-primary: #8b7bff;
+    --color-accent-secondary: #5eead4;
     --color-accent-success: #10b981;
     --color-accent-warning: #f59e0b;
     --color-accent-danger: #f43f5e;
 
     /* Messages */
-    --color-message-user-bg: rgba(99, 102, 241, 0.15);
-    --color-message-user-border: rgba(99, 102, 241, 0.2);
+    --color-message-user-bg: rgba(124, 108, 255, 0.16);
+    --color-message-user-border: rgba(139, 123, 255, 0.28);
 
     /* ───────────────────────────────── Spacing ───────────────────────────── */
     --space-xs: 4px;
@@ -89,7 +89,7 @@
 @layer utilities {
   /* Utility classes based on design tokens */
   .glass-card {
-    background: rgba(15, 23, 42, 0.55);
+    background: rgba(22, 22, 34, 0.6);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border: 1px solid var(--color-border-light);
@@ -121,17 +121,24 @@
 
   .glass-input:focus-within {
     border-color: var(--color-border-medium);
-    box-shadow: 0 0 15px rgba(6, 182, 212, 0.1);
+    box-shadow: 0 0 0 3px rgba(139, 123, 255, 0.12), 0 0 24px rgba(139, 123, 255, 0.12);
+  }
+
+  .gradient-text-brand {
+    background: linear-gradient(120deg, #a99cff 0%, #c084fc 50%, #5eead4 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
   }
 
   .gradient-text-gemini {
-    background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 50%, #8b5cf6 100%);
+    background: linear-gradient(135deg, #8b7bff 0%, #c084fc 55%, #5eead4 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
   }
 
   .gradient-text-openai {
-    background: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
+    background: linear-gradient(135deg, #5eead4 0%, #8b7bff 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
   }
@@ -178,7 +185,7 @@
     position: absolute;
     width: 500px;
     height: 500px;
-    background: radial-gradient(circle, rgba(139, 92, 246, 0.15) 0%, rgba(0, 0, 0, 0) 70%);
+    background: radial-gradient(circle, rgba(124, 108, 255, 0.18) 0%, rgba(0, 0, 0, 0) 70%);
     top: -150px;
     left: -150px;
     pointer-events: none;
@@ -189,7 +196,7 @@
     position: absolute;
     width: 600px;
     height: 600px;
-    background: radial-gradient(circle, rgba(6, 182, 212, 0.12) 0%, rgba(0, 0, 0, 0) 70%);
+    background: radial-gradient(circle, rgba(94, 234, 212, 0.08) 0%, rgba(0, 0, 0, 0) 70%);
     bottom: -200px;
     right: -200px;
     pointer-events: none;
