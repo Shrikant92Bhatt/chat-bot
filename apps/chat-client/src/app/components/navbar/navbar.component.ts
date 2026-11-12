@@ -2,11 +2,12 @@ import { Component, EventEmitter, Output, ChangeDetectionStrategy, signal } from
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../../services/auth.service';
 import { ChatService } from '../../services/chat.service';
+import { NexusLogoComponent } from '../../shared/logo/nexus-logo.component';
 
 @Component({
   selector: 'app-navbar',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, NexusLogoComponent],
   changeDetection: ChangeDetectionStrategy.Eager,
   templateUrl: './navbar.component.html',
 })
